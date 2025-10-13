@@ -1,0 +1,77 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Data files (large media and database)
+data/videos/*.mp4
+data/videos/*.avi
+data/videos/*.mov
+data/videos/*.webm
+data/audio/*.wav
+data/audio/*.mp3
+data/exports/*.json
+
+# Keep directory structure
+!data/videos/.gitkeep
+!data/audio/.gitkeep
+!data/exports/.gitkeep
+
+# Database (comment out if you want to version control)
+data/annotations.db
+data/*.db
+
+# Logs
+*.log
+logs/
+
+# Environment variables
+.env
+.env.local
+
+# OS
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+~$*
+
+# Whisper model cache (large files)
+.cache/
+*.pt
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/

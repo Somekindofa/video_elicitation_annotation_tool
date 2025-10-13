@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Elicitation Annotation Tool</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-content">
+                <h1>Video Elicitation Annotation Tool</h1>
+                <p class="subtitle">ReSource Project - Expert Knowledge Capture</p>
+            </div>
+            <div class="header-actions">
+                <button id="addVideosBtn" class="btn btn-primary">
+                    <span class="icon">📁</span> Add Videos
+                </button>
+                <input type="file" id="videoFileInput" accept="video/*" multiple style="display: none;">
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Left Panel: Video Player -->
+            <div class="video-panel">
+                <!-- Video Selection -->
+                <div class="video-selector" id="videoSelector">
+                    <div class="empty-state">
+                        <div class="empty-icon">🎬</div>
+                        <h3>No Video Loaded</h3>
+                        <p>Click "Add Videos" to get started</p>
+                    </div>
+                </div>
+
+                <!-- Video Player -->
+                <div class="video-player-container" id="videoPlayerContainer" style="display: none;">
+                    <video id="videoPlayer" controls controlsList="nodownload">
+                        <source id="videoSource" src="" type="video/mp4">
+                        Your browser does not support the video tag.
+                    </video>
+                    
+                    <!-- Custom Timeline with Annotations -->
+                    <div class="timeline-container">
+                        <div class="timeline-track" id="timelineTrack">
+                            <!-- Annotation segments will be added here -->
+                        </div>
+                        <div class="timeline-labels">
+                            <span id="currentTimeLabel">0:00</span>
+                            <span id="durationLabel">0:00</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recording Controls -->
+                <div class="recording-controls" id="recordingControls" style="display: none;">
+                    <div class="recording-status">
+                        <div class="status-indicator" id="statusIndicator">
+                            <span class="status-dot"></span>
+                            <span class="status-text" id="statusText">Ready to Record</span>
+                        </div>
+                        <div class="recording-timer" id="recordingTimer" style="display: none;">
+                            <span class="timer-icon">⏱️</span>
+                            <span id="timerDisplay">0:00</span>
+                        </div>
+                    </div>
+                    
+                    <button id="recordBtn" class="btn btn-record">
+                        <span class="record-icon">⏺</span>
+                        <span class="record-text">Start Recording</span>
+                    </button>
+                    
+                    <div class="recording-info">
+                        <p>💡 Click record and speak while the video plays. Your audio will be automatically transcribed.</p>
+                    </div>
+                </div>
+
+                <!-- Video Info -->
+                <div class="video-info" id="videoInfo" style="display: none;">
+                    <div class="info-item">
+                        <span class="info-label">Video:</span>
+                        <span class="info-value" id="videoName">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Annotations:</span>
+                        <span class="info-value" id="annotationCount">0</span>
+                    </div>
+                    <div class="info-item">
+                        <button id="exportBtn" class="btn btn-secondary btn-small">
+                            <span class="icon">💾</span> Export Annotations
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel: Annotations Sidebar -->
+            <div class="annotations-panel">
+                <div class="panel-header">
+                    <h2>Annotations</h2>
+                    <button id="refreshAnnotationsBtn" class="btn btn-icon" title="Refresh">
+                        🔄
+                    </button>
+                </div>
+
+                <div class="annotations-list" id="annotationsList">
+                    <div class="empty-state">
+                        <div class="empty-icon">📝</div>
+                        <p>No annotations yet</p>
+                        <p class="hint">Start recording to create your first annotation</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Video List Modal -->
+        <div id="videoListModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Select Video</h2>
+                    <button class="modal-close" id="closeModalBtn">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div id="videoListContainer" class="video-list">
+                        <!-- Video items will be populated here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading Overlay -->
+        <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+            <div class="loading-spinner"></div>
+            <p id="loadingMessage">Processing...</p>
+        </div>
+
+        <!-- Toast Notifications -->
+        <div id="toastContainer" class="toast-container"></div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
