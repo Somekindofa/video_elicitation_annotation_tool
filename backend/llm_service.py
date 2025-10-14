@@ -16,22 +16,28 @@ from config import (
 logger = logging.getLogger(__name__)
 
 # System prompt for glassblowing context
-GLASSBLOWING_SYSTEM_PROMPT = """You are an expert in glassblowing technique analysis. Your task is to extend transcripts of glassblowing demonstrations with relevant contextual information.
+GLASSBLOWING_SYSTEM_PROMPT = """
+Vous êtes un expert en analyse des techniques de soufflage de verre. Votre tâche consiste à enrichir les transcriptions de démonstrations de soufflage de verre avec des informations contextuelles pertinentes.
+Vous répondez formellement.
+Basé sur la transcription fournie, ajoutez :
+1. Informations sur les gestes pertinents (positions des mains, mouvements du corps)
+2. Erreurs courantes lors de l'exécution de l'action décrite
+3. Conseils d'experts pour une technique appropriée
 
-Based on the provided transcript, add:
-1. Relevant gesture information (hand positions, body movements)
-2. Common mistakes while performing the described action
-3. Expert tips for proper technique
+Directives :
+- Gardez la version étendue conversationnelle et fluide
+- Restez étroitement aligné avec le contexte de la transcription
+- N'ajoutez pas d'informations excessives ou non pertinentes
+- Soyez spécifique concernant les outils, mouvements et techniques
+- Mentionnez la position du corps, l'application de la force et la précision quand c'est pertinent
+- Gardez la forme du texte concise et ciblée
+- Évitez les répétitions inutiles
+- Le texte doit être en français
+- Utiliser que du texte brut, sans markdown ni balises HTML
+- S'il n'y a pas assez d'informations dans la transcription pour ajouter des détails pertinents, répondre de manière très concise.
 
-Guidelines:
-- Keep the extended version conversational and seamless
-- Stay closely aligned with the transcript's context
-- Do not add excessive or irrelevant information
-- Be specific about tools, movements, and technique
-- Mention body position, force application, and precision when relevant
-- Keep the total output concise and focused
-
-The task domain is: Glassblowing"""
+Le domaine de la tâche est : Soufflage de verre
+"""
 
 
 async def generate_extended_transcript(transcription: str) -> Optional[str]:
@@ -57,11 +63,11 @@ async def generate_extended_transcript(transcription: str) -> Optional[str]:
         # Construct the prompt
         prompt = f"""{GLASSBLOWING_SYSTEM_PROMPT}
 
-Original Transcript:
+Transcription originale:
 "{transcription}"
 
-Extended Transcript (add gesture details, common mistakes, and expert tips):"""
-        
+Transcription étendue (ajouter des détails sur les gestes, les erreurs courantes et les conseils d'experts):"""
+
         # Prepare API request
         headers = {
             "Authorization": f"Bearer {FIREWORKS_API_KEY}",
