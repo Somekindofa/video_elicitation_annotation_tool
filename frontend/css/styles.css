@@ -67,7 +67,7 @@ body {
 
 /* Header */
 .app-header {
-    background: var(--surface);
+    background: #cbecff;
     border-bottom: 1px solid var(--border-color);
     padding: var(--spacing-lg) var(--spacing-xl);
     display: flex;
@@ -129,7 +129,8 @@ body {
 .empty-icon {
     font-size: 4rem;
     margin-bottom: var(--spacing-md);
-    opacity: 0.5;
+    opacity: 0.3;
+    color: var(--text-secondary);
 }
 
 .empty-state h3 {
@@ -515,6 +516,10 @@ body {
 
 .icon {
     font-size: 1.125rem;
+}
+
+.btn i {
+    margin-right: 0.25rem;
 }
 
 /* Modal */

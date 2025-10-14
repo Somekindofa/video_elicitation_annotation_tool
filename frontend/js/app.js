@@ -45,6 +45,15 @@ async function initializeApp() {
 
 // Event Listeners Setup
 function setupEventListeners() {
+    // Video selection
+    document.getElementById('selectVideoBtn').addEventListener('click', () => {
+        if (state.videos.length > 0) {
+            showVideoModal();
+        } else {
+            showToast('No Videos', 'Please upload videos first', 'info');
+        }
+    });
+    
     // Video upload
     document.getElementById('addVideosBtn').addEventListener('click', () => {
         document.getElementById('videoFileInput').click();
@@ -210,9 +219,7 @@ async function loadVideos() {
         
         state.videos = await response.json();
         
-        if (state.videos.length > 0) {
-            showVideoModal();
-        }
+        // Don't auto-show modal, let user click "Select Video" button
     } catch (error) {
         console.error('Error loading videos:', error);
         showToast('Error', 'Failed to load videos', 'error');
@@ -493,7 +500,7 @@ function renderAnnotations() {
     if (state.annotations.length === 0) {
         container.innerHTML = `
             <div class="empty-state">
-                <div class="empty-icon">📝</div>
+                <i class="fas fa-pen-to-square empty-icon"></i>
                 <p>No annotations yet</p>
                 <p class="hint">Start recording to create your first annotation</p>
             </div>
@@ -520,10 +527,10 @@ function renderAnnotations() {
                 </span>
                 <div class="annotation-actions">
                     <button class="btn btn-icon btn-small" onclick="seekToAnnotation(${annotation.start_time})" title="Jump to time">
-                        ▶️
+                        <i class="fas fa-play"></i>
                     </button>
                     <button class="btn btn-icon btn-small" onclick="deleteAnnotation(${annotation.id})" title="Delete">
-                        🗑️
+                        <i class="fas fa-trash"></i>
                     </button>
                 </div>
             </div>
@@ -746,10 +753,10 @@ function formatFileSize(bytes) {
 
 function getStatusText(status) {
     const statusMap = {
-        'pending': '⏳ Transcription pending...',
-        'processing': '🔄 Transcribing audio...',
-        'completed': '✅ Transcription complete',
-        'failed': '❌ Transcription failed'
+        'pending': '<i class="fas fa-hourglass-half"></i> Transcription pending...',
+        'processing': '<i class="fas fa-spinner fa-spin"></i> Transcribing audio...',
+        'completed': '<i class="fas fa-check-circle"></i> Transcription complete',
+        'failed': '<i class="fas fa-exclamation-circle"></i> Transcription failed'
     };
     
     return statusMap[status] || status;
@@ -786,10 +793,10 @@ function showToast(title, message, type = 'info') {
     toast.className = `toast ${type}`;
     
     const icons = {
-        success: '✅',
-        error: '❌',
-        warning: '⚠️',
-        info: 'ℹ️'
+        success: '<i class="fas fa-check-circle"></i>',
+        error: '<i class="fas fa-times-circle"></i>',
+        warning: '<i class="fas fa-exclamation-triangle"></i>',
+        info: '<i class="fas fa-info-circle"></i>'
     };
     
     toast.innerHTML = `
