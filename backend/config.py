@@ -40,12 +40,13 @@ FIREWORKS_API_URL = "https://audio-turbo.us-virginia-1.direct.fireworks.ai/v1/au
 FIREWORKS_MODEL = "whisper-v3-turbo"
 FIREWORKS_TEMPERATURE = "0"
 FIREWORKS_VAD_MODEL = "silero"
+FIREWORKS_LANGUAGE = "fr"
 
 # Fireworks.ai LLM settings for extended transcripts
 FIREWORKS_LLM_API_URL = "https://api.fireworks.ai/inference/v1/completions"
-FIREWORKS_LLM_MODEL = "accounts/fireworks/models/llama-v3p1-8b-instruct"
-FIREWORKS_LLM_MAX_TOKENS = 512
-FIREWORKS_LLM_TEMPERATURE = 0.7
+FIREWORKS_LLM_MODEL = "accounts/fireworks/models/llama-v3p3-70b-instruct"
+FIREWORKS_LLM_MAX_TOKENS = 360
+FIREWORKS_LLM_TEMPERATURE = 0.9
 
 # Audio recording settings
 AUDIO_SAMPLE_RATE = 16000  # Whisper works best with 16kHz
