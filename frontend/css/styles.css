@@ -153,20 +153,23 @@ body {
 .video-player-container {
     background: var(--surface);
     border-radius: var(--radius-lg);
-    padding: var(--spacing-lg);
+    padding: 0;  /* Remove padding for seamless integration */
     box-shadow: var(--shadow-md);
+    overflow: hidden;  /* Ensure children respect border radius */
 }
 
 #videoPlayer {
     width: 100%;
     max-height: 600px;
-    border-radius: var(--radius-md);
+    border-radius: 0 0 var(--radius-md) var(--radius-md);  /* Only round bottom corners */
     background: #000;
+    display: block;
 }
 
 /* Timeline */
 .timeline-container {
     margin-top: var(--spacing-lg);
+    padding: 0 var(--spacing-lg) var(--spacing-lg);  /* Add padding for timeline */
 }
 
 .timeline-track {
@@ -805,18 +808,28 @@ body {
     position: relative;
 }
 
-/* Recording Controls Sidebar - Now on Top */
+/* Recording Controls - Streamlined Horizontal Bar on Top */
 .recording-controls-sidebar {
     display: flex;
     flex-direction: row;
     align-items: center;
-    justify-content: center;
-    gap: 13.5px;  /* 15px reduced by 10% */
-    padding: 12px 0;  /* 20px reduced by 10%, horizontal padding removed */
+    justify-content: space-between;
+    padding: 14px 24px;
     background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf1 100%);
-    border-radius: 0 0 12px 12px;  /* Rounded bottom corners only */
+    border-radius: 12px 12px 0 0;  /* Rounded top corners only */
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-    min-height: 80px;  /* Fixed height for consistency */
+    border-bottom: 2px solid #e2e8f0;
+    position: relative;
+}
+
+/* Group the three main control buttons together */
+.control-buttons-group {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 20px;
+    flex: 1;
+    justify-content: center;
 }
 
 .btn-playback {
@@ -938,51 +951,55 @@ body {
     display: flex;
     flex-direction: row;
     align-items: center;
-    gap: 13.5px;  /* 15px reduced by 10% */
-    margin-left: 18px;  /* 20px reduced by 10% */
-    padding-left: 18px;  /* 20px reduced by 10% */
-    border-left: 1px solid #dce1e8;
+    gap: 15px;
+    margin-left: 20px;
+    padding-left: 20px;
+    border-left: 2px solid #dce1e8;
 }
 
 .status-indicator-compact {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
 }
 
 .status-indicator-compact .status-dot {
-    width: 8px;
-    height: 8px;
+    width: 10px;
+    height: 10px;
     border-radius: 50%;
     background-color: #10b981;
     display: inline-block;
+    flex-shrink: 0;
 }
 
 .status-indicator-compact .status-text {
     font-size: 13px;
     font-weight: 600;
     color: #4b5563;
+    white-space: nowrap;
 }
 
 .recording-controls-sidebar .status-indicator-compact {
-    flex-direction: column;
-    text-align: center;
+    flex-direction: row;
     gap: 8px;
 }
 
-.recording-controls-sidebar .status-indicator-compact .status-text {
-    font-size: 11px;
-    text-align: center;
-}
-
 .recording-controls-sidebar .recording-timer {
-    flex-direction: column;
-    gap: 5px;
-    text-align: center;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
 }
 
 .recording-controls-sidebar .recording-timer #timerDisplay {
-    font-size: 1rem;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #ef4444;
+}
+
+.recording-controls-sidebar .recording-timer .timer-icon {
+    font-size: 14px;
+    color: #ef4444;
 }
 
 .status-indicator-compact.recording .status-dot {
@@ -1345,7 +1362,12 @@ body {
         flex-direction: row;
         width: 100%;
         min-width: auto;
-        justify-content: center;
+        justify-content: space-between;
+        padding: 12px 16px;
+    }
+    
+    .control-buttons-group {
+        gap: 15px;
     }
     
     .recording-status-sidebar {
