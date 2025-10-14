@@ -1093,7 +1093,6 @@ body {
 
 /* Extended transcript content */
 .extended-transcript-content {
-    padding: var(--spacing-md);
     background: #f0f9ff;
     border: 1px solid #bae6fd;
     border-radius: var(--radius-md);
@@ -1103,12 +1102,16 @@ body {
     margin-top: var(--spacing-sm);
     max-height: 0;
     overflow: hidden;
-    transition: max-height 0.3s ease-out;
+    opacity: 0;
+    padding: 0 var(--spacing-md);
+    transition: max-height 0.3s ease-out, opacity 0.3s ease-out, padding 0.3s ease-out;
 }
 
 .extended-transcript-content.expanded {
     max-height: 500px;
     overflow-y: auto;
+    opacity: 1;
+    padding: var(--spacing-md);
 }
 
 .extended-transcript-content p {

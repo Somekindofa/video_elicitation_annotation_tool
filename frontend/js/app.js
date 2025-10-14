@@ -1081,3 +1081,5 @@ function removeToast(toast) {
 // Make functions globally available
 window.seekToAnnotation = seekToAnnotation;
 window.deleteAnnotation = deleteAnnotation;
+window.toggleExtendedTranscript = toggleExtendedTranscript;
+window.handleFeedback = handleFeedback;
