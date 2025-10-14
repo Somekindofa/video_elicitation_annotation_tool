@@ -679,6 +679,7 @@ body {
     gap: var(--spacing-md);
     animation: slideIn 0.3s ease;
     border-left: 4px solid var(--primary-color);
+    position: relative;
 }
 
 .toast.success {
@@ -711,6 +712,30 @@ body {
     color: var(--text-secondary);
 }
 
+.toast-close {
+    position: absolute;
+    top: var(--spacing-sm);
+    right: var(--spacing-sm);
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    cursor: pointer;
+    padding: var(--spacing-xs);
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    transition: var(--transition);
+}
+
+.toast-close:hover {
+    background: var(--surface-hover);
+    color: var(--text-primary);
+}
+
 /* Animations */
 @keyframes spin {
     to { transform: rotate(360deg); }
@@ -734,6 +759,17 @@ body {
     to {
         transform: translateX(0);
         opacity: 1;
+    }
+}
+
+@keyframes slideOut {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(100%);
+        opacity: 0;
     }
 }
 

@@ -1042,17 +1042,40 @@ function showToast(title, message, type = 'info') {
             <div class="toast-title">${title}</div>
             <div class="toast-message">${message}</div>
         </div>
+        <button class="toast-close" title="Close">
+            <i class="fas fa-times"></i>
+        </button>
     `;
     
     container.appendChild(toast);
     
+    // Close button handler
+    const closeBtn = toast.querySelector('.toast-close');
+    closeBtn.addEventListener('click', () => {
+        removeToast(toast);
+    });
+    
     // Auto remove after 5 seconds
-    setTimeout(() => {
-        toast.style.animation = 'slideOut 0.3s ease';
-        setTimeout(() => {
-            container.removeChild(toast);
-        }, 300);
+    const autoRemoveTimeout = setTimeout(() => {
+        removeToast(toast);
     }, 5000);
+    
+    // Store timeout ID so we can cancel it if user closes manually
+    toast.dataset.timeoutId = autoRemoveTimeout;
+}
+
+function removeToast(toast) {
+    // Cancel auto-remove timeout if it exists
+    if (toast.dataset.timeoutId) {
+        clearTimeout(parseInt(toast.dataset.timeoutId));
+    }
+    
+    toast.style.animation = 'slideOut 0.3s ease';
+    setTimeout(() => {
+        if (toast.parentNode) {
+            toast.parentNode.removeChild(toast);
+        }
+    }, 300);
 }
 
 // Make functions globally available
