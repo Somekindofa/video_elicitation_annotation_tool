@@ -14,7 +14,12 @@ const state = {
     mediaRecorder: null,
     audioChunks: [],
     websocket: null,
-    recordingTimer: null
+    recordingTimer: null,
+    // Projects
+    projects: [],
+    currentProject: null,
+    currentTab: 'annotate',
+    editingProjectId: null
 };
 
 // API Base URL
@@ -95,6 +100,19 @@ function setupEventListeners() {
     
     // Modal
     document.getElementById('closeModalBtn').addEventListener('click', closeVideoModal);
+    
+    // Tab Navigation
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+    });
+    
+    // Projects
+    document.getElementById('createProjectBtn').addEventListener('click', openProjectModal);
+    document.getElementById('closeProjectModalBtn').addEventListener('click', closeProjectModal);
+    document.getElementById('cancelProjectBtn').addEventListener('click', closeProjectModal);
+    document.getElementById('projectForm').addEventListener('submit', handleProjectFormSubmit);
+    document.getElementById('closeAssignVideosModalBtn').addEventListener('click', closeAssignVideosModal);
+    document.getElementById('closeAssignVideosBtn').addEventListener('click', closeAssignVideosModal);
 }
 
 // WebSocket Connection
@@ -1078,8 +1096,394 @@ function removeToast(toast) {
     }, 300);
 }
 
+// ============================================================================
+// PROJECTS & TAB MANAGEMENT
+// ============================================================================
+
+function switchTab(tabName) {
+    state.currentTab = tabName;
+    
+    // Update tab buttons
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tab === tabName);
+    });
+    
+    // Show/hide content
+    const annotateTab = document.getElementById('annotateTab');
+    const projectsTab = document.getElementById('projectsTab');
+    
+    if (tabName === 'annotate') {
+        annotateTab.style.display = 'flex';
+        projectsTab.style.display = 'none';
+    } else if (tabName === 'projects') {
+        annotateTab.style.display = 'none';
+        projectsTab.style.display = 'block';
+        loadProjects();
+    }
+}
+
+async function loadProjects() {
+    try {
+        const response = await fetch(`${API_BASE}/api/projects`);
+        if (!response.ok) throw new Error('Failed to load projects');
+        
+        state.projects = await response.json();
+        renderProjects();
+    } catch (error) {
+        console.error('Error loading projects:', error);
+        showToast('Error', 'Failed to load projects', 'error');
+    }
+}
+
+function renderProjects() {
+    const grid = document.getElementById('projectsGrid');
+    
+    if (state.projects.length === 0) {
+        grid.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-folder-tree empty-icon"></i>
+                <h3>No Projects Yet</h3>
+                <p>Create a project to organize your videos for batch annotation</p>
+            </div>
+        `;
+        return;
+    }
+    
+    grid.innerHTML = state.projects.map(project => `
+        <div class="project-card" onclick="openProject(${project.id})">
+            <div class="project-card-header">
+                <div>
+                    <div class="project-card-title">${escapeHtml(project.name)}</div>
+                </div>
+                <div class="project-card-actions" onclick="event.stopPropagation()">
+                    <button class="btn btn-icon" onclick="editProject(${project.id})" title="Edit">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn btn-icon" onclick="assignVideos(${project.id})" title="Assign Videos">
+                        <i class="fas fa-video"></i>
+                    </button>
+                    <button class="btn btn-icon btn-danger" onclick="deleteProject(${project.id})" title="Delete">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+            ${project.description ? `<div class="project-card-description">${escapeHtml(project.description)}</div>` : ''}
+            <div class="project-card-stats">
+                <div class="project-stat">
+                    <i class="fas fa-video"></i>
+                    <span><span class="project-stat-value">${project.video_count || 0}</span> videos</span>
+                </div>
+                <div class="project-stat">
+                    <i class="fas fa-clock"></i>
+                    <span>${formatDate(project.created_at)}</span>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function openProjectModal(projectId = null) {
+    const modal = document.getElementById('projectModal');
+    const title = document.getElementById('projectModalTitle');
+    const form = document.getElementById('projectForm');
+    const nameInput = document.getElementById('projectName');
+    const descInput = document.getElementById('projectDescription');
+    
+    if (projectId) {
+        // Edit mode
+        const project = state.projects.find(p => p.id === projectId);
+        if (!project) return;
+        
+        state.editingProjectId = projectId;
+        title.textContent = 'Edit Project';
+        nameInput.value = project.name;
+        descInput.value = project.description || '';
+    } else {
+        // Create mode
+        state.editingProjectId = null;
+        title.textContent = 'Create Project';
+        form.reset();
+    }
+    
+    modal.style.display = 'flex';
+}
+
+function closeProjectModal() {
+    const modal = document.getElementById('projectModal');
+    modal.style.display = 'none';
+    state.editingProjectId = null;
+}
+
+async function handleProjectFormSubmit(event) {
+    event.preventDefault();
+    
+    const name = document.getElementById('projectName').value.trim();
+    const description = document.getElementById('projectDescription').value.trim();
+    
+    if (!name) {
+        showToast('Error', 'Project name is required', 'error');
+        return;
+    }
+    
+    try {
+        const payload = { name, description };
+        let response;
+        
+        if (state.editingProjectId) {
+            // Update existing project
+            response = await fetch(`${API_BASE}/api/projects/${state.editingProjectId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+        } else {
+            // Create new project
+            response = await fetch(`${API_BASE}/api/projects`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+        }
+        
+        if (!response.ok) throw new Error('Failed to save project');
+        
+        showToast('Success', `Project ${state.editingProjectId ? 'updated' : 'created'} successfully`, 'success');
+        closeProjectModal();
+        await loadProjects();
+        
+    } catch (error) {
+        console.error('Error saving project:', error);
+        showToast('Error', 'Failed to save project', 'error');
+    }
+}
+
+async function editProject(projectId) {
+    openProjectModal(projectId);
+}
+
+async function deleteProject(projectId) {
+    const project = state.projects.find(p => p.id === projectId);
+    if (!project) return;
+    
+    if (!confirm(`Delete project "${project.name}"?\n\nVideos will not be deleted, but will be unassigned from this project.`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE}/api/projects/${projectId}`, {
+            method: 'DELETE'
+        });
+        
+        if (!response.ok) throw new Error('Failed to delete project');
+        
+        showToast('Success', 'Project deleted successfully', 'success');
+        await loadProjects();
+        
+    } catch (error) {
+        console.error('Error deleting project:', error);
+        showToast('Error', 'Failed to delete project', 'error');
+    }
+}
+
+async function assignVideos(projectId) {
+    const project = state.projects.find(p => p.id === projectId);
+    if (!project) return;
+    
+    const modal = document.getElementById('assignVideosModal');
+    document.getElementById('assignProjectName').textContent = project.name;
+    
+    // Load videos for this project and all available videos
+    try {
+        const [projectVideosResp, allVideosResp] = await Promise.all([
+            fetch(`${API_BASE}/api/projects/${projectId}/videos`),
+            fetch(`${API_BASE}/api/videos`)
+        ]);
+        
+        if (!projectVideosResp.ok || !allVideosResp.ok) {
+            throw new Error('Failed to load videos');
+        }
+        
+        const projectVideos = await projectVideosResp.json();
+        const allVideos = await allVideosResp.json();
+        
+        // Separate available (unassigned) and assigned videos
+        const assignedIds = new Set(projectVideos.map(v => v.id));
+        const availableVideos = allVideos.filter(v => !assignedIds.has(v.id) && !v.project_id);
+        
+        // Render available videos
+        const availableList = document.getElementById('availableVideosList');
+        if (availableVideos.length === 0) {
+            availableList.innerHTML = '<div class="empty-state"><p>No available videos</p></div>';
+        } else {
+            availableList.innerHTML = availableVideos.map(video => `
+                <div class="video-item" onclick="addVideoToProject(${projectId}, ${video.id})">
+                    <div class="video-item-info">
+                        <div class="video-item-name">${escapeHtml(video.filename)}</div>
+                        <div class="video-item-meta">No annotations</div>
+                    </div>
+                    <button class="btn btn-small btn-primary" onclick="event.stopPropagation(); addVideoToProject(${projectId}, ${video.id})">
+                        <i class="fas fa-plus"></i> Add
+                    </button>
+                </div>
+            `).join('');
+        }
+        
+        // Render assigned videos
+        const assignedList = document.getElementById('assignedVideosList');
+        if (projectVideos.length === 0) {
+            assignedList.innerHTML = '<div class="empty-state"><p>No videos assigned yet</p></div>';
+        } else {
+            assignedList.innerHTML = projectVideos.map((video, index) => `
+                <div class="video-item assigned">
+                    <div class="video-item-info">
+                        <div class="video-item-name">${escapeHtml(video.filename)}</div>
+                        <div class="video-item-meta">${video.annotation_count || 0} annotations</div>
+                    </div>
+                    <div class="video-item-position">
+                        <span class="badge">#${index + 1}</span>
+                        <button class="btn btn-small btn-danger" onclick="removeVideoFromProject(${video.id})">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        modal.style.display = 'flex';
+        
+    } catch (error) {
+        console.error('Error loading videos for assignment:', error);
+        showToast('Error', 'Failed to load videos', 'error');
+    }
+}
+
+async function addVideoToProject(projectId, videoId) {
+    try {
+        // Get current project videos to determine next batch position
+        const response = await fetch(`${API_BASE}/api/projects/${projectId}/videos`);
+        if (!response.ok) throw new Error('Failed to load project videos');
+        
+        const projectVideos = await response.json();
+        const nextPosition = projectVideos.length + 1;
+        
+        // Update video with project_id and batch_position
+        const updateResp = await fetch(`${API_BASE}/api/videos/${videoId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                project_id: projectId,
+                batch_position: nextPosition
+            })
+        });
+        
+        if (!updateResp.ok) throw new Error('Failed to assign video');
+        
+        showToast('Success', 'Video added to project', 'success');
+        
+        // Refresh the assign videos modal
+        closeAssignVideosModal();
+        await assignVideos(projectId);
+        
+    } catch (error) {
+        console.error('Error adding video to project:', error);
+        showToast('Error', 'Failed to add video to project', 'error');
+    }
+}
+
+async function removeVideoFromProject(videoId) {
+    try {
+        // Remove project_id and batch_position from video
+        const response = await fetch(`${API_BASE}/api/videos/${videoId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                project_id: null,
+                batch_position: null
+            })
+        });
+        
+        if (!response.ok) throw new Error('Failed to remove video');
+        
+        showToast('Success', 'Video removed from project', 'success');
+        
+        // Refresh - close and reopen modal
+        const modal = document.getElementById('assignVideosModal');
+        const projectName = document.getElementById('assignProjectName').textContent;
+        const project = state.projects.find(p => p.name === projectName);
+        
+        if (project) {
+            closeAssignVideosModal();
+            await assignVideos(project.id);
+        }
+        
+    } catch (error) {
+        console.error('Error removing video from project:', error);
+        showToast('Error', 'Failed to remove video from project', 'error');
+    }
+}
+
+function closeAssignVideosModal() {
+    const modal = document.getElementById('assignVideosModal');
+    modal.style.display = 'none';
+}
+
+async function openProject(projectId) {
+    try {
+        const response = await fetch(`${API_BASE}/api/projects/${projectId}/videos`);
+        if (!response.ok) throw new Error('Failed to load project videos');
+        
+        const videos = await response.json();
+        
+        if (videos.length === 0) {
+            showToast('Info', 'No videos in this project yet', 'info');
+            return;
+        }
+        
+        // Switch to annotate tab and load first video
+        state.currentProject = projectId;
+        switchTab('annotate');
+        
+        // Load the first video
+        await selectVideo(videos[0].id);
+        
+        showToast('Success', `Loaded project with ${videos.length} video(s)`, 'success');
+        
+    } catch (error) {
+        console.error('Error opening project:', error);
+        showToast('Error', 'Failed to open project', 'error');
+    }
+}
+
+// Utility functions
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function formatDate(dateString) {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays} days ago`;
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+    if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
+    return `${Math.floor(diffDays / 365)} years ago`;
+}
+
 // Make functions globally available
 window.seekToAnnotation = seekToAnnotation;
 window.deleteAnnotation = deleteAnnotation;
 window.toggleExtendedTranscript = toggleExtendedTranscript;
 window.handleFeedback = handleFeedback;
+window.openProject = openProject;
+window.editProject = editProject;
+window.deleteProject = deleteProject;
+window.assignVideos = assignVideos;
+window.addVideoToProject = addVideoToProject;
+window.removeVideoFromProject = removeVideoFromProject;

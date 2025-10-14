@@ -26,8 +26,18 @@
             </div>
         </header>
 
+        <!-- Tab Navigation -->
+        <div class="tab-navigation">
+            <button class="tab-btn active" data-tab="annotate">
+                <i class="fas fa-pen-to-square"></i> Annotate
+            </button>
+            <button class="tab-btn" data-tab="projects">
+                <i class="fas fa-folder-tree"></i> Projects
+            </button>
+        </div>
+
         <!-- Main Content -->
-        <div class="main-content">
+        <div class="main-content" id="annotateTab">
             <!-- Left Panel: Video Player -->
             <div class="video-panel">
                 <!-- Video Selection -->
@@ -133,6 +143,24 @@
             </div>
         </div>
 
+        <!-- Projects Tab Content -->
+        <div class="projects-content" id="projectsTab" style="display: none;">
+            <div class="projects-header">
+                <h2><i class="fas fa-folder-tree"></i> Projects</h2>
+                <button id="createProjectBtn" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> New Project
+                </button>
+            </div>
+
+            <div class="projects-grid" id="projectsGrid">
+                <div class="empty-state">
+                    <i class="fas fa-folder-tree empty-icon"></i>
+                    <h3>No Projects Yet</h3>
+                    <p>Create a project to organize your videos for batch annotation</p>
+                </div>
+            </div>
+        </div>
+
         <!-- Video List Modal -->
         <div id="videoListModal" class="modal">
             <div class="modal-content">
@@ -143,6 +171,61 @@
                 <div class="modal-body">
                     <div id="videoListContainer" class="video-list">
                         <!-- Video items will be populated here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Project Modal -->
+        <div id="projectModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 id="projectModalTitle">Create Project</h2>
+                    <button class="modal-close" id="closeProjectModalBtn">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <form id="projectForm">
+                        <div class="form-group">
+                            <label for="projectName">Project Name *</label>
+                            <input type="text" id="projectName" required placeholder="Enter project name">
+                        </div>
+                        <div class="form-group">
+                            <label for="projectDescription">Description</label>
+                            <textarea id="projectDescription" rows="3" placeholder="Optional description"></textarea>
+                        </div>
+                        <div class="modal-actions">
+                            <button type="button" class="btn btn-secondary" id="cancelProjectBtn">Cancel</button>
+                            <button type="submit" class="btn btn-primary" id="saveProjectBtn">Save Project</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Assign Videos to Project Modal -->
+        <div id="assignVideosModal" class="modal">
+            <div class="modal-content modal-large">
+                <div class="modal-header">
+                    <h2>Assign Videos to <span id="assignProjectName"></span></h2>
+                    <button class="modal-close" id="closeAssignVideosModalBtn">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="assign-videos-container">
+                        <div class="available-videos-section">
+                            <h3>Available Videos</h3>
+                            <div id="availableVideosList" class="videos-list-scrollable">
+                                <!-- Available videos will be populated here -->
+                            </div>
+                        </div>
+                        <div class="assigned-videos-section">
+                            <h3>Videos in Project (Drag to reorder)</h3>
+                            <div id="assignedVideosList" class="videos-list-scrollable">
+                                <!-- Assigned videos will be populated here -->
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-actions">
+                        <button class="btn btn-secondary" id="closeAssignVideosBtn">Close</button>
                     </div>
                 </div>
             </div>

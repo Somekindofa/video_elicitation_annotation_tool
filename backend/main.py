@@ -262,6 +262,40 @@ async def get_video_file(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.put("/api/videos/{video_id}", response_model=models.VideoResponse)
+async def update_video(
+    video_id: int,
+    video_update: dict,
+    session: AsyncSession = Depends(db.get_session)
+):
+    """Update video metadata (e.g., project_id, batch_position)"""
+    try:
+        video = await db.get_video(session, video_id)
+        if not video:
+            raise HTTPException(status_code=404, detail="Video not found")
+        
+        # Update allowed fields
+        if 'project_id' in video_update:
+            video.project_id = video_update['project_id']
+        if 'batch_position' in video_update:
+            video.batch_position = video_update['batch_position']
+        
+        await session.commit()
+        await session.refresh(video)
+        
+        video_response = models.VideoResponse.model_validate(video)
+        video_response.annotation_count = len(video.annotations)
+        
+        logger.info(f"Video updated: ID={video_id}")
+        return video_response
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating video: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.delete("/api/videos/{video_id}")
 async def delete_video(
     video_id: int,
@@ -292,6 +326,127 @@ async def delete_video(
         raise
     except Exception as e:
         logger.error(f"Error deleting video: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# PROJECT ENDPOINTS
+# ============================================================================
+
+@app.post("/api/projects", response_model=models.ProjectResponse)
+async def create_project(
+    project: models.ProjectCreate,
+    session: AsyncSession = Depends(db.get_session)
+):
+    """Create a new project"""
+    try:
+        new_project = await db.create_project(session, project)
+        logger.info(f"Project created: {new_project.name} (ID={new_project.id})")
+        return new_project
+    except Exception as e:
+        logger.error(f"Error creating project: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/projects", response_model=List[models.ProjectResponse])
+async def get_all_projects(
+    session: AsyncSession = Depends(db.get_session)
+):
+    """Get all projects"""
+    try:
+        projects = await db.get_all_projects(session)
+        return projects
+    except Exception as e:
+        logger.error(f"Error getting projects: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/projects/{project_id}", response_model=models.ProjectResponse)
+async def get_project(
+    project_id: int,
+    session: AsyncSession = Depends(db.get_session)
+):
+    """Get a specific project by ID"""
+    try:
+        project = await db.get_project(session, project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        return project
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting project: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/projects/{project_id}/videos", response_model=List[models.VideoResponse])
+async def get_project_videos(
+    project_id: int,
+    session: AsyncSession = Depends(db.get_session)
+):
+    """Get all videos in a project, ordered by batch position"""
+    try:
+        project = await db.get_project(session, project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        videos = await db.get_videos_by_project(session, project_id)
+        
+        # Add annotation count to each video
+        video_responses = []
+        for video in videos:
+            video_response = models.VideoResponse.model_validate(video)
+            video_response.annotation_count = len(video.annotations)
+            video_responses.append(video_response)
+        
+        return video_responses
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting project videos: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/projects/{project_id}", response_model=models.ProjectResponse)
+async def update_project(
+    project_id: int,
+    project_update: models.ProjectUpdate,
+    session: AsyncSession = Depends(db.get_session)
+):
+    """Update a project"""
+    try:
+        project = await db.get_project(session, project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        updated_project = await db.update_project(session, project_id, project_update)
+        logger.info(f"Project updated: ID={project_id}")
+        return updated_project
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating project: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/projects/{project_id}")
+async def delete_project(
+    project_id: int,
+    session: AsyncSession = Depends(db.get_session)
+):
+    """Delete a project (sets project_id to null for associated videos)"""
+    try:
+        project = await db.get_project(session, project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        await db.delete_project(session, project_id)
+        logger.info(f"Project deleted: ID={project_id}")
+        return {"status": "success", "message": "Project deleted"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting project: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
