@@ -9,7 +9,7 @@ from sqlalchemy.future import select
 from sqlalchemy import func
 from datetime import datetime
 
-from models import Base, Video, Annotation, VideoCreate, AnnotationCreate, AnnotationUpdate
+from models import Base, Project, Video, Annotation, ProjectCreate, ProjectUpdate, VideoCreate, AnnotationCreate, AnnotationUpdate
 from config import DATABASE_URL
 
 
@@ -164,5 +164,81 @@ async def get_pending_transcriptions(session: AsyncSession, limit: int = 10) -> 
         .where(Annotation.transcription_status == "pending")
         .limit(limit)
         .order_by(Annotation.created_at)
+    )
+    return result.scalars().all()
+
+
+# Project CRUD Operations
+
+async def create_project(session: AsyncSession, project_data: ProjectCreate) -> Project:
+    """Create a new project"""
+    project = Project(**project_data.model_dump())
+    session.add(project)
+    await session.commit()
+    await session.refresh(project)
+    return project
+
+
+async def get_project(session: AsyncSession, project_id: int) -> Optional[Project]:
+    """Get a project by ID with videos"""
+    result = await session.execute(
+        select(Project).where(Project.id == project_id).options(selectinload(Project.videos))
+    )
+    return result.scalar_one_or_none()
+
+
+async def get_all_projects(session: AsyncSession, skip: int = 0, limit: int = 100) -> List[Project]:
+    """Get all projects with pagination"""
+    result = await session.execute(
+        select(Project)
+        .options(selectinload(Project.videos))
+        .offset(skip)
+        .limit(limit)
+        .order_by(Project.updated_at.desc())
+    )
+    return result.scalars().all()
+
+
+async def update_project(
+    session: AsyncSession,
+    project_id: int,
+    project_update: ProjectUpdate
+) -> Optional[Project]:
+    """Update a project"""
+    project = await get_project(session, project_id)
+    if project:
+        update_data = project_update.model_dump(exclude_unset=True)
+        for field, value in update_data.items():
+            setattr(project, field, value)
+        project.updated_at = datetime.utcnow()
+        await session.commit()
+        await session.refresh(project)
+    return project
+
+
+async def delete_project(session: AsyncSession, project_id: int) -> bool:
+    """Delete a project and all its videos"""
+    project = await get_project(session, project_id)
+    if project:
+        await session.delete(project)
+        await session.commit()
+        return True
+    return False
+
+
+async def get_videos_by_project(
+    session: AsyncSession,
+    project_id: int,
+    skip: int = 0,
+    limit: int = 1000
+) -> List[Video]:
+    """Get all videos for a specific project, ordered by batch_position"""
+    result = await session.execute(
+        select(Video)
+        .where(Video.project_id == project_id)
+        .options(selectinload(Video.annotations))
+        .offset(skip)
+        .limit(limit)
+        .order_by(Video.batch_position.nulls_last(), Video.uploaded_at)
     )
     return result.scalars().all()

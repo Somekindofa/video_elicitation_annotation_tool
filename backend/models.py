@@ -12,19 +12,36 @@ Base = declarative_base()
 
 # SQLAlchemy Models (Database)
 
+class Project(Base):
+    """Project containing a dataset of videos and annotations"""
+    __tablename__ = "projects"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationship to videos
+    videos = relationship("Video", back_populates="project", cascade="all, delete-orphan")
+
+
 class Video(Base):
     """Video file metadata"""
     __tablename__ = "videos"
     
     id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)  # Optional: videos can exist without project
     filename = Column(String, nullable=False)
     filepath = Column(String, nullable=False, unique=True)
     duration = Column(Float, nullable=True)  # in seconds
     file_size = Column(Integer, nullable=True)  # in bytes
     mime_type = Column(String, nullable=True)
+    batch_position = Column(Integer, nullable=True)  # Position in batch (0-indexed)
     uploaded_at = Column(DateTime, default=datetime.utcnow)
     
-    # Relationship to annotations
+    # Relationships
+    project = relationship("Project", back_populates="videos")
     annotations = relationship("Annotation", back_populates="video", cascade="all, delete-orphan")
 
 
@@ -53,10 +70,37 @@ class Annotation(Base):
 
 # Pydantic Schemas (API Request/Response)
 
+class ProjectCreate(BaseModel):
+    """Schema for creating a project"""
+    name: str
+    description: Optional[str] = None
+
+
+class ProjectUpdate(BaseModel):
+    """Schema for updating a project"""
+    name: Optional[str] = None
+    description: Optional[str] = None
+
+
+class ProjectResponse(BaseModel):
+    """Schema for project response"""
+    id: int
+    name: str
+    description: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    video_count: int = 0
+    
+    class Config:
+        from_attributes = True
+
+
 class VideoCreate(BaseModel):
     """Schema for creating a video record"""
     filename: str
     filepath: str
+    project_id: Optional[int] = None
+    batch_position: Optional[int] = None
     duration: Optional[float] = None
     file_size: Optional[int] = None
     mime_type: Optional[str] = None
@@ -65,8 +109,10 @@ class VideoCreate(BaseModel):
 class VideoResponse(BaseModel):
     """Schema for video response"""
     id: int
+    project_id: Optional[int] = None
     filename: str
     filepath: str
+    batch_position: Optional[int] = None
     duration: Optional[float] = None
     file_size: Optional[int] = None
     mime_type: Optional[str] = None

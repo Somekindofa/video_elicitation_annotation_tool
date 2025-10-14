@@ -794,31 +794,34 @@ body {
 /* Video with Controls Layout */
 .video-with-controls {
     display: flex;
-    gap: 20px;
-    align-items: flex-start;
+    flex-direction: column;
+    gap: 0;
+    align-items: stretch;
+    position: relative;
 }
 
 .video-content {
     flex: 1;
+    position: relative;
 }
 
-/* Recording Controls Sidebar */
+/* Recording Controls Sidebar - Now on Top */
 .recording-controls-sidebar {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
-    justify-content: flex-start;
-    gap: 15px;
-    padding: 20px 15px;
+    justify-content: center;
+    gap: 13.5px;  /* 15px reduced by 10% */
+    padding: 12px 0;  /* 20px reduced by 10%, horizontal padding removed */
     background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf1 100%);
-    border-radius: 12px;
+    border-radius: 0 0 12px 12px;  /* Rounded bottom corners only */
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-    min-width: 100px;
+    min-height: 80px;  /* Fixed height for consistency */
 }
 
 .btn-playback {
-    width: 45px;
-    height: 45px;
+    width: 40.5px;  /* 45px reduced by 10% */
+    height: 40.5px;  /* 45px reduced by 10% */
     border-radius: 50%;
     border: 2px solid #dce1e8;
     background: white;
@@ -853,8 +856,8 @@ body {
 }
 
 .btn-record-round {
-    width: 60px;
-    height: 60px;
+    width: 54px;  /* 60px reduced by 10% */
+    height: 54px;  /* 60px reduced by 10% */
     border-radius: 50%;
     border: 3px solid #ef4444;
     background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
@@ -888,15 +891,15 @@ body {
 }
 
 .btn-record-round .record-icon {
-    font-size: 28px;
+    font-size: 25px;  /* 28px reduced by ~10% */
     color: white;
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
 }
 
 .recording-pulse {
     position: absolute;
-    width: 60px;
-    height: 60px;
+    width: 54px;  /* 60px reduced by 10% */
+    height: 54px;  /* 60px reduced by 10% */
     border-radius: 50%;
     background: rgba(239, 68, 68, 0.4);
     animation: pulse-ring 1.5s ease-out infinite;
@@ -933,13 +936,12 @@ body {
 
 .recording-status-sidebar {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
-    gap: 8px;
-    margin-top: 10px;
-    padding-top: 15px;
-    border-top: 1px solid #dce1e8;
-    width: 100%;
+    gap: 13.5px;  /* 15px reduced by 10% */
+    margin-left: 18px;  /* 20px reduced by 10% */
+    padding-left: 18px;  /* 20px reduced by 10% */
+    border-left: 1px solid #dce1e8;
 }
 
 .status-indicator-compact {
