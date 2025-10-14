@@ -40,6 +40,10 @@ class Annotation(Base):
     audio_filepath = Column(String, nullable=False)
     transcription = Column(Text, nullable=True)
     transcription_status = Column(String, default="pending")  # pending, processing, completed, failed
+    extended_transcript = Column(Text, nullable=True)  # LLM-enhanced transcript
+    extended_transcript_status = Column(String, default="pending")  # pending, processing, completed, failed
+    feedback = Column(Integer, nullable=True)  # 1 for thumbs up, 0 for thumbs down, null for no feedback
+    feedback_choices = Column(String, nullable=True)  # JSON string storing array of 1s and 0s
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -86,6 +90,10 @@ class AnnotationUpdate(BaseModel):
     """Schema for updating an annotation"""
     transcription: Optional[str] = None
     transcription_status: Optional[str] = None
+    extended_transcript: Optional[str] = None
+    extended_transcript_status: Optional[str] = None
+    feedback: Optional[int] = None
+    feedback_choices: Optional[str] = None
 
 
 class AnnotationResponse(BaseModel):
@@ -98,6 +106,10 @@ class AnnotationResponse(BaseModel):
     audio_filepath: str
     transcription: Optional[str] = None
     transcription_status: str
+    extended_transcript: Optional[str] = None
+    extended_transcript_status: str
+    feedback: Optional[int] = None
+    feedback_choices: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     
@@ -130,6 +142,13 @@ class ExportResponse(BaseModel):
     annotation_count: int
     export_timestamp: datetime
     annotations: List[dict]
+
+
+class FeedbackRequest(BaseModel):
+    """Schema for submitting feedback"""
+    annotation_id: int
+    feedback: int = Field(..., ge=0, le=1)  # 0 for thumbs down, 1 for thumbs up
+    feedback_choices: List[int] = Field(..., min_length=5, max_length=6)  # Array of 0s and 1s
 
 
 class StatusResponse(BaseModel):

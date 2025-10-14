@@ -408,6 +408,10 @@ async def process_transcription(annotation_id: int, audio_path: str):
             "transcription": transcription
         })
         
+        # Start extended transcript generation in background
+        import asyncio
+        asyncio.create_task(process_extended_transcript(annotation_id, transcription))
+        
     except Exception as e:
         logger.error(f"Transcription error for annotation {annotation_id}: {e}")
         
@@ -422,6 +426,75 @@ async def process_transcription(annotation_id: int, audio_path: str):
             
             await manager.broadcast({
                 "type": "transcription_error",
+                "annotation_id": annotation_id,
+                "error": str(e)
+            })
+        except:
+            pass
+
+
+async def process_extended_transcript(annotation_id: int, transcription: str):
+    """Background task to process extended transcript using LLM"""
+    from llm_service import generate_extended_transcript
+    
+    try:
+        # Update status to processing
+        async with db.AsyncSessionLocal() as session:
+            await db.update_annotation(
+                session,
+                annotation_id,
+                models.AnnotationUpdate(extended_transcript_status="processing")
+            )
+        
+        # Broadcast status
+        await manager.broadcast({
+            "type": "extended_transcript_status",
+            "annotation_id": annotation_id,
+            "status": "processing"
+        })
+        
+        logger.info(f"Starting extended transcript generation for annotation {annotation_id}")
+        
+        # Generate extended transcript using LLM
+        extended_transcript = await generate_extended_transcript(transcription)
+        
+        if extended_transcript:
+            # Update annotation with extended transcript
+            async with db.AsyncSessionLocal() as session:
+                await db.update_annotation(
+                    session,
+                    annotation_id,
+                    models.AnnotationUpdate(
+                        extended_transcript=extended_transcript,
+                        extended_transcript_status="completed"
+                    )
+                )
+            
+            logger.info(f"Extended transcript completed for annotation {annotation_id}")
+            
+            # Broadcast completion
+            await manager.broadcast({
+                "type": "extended_transcript_complete",
+                "annotation_id": annotation_id,
+                "extended_transcript": extended_transcript
+            })
+        else:
+            raise Exception("LLM returned no extended transcript")
+        
+    except Exception as e:
+        logger.error(f"Extended transcript error for annotation {annotation_id}: {e}")
+        
+        # Update status to failed
+        try:
+            async with db.AsyncSessionLocal() as session:
+                await db.update_annotation(
+                    session,
+                    annotation_id,
+                    models.AnnotationUpdate(extended_transcript_status="failed")
+                )
+            
+            await manager.broadcast({
+                "type": "extended_transcript_error",
                 "annotation_id": annotation_id,
                 "error": str(e)
             })
@@ -530,6 +603,47 @@ async def delete_annotation(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/api/annotations/{annotation_id}/feedback")
+async def submit_feedback(
+    annotation_id: int,
+    feedback_data: models.FeedbackRequest,
+    session: AsyncSession = Depends(db.get_session)
+):
+    """Submit user feedback for extended transcript"""
+    try:
+        # Verify annotation exists
+        annotation = await db.get_annotation(session, annotation_id)
+        if not annotation:
+            raise HTTPException(status_code=404, detail="Annotation not found")
+        
+        # Convert feedback_choices array to JSON string
+        feedback_choices_json = json.dumps(feedback_data.feedback_choices)
+        
+        # Update annotation with feedback
+        await db.update_annotation(
+            session,
+            annotation_id,
+            models.AnnotationUpdate(
+                feedback=feedback_data.feedback,
+                feedback_choices=feedback_choices_json
+            )
+        )
+        
+        logger.info(f"Feedback submitted for annotation {annotation_id}: {'positive' if feedback_data.feedback == 1 else 'negative'}")
+        
+        return {
+            "status": "success",
+            "message": "Feedback submitted successfully",
+            "annotation_id": annotation_id
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error submitting feedback: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/export/{video_id}")
 async def export_annotations(
     video_id: int,
@@ -556,6 +670,9 @@ async def export_annotations(
                     "end_time": ann.end_time,
                     "duration": ann.end_time - ann.start_time,
                     "transcription": ann.transcription,
+                    "extended_transcript": ann.extended_transcript,
+                    "feedback": ann.feedback,
+                    "feedback_choices": json.loads(ann.feedback_choices) if ann.feedback_choices else None,
                     "audio_file": ann.audio_filename,
                     "created_at": ann.created_at.isoformat()
                 }

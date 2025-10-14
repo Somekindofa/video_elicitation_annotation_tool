@@ -45,6 +45,15 @@ async function initializeApp() {
 
 // Event Listeners Setup
 function setupEventListeners() {
+    // Video selection
+    document.getElementById('selectVideoBtn').addEventListener('click', () => {
+        if (state.videos.length > 0) {
+            showVideoModal();
+        } else {
+            showToast('No Videos', 'Please upload videos first', 'info');
+        }
+    });
+    
     // Video upload
     document.getElementById('addVideosBtn').addEventListener('click', () => {
         document.getElementById('videoFileInput').click();
@@ -139,6 +148,22 @@ function handleWebSocketMessage(message) {
             updateAnnotationStatus(message.annotation_id, 'failed');
             break;
             
+        case 'extended_transcript_status':
+            updateExtendedTranscriptStatus(message.annotation_id, message.status);
+            break;
+            
+        case 'extended_transcript_complete':
+            updateExtendedTranscript(message.annotation_id, message.extended_transcript);
+            if (state.currentVideoId) {
+                loadAnnotations(state.currentVideoId);
+            }
+            break;
+            
+        case 'extended_transcript_error':
+            showToast('Extended Transcript Error', message.error, 'error');
+            updateExtendedTranscriptStatus(message.annotation_id, 'failed');
+            break;
+            
         case 'annotation_deleted':
             if (state.currentVideoId) {
                 loadAnnotations(state.currentVideoId);
@@ -210,9 +235,7 @@ async function loadVideos() {
         
         state.videos = await response.json();
         
-        if (state.videos.length > 0) {
-            showVideoModal();
-        }
+        // Don't auto-show modal, let user click "Select Video" button
     } catch (error) {
         console.error('Error loading videos:', error);
         showToast('Error', 'Failed to load videos', 'error');
@@ -493,7 +516,7 @@ function renderAnnotations() {
     if (state.annotations.length === 0) {
         container.innerHTML = `
             <div class="empty-state">
-                <div class="empty-icon">📝</div>
+                <i class="fas fa-pen-to-square empty-icon"></i>
                 <p>No annotations yet</p>
                 <p class="hint">Start recording to create your first annotation</p>
             </div>
@@ -512,6 +535,49 @@ function renderAnnotations() {
         const statusText = getStatusText(annotation.transcription_status);
         const statusClass = annotation.transcription_status;
         
+        // Extended transcript UI logic
+        let extendedTranscriptHTML = '';
+        if (annotation.transcription && annotation.transcription_status === 'completed') {
+            if (annotation.extended_transcript_status === 'processing') {
+                extendedTranscriptHTML = `
+                    <div class="extended-transcript-progress">
+                        <i class="fa-solid fa-hammer"></i>
+                        <span class="ellipsis">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                        </span>
+                    </div>
+                `;
+            } else if (annotation.extended_transcript_status === 'completed' && annotation.extended_transcript) {
+                const feedbackClass = annotation.feedback !== null ? 
+                    (annotation.feedback === 1 ? 'thumbs-up' : 'thumbs-down') : '';
+                extendedTranscriptHTML = `
+                    <div class="extended-transcript-container">
+                        <div class="extended-transcript-toggle" onclick="toggleExtendedTranscript(${annotation.id})">
+                            <i class="fa-solid fa-caret-down"></i>
+                            <span>See Extended Transcript</span>
+                        </div>
+                        <div class="extended-transcript-content" id="extended-${annotation.id}">
+                            <p>${annotation.extended_transcript}</p>
+                            <div class="feedback-buttons">
+                                <button class="feedback-btn thumbs-up ${annotation.feedback === 1 ? 'active' : ''}" 
+                                    onclick="handleFeedback(${annotation.id}, 1, event)">
+                                    <i class="fa-solid fa-thumbs-up"></i>
+                                    <span>Utile</span>
+                                </button>
+                                <button class="feedback-btn thumbs-down ${annotation.feedback === 0 ? 'active' : ''}" 
+                                    onclick="handleFeedback(${annotation.id}, 0, event)">
+                                    <i class="fa-solid fa-thumbs-down"></i>
+                                    <span>Pas utile</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+        
         item.innerHTML = `
             <div class="annotation-header">
                 <span class="annotation-time">
@@ -520,10 +586,10 @@ function renderAnnotations() {
                 </span>
                 <div class="annotation-actions">
                     <button class="btn btn-icon btn-small" onclick="seekToAnnotation(${annotation.start_time})" title="Jump to time">
-                        ▶️
+                        <i class="fas fa-play"></i>
                     </button>
                     <button class="btn btn-icon btn-small" onclick="deleteAnnotation(${annotation.id})" title="Delete">
-                        🗑️
+                        <i class="fas fa-trash"></i>
                     </button>
                 </div>
             </div>
@@ -533,10 +599,11 @@ function renderAnnotations() {
             <div class="annotation-status ${statusClass}">
                 ${statusText}
             </div>
+            ${extendedTranscriptHTML}
         `;
         
         item.addEventListener('click', (e) => {
-            if (!e.target.closest('button')) {
+            if (!e.target.closest('button') && !e.target.closest('.extended-transcript-toggle') && !e.target.closest('.feedback-btn')) {
                 seekToAnnotation(annotation.start_time);
             }
         });
@@ -746,13 +813,190 @@ function formatFileSize(bytes) {
 
 function getStatusText(status) {
     const statusMap = {
-        'pending': '⏳ Transcription pending...',
-        'processing': '🔄 Transcribing audio...',
-        'completed': '✅ Transcription complete',
-        'failed': '❌ Transcription failed'
+        'pending': '<i class="fas fa-hourglass-half"></i> Transcription pending...',
+        'processing': '<i class="fas fa-spinner fa-spin"></i> Transcribing audio...',
+        'completed': '<i class="fas fa-check-circle"></i> Transcription complete',
+        'failed': '<i class="fas fa-exclamation-circle"></i> Transcription failed'
     };
     
     return statusMap[status] || status;
+}
+
+// Extended Transcript Functions
+function toggleExtendedTranscript(annotationId) {
+    const content = document.getElementById(`extended-${annotationId}`);
+    const toggle = content.previousElementSibling;
+    const icon = toggle.querySelector('i');
+    
+    if (content.classList.contains('expanded')) {
+        content.classList.remove('expanded');
+        icon.classList.remove('fa-caret-up');
+        icon.classList.add('fa-caret-down');
+        toggle.querySelector('span').textContent = 'See Extended Transcript';
+    } else {
+        content.classList.add('expanded');
+        icon.classList.remove('fa-caret-down');
+        icon.classList.add('fa-caret-up');
+        toggle.querySelector('span').textContent = 'Hide Extended Transcript';
+    }
+}
+
+function updateExtendedTranscriptStatus(annotationId, status) {
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (annotation) {
+        annotation.extended_transcript_status = status;
+        renderAnnotations();
+        renderTimeline();
+    }
+}
+
+function updateExtendedTranscript(annotationId, extendedTranscript) {
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (annotation) {
+        annotation.extended_transcript = extendedTranscript;
+        annotation.extended_transcript_status = 'completed';
+        renderAnnotations();
+    }
+}
+
+function handleFeedback(annotationId, feedbackValue, event) {
+    event.stopPropagation();
+    
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (!annotation) return;
+    
+    // If clicking the same feedback, deselect it
+    if (annotation.feedback === feedbackValue) {
+        annotation.feedback = null;
+        renderAnnotations();
+        return;
+    }
+    
+    // Show feedback modal
+    showFeedbackModal(annotationId, feedbackValue);
+}
+
+function showFeedbackModal(annotationId, feedbackValue) {
+    // Create modal if it doesn't exist
+    let modal = document.getElementById('feedbackModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'feedbackModal';
+        modal.className = 'feedback-modal';
+        document.body.appendChild(modal);
+    }
+    
+    const isPositive = feedbackValue === 1;
+    const choices = isPositive ? [
+        "Les erreurs communes sont pertinentes",
+        "La spécificité du mouvement (pourquoi le faire) est correctement décrite",
+        "La description générale du geste est précise (quelle main utiliser, position des jambes...)",
+        "La description fine du geste est précise (rotation dans les mains, force dans les jambes...)",
+        "Tous les outils mentionnés sont corrects et font partie de la séquence visionnée"
+    ] : [
+        "Les erreurs communes ne sont pas pertinentes",
+        "La spécificité du mouvement (pourquoi le faire) n'est pas correctement décrite",
+        "La description générale du geste n'est pas précise (quelle main utiliser, position des jambes...)",
+        "La description fine du geste n'est pas précise (rotation dans les mains, force dans les jambes...)",
+        "Les outils mentionnés ne sont pas corrects ou ne font pas partie de la séquence visionnée",
+        "Cette version décrit au delà du transcript / Ne décrit pas assez le transcript"
+    ];
+    
+    const choicesHTML = choices.map((choice, index) => `
+        <div class="feedback-choice">
+            <input type="checkbox" id="choice-${index}" name="feedback-choice" value="${index}">
+            <label for="choice-${index}">${choice}</label>
+        </div>
+    `).join('');
+    
+    modal.innerHTML = `
+        <div class="feedback-modal-content">
+            <div class="feedback-modal-header">
+                <h3>Merci pour votre avis</h3>
+                <button class="feedback-modal-close">&times;</button>
+            </div>
+            <div class="feedback-modal-body">
+                <p class="feedback-intro">Veuillez sélectionner ce qui vous a ${isPositive ? 'plu' : 'déplu'} :</p>
+                <div class="feedback-choices">
+                    ${choicesHTML}
+                </div>
+            </div>
+            <div class="feedback-modal-footer">
+                <button class="btn btn-secondary" onclick="closeFeedbackModal()">Annuler</button>
+                <button class="btn btn-primary" onclick="submitFeedbackModal(${annotationId}, ${feedbackValue})">Soumettre</button>
+            </div>
+        </div>
+    `;
+    
+    modal.classList.add('active');
+    
+    // Close button handler
+    modal.querySelector('.feedback-modal-close').addEventListener('click', closeFeedbackModal);
+    
+    // Close on background click
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            closeFeedbackModal();
+        }
+    });
+    
+    // Add change handler for checkboxes to add selected class
+    modal.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+        checkbox.addEventListener('change', (e) => {
+            const choiceDiv = e.target.closest('.feedback-choice');
+            if (e.target.checked) {
+                choiceDiv.classList.add('selected');
+            } else {
+                choiceDiv.classList.remove('selected');
+            }
+        });
+    });
+}
+
+function closeFeedbackModal() {
+    const modal = document.getElementById('feedbackModal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+}
+
+async function submitFeedbackModal(annotationId, feedbackValue) {
+    const modal = document.getElementById('feedbackModal');
+    const checkboxes = modal.querySelectorAll('input[type="checkbox"]');
+    
+    // Get selected choices
+    const feedbackChoices = Array.from(checkboxes).map(cb => cb.checked ? 1 : 0);
+    
+    try {
+        const response = await fetch(`${API_BASE}/api/annotations/${annotationId}/feedback`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                annotation_id: annotationId,
+                feedback: feedbackValue,
+                feedback_choices: feedbackChoices
+            })
+        });
+        
+        if (!response.ok) throw new Error('Failed to submit feedback');
+        
+        // Update local state
+        const annotation = state.annotations.find(a => a.id === annotationId);
+        if (annotation) {
+            annotation.feedback = feedbackValue;
+            annotation.feedback_choices = JSON.stringify(feedbackChoices);
+        }
+        
+        renderAnnotations();
+        closeFeedbackModal();
+        showToast('Feedback Submitted', 'Merci pour votre retour !', 'success');
+        
+    } catch (error) {
+        console.error('Error submitting feedback:', error);
+        showToast('Error', 'Failed to submit feedback', 'error');
+    }
 }
 
 async function blobToBase64(blob) {
@@ -786,10 +1030,10 @@ function showToast(title, message, type = 'info') {
     toast.className = `toast ${type}`;
     
     const icons = {
-        success: '✅',
-        error: '❌',
-        warning: '⚠️',
-        info: 'ℹ️'
+        success: '<i class="fas fa-check-circle"></i>',
+        error: '<i class="fas fa-times-circle"></i>',
+        warning: '<i class="fas fa-exclamation-triangle"></i>',
+        info: '<i class="fas fa-info-circle"></i>'
     };
     
     toast.innerHTML = `
@@ -798,19 +1042,44 @@ function showToast(title, message, type = 'info') {
             <div class="toast-title">${title}</div>
             <div class="toast-message">${message}</div>
         </div>
+        <button class="toast-close" title="Close">
+            <i class="fas fa-times"></i>
+        </button>
     `;
     
     container.appendChild(toast);
     
+    // Close button handler
+    const closeBtn = toast.querySelector('.toast-close');
+    closeBtn.addEventListener('click', () => {
+        removeToast(toast);
+    });
+    
     // Auto remove after 5 seconds
-    setTimeout(() => {
-        toast.style.animation = 'slideOut 0.3s ease';
-        setTimeout(() => {
-            container.removeChild(toast);
-        }, 300);
+    const autoRemoveTimeout = setTimeout(() => {
+        removeToast(toast);
     }, 5000);
+    
+    // Store timeout ID so we can cancel it if user closes manually
+    toast.dataset.timeoutId = autoRemoveTimeout;
+}
+
+function removeToast(toast) {
+    // Cancel auto-remove timeout if it exists
+    if (toast.dataset.timeoutId) {
+        clearTimeout(parseInt(toast.dataset.timeoutId));
+    }
+    
+    toast.style.animation = 'slideOut 0.3s ease';
+    setTimeout(() => {
+        if (toast.parentNode) {
+            toast.parentNode.removeChild(toast);
+        }
+    }, 300);
 }
 
 // Make functions globally available
 window.seekToAnnotation = seekToAnnotation;
 window.deleteAnnotation = deleteAnnotation;
+window.toggleExtendedTranscript = toggleExtendedTranscript;
+window.handleFeedback = handleFeedback;

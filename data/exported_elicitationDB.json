@@ -98,18 +98,6 @@
                 }
             ],
             "rows": [
-                [
-                    1,
-                    1,
-                    16.034,
-                    32.675,
-                    "annotation_c727d3f4022d43cb96e8cf687c5979e7.wav",
-                    "C:\\Users\\Theo Akbas\\Documents\\video-elicitation\\data\\audio\\annotation_c727d3f4022d43cb96e8cf687c5979e7.wav",
-                    "J'ouvre la porte et puis voilà je vais aller récupérer un petit peu de matière en tournant un petit peu vers la droite, un petit peu vers la gauche. Voilà je ressors, c'est histoire de mieux rentrer ensuite quoi.",
-                    "completed",
-                    "2025-10-13 16:17:42.353837",
-                    "2025-10-13 16:17:43.557959"
-                ]
             ]
         },
         {
@@ -181,11 +169,11 @@
                 [
                     1,
                     "GBL_VideoEgo_Pipe_2_1_000.mp4",
-                    "C:\\Users\\Theo Akbas\\Documents\\video-elicitation\\data\\videos\\458da559d3d6423b9aea9208067aa494_GBL_VideoEgo_Pipe_2_1_000.mp4",
+                    "C:\\Users\\Theo Akbas\\Documents\\video_elicitation_annotation_tool\\data\\videos\\4f24946a60344e53abc8dbc2fd6fd60b_GBL_VideoEgo_Pipe_2_1_000.mp4",
                     null,
                     264382640,
                     "video\/mp4",
-                    "2025-10-13 16:17:14.377611"
+                    "2025-10-14 08:36:06.312082"
                 ]
             ]
         },
