@@ -373,6 +373,7 @@ async function startRecording() {
         state.mediaRecorder.start();
         state.isRecording = true;
         state.recordingStartTime = document.getElementById('videoPlayer').currentTime;
+        state.recordingStartWallTime = Date.now(); // Track actual recording time
         
         // Update UI
         updateRecordingStatus('recording', 'Recording...');
@@ -409,9 +410,9 @@ async function stopRecording() {
 async function handleRecordingStop() {
     const recordingEndTime = document.getElementById('videoPlayer').currentTime;
     
-    // Validate recording duration (minimum 0.5 seconds)
-    const duration = recordingEndTime - state.recordingStartTime;
-    if (duration < 0.5) {
+    // Validate recording duration based on actual recording time (not video time)
+    const actualRecordingDuration = (Date.now() - state.recordingStartWallTime) / 1000;
+    if (actualRecordingDuration < 0.5) {
         showToast('Recording Too Short', 'Please record for at least 0.5 seconds', 'warning');
         // Reset UI
         updateRecordingStatus('ready', 'Ready to Record');
