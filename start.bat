@@ -19,6 +19,28 @@ if errorlevel 1 (
 echo Python found!
 echo.
 
+REM Create virtual environment if it doesn't exist
+if not exist ".venv" (
+    echo Creating virtual environment...
+    python -m venv .venv
+    if errorlevel 1 (
+        echo ERROR: Failed to create virtual environment
+        pause
+        exit /b 1
+    )
+    echo Virtual environment created successfully!
+    echo.
+)
+
+REM Activate virtual environment
+echo Activating virtual environment...
+call .venv\Scripts\activate.bat
+if errorlevel 1 (
+    echo ERROR: Failed to activate virtual environment
+    pause
+    exit /b 1
+)
+
 REM Check if dependencies are installed
 echo Checking dependencies...
 python -c "import fastapi" >nul 2>&1
