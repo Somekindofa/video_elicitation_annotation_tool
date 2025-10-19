@@ -14,7 +14,7 @@ DATA_DIR = BASE_DIR / "data"
 VIDEOS_DIR = DATA_DIR / "videos"
 AUDIO_DIR = DATA_DIR / "audio"
 EXPORTS_DIR = DATA_DIR / "exports"
-FRONTEND_DIR = BASE_DIR / "frontend"
+FRONTEND_DIR = BASE_DIR  # Static files (css/, js/, index.html) are at project root
 
 # Ensure directories exist
 for directory in [DATA_DIR, VIDEOS_DIR, AUDIO_DIR, EXPORTS_DIR]:
@@ -47,6 +47,10 @@ FIREWORKS_LLM_API_URL = "https://api.fireworks.ai/inference/v1/completions"
 FIREWORKS_LLM_MODEL = "accounts/fireworks/models/llama-v3p3-70b-instruct"
 FIREWORKS_LLM_MAX_TOKENS = 360
 FIREWORKS_LLM_TEMPERATURE = 0.9
+
+# Google Drive API settings
+GOOGLE_DRIVE_API_KEY = os.getenv("GOOGLE_DRIVE_API_KEY", "")  # Optional: for accessing public folders
+GOOGLE_DRIVE_DEFAULT_FOLDER_ID = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "")  # Optional: default folder ID
 
 # Audio recording settings
 AUDIO_SAMPLE_RATE = 16000  # Whisper works best with 16kHz

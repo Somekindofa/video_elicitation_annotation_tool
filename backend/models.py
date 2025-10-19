@@ -38,6 +38,8 @@ class Video(Base):
     file_size = Column(Integer, nullable=True)  # in bytes
     mime_type = Column(String, nullable=True)
     batch_position = Column(Integer, nullable=True)  # Position in batch (0-indexed)
+    is_local = Column(Integer, default=0)  # 0 for uploaded (copied), 1 for local (streaming)
+    source_type = Column(String, default="uploaded")  # "uploaded", "local", "gdrive"
     uploaded_at = Column(DateTime, default=datetime.utcnow)
     
     # Relationships
@@ -104,6 +106,8 @@ class VideoCreate(BaseModel):
     duration: Optional[float] = None
     file_size: Optional[int] = None
     mime_type: Optional[str] = None
+    is_local: int = 0
+    source_type: str = "uploaded"
 
 
 class VideoResponse(BaseModel):
@@ -116,6 +120,8 @@ class VideoResponse(BaseModel):
     duration: Optional[float] = None
     file_size: Optional[int] = None
     mime_type: Optional[str] = None
+    is_local: int = 0
+    source_type: str = "uploaded"
     uploaded_at: datetime
     annotation_count: int = 0
     
@@ -195,6 +201,11 @@ class FeedbackRequest(BaseModel):
     annotation_id: int
     feedback: int = Field(..., ge=0, le=1)  # 0 for thumbs down, 1 for thumbs up
     feedback_choices: List[int] = Field(..., min_length=5, max_length=6)  # Array of 0s and 1s
+
+
+class LocalVideoRegisterRequest(BaseModel):
+    """Schema for registering a local video file"""
+    filepath: str
 
 
 class StatusResponse(BaseModel):

@@ -17,6 +17,9 @@ aiohttp
 numpy
 soundfile
 
+# Google Drive API
+requests
+
 # File Handling
 aiofiles
 python-magic-bin

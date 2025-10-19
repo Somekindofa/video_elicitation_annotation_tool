@@ -22,6 +22,12 @@
                 <button id="addVideosBtn" class="btn btn-primary">
                     <i class="fas fa-folder-open"></i> Add Videos
                 </button>
+                <button id="browseLocalBtn" class="btn btn-secondary">
+                    <i class="fas fa-hard-drive"></i> Browse Local Folder
+                </button>
+                <button id="loadGDriveBtn" class="btn btn-secondary">
+                    <i class="fa-brands fa-google-drive"></i> Load Google Drive Videos
+                </button>
                 <input type="file" id="videoFileInput" accept="video/*" multiple style="display: none;">
             </div>
         </header>
@@ -31,6 +37,9 @@
             <button class="tab-btn active" data-tab="annotate">
                 <i class="fas fa-pen-to-square"></i> Annotate
             </button>
+            <button class="tab-btn" data-tab="gdrive" id="gdriveTab" style="display: none;">
+                <i class="fa-brands fa-google-drive"></i> Google Drive Videos
+            </button>
             <button class="tab-btn" data-tab="projects">
                 <i class="fas fa-folder-tree"></i> Projects
             </button>
@@ -38,7 +47,7 @@
 
         <!-- Main Content -->
         <div class="main-content" id="annotateTab">
-            <!-- Left Panel: Video Player -->
+            <!-- Video Player -->
             <div class="video-panel">
                 <!-- Video Selection -->
                 <div class="video-selector" id="videoSelector">
@@ -161,6 +170,24 @@
             </div>
         </div>
 
+        <!-- Google Drive Videos Tab Content -->
+        <div class="gdrive-content" id="gdriveVideosTab" style="display: none;">
+            <div class="gdrive-header">
+                <h2><i class="fa-brands fa-google-drive"></i> Google Drive Videos</h2>
+                <button id="reloadGDriveBtn" class="btn btn-secondary">
+                    <i class="fas fa-sync-alt"></i> Reload Folder
+                </button>
+            </div>
+
+            <div class="gdrive-videos-grid" id="gdriveVideosGrid">
+                <div class="empty-state">
+                    <i class="fa-brands fa-google-drive empty-icon"></i>
+                    <h3>No Videos Loaded</h3>
+                    <p>Click "Load Google Drive Videos" to get started</p>
+                </div>
+            </div>
+        </div>
+
         <!-- Video List Modal -->
         <div id="videoListModal" class="modal">
             <div class="modal-content">
@@ -226,6 +253,60 @@
                     </div>
                     <div class="modal-actions">
                         <button class="btn btn-secondary" id="closeAssignVideosBtn">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Google Drive Folder ID Modal -->
+        <div id="gdriveFolderModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2><i class="fa-brands fa-google-drive"></i> Load Google Drive Videos</h2>
+                    <button class="modal-close" id="closeGDriveFolderModalBtn">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <form id="gdriveFolderForm">
+                        <div class="form-group">
+                            <label for="gdriveFolderId">Google Drive Folder ID *</label>
+                            <input type="text" id="gdriveFolderId" required placeholder="Enter folder ID from URL">
+                            <small class="form-hint">Example: From URL https://drive.google.com/drive/folders/<strong>FOLDER_ID_HERE</strong></small>
+                        </div>
+                        <div class="modal-actions">
+                            <button type="button" class="btn btn-secondary" id="cancelGDriveBtn">Cancel</button>
+                            <button type="submit" class="btn btn-primary" id="loadGDriveFolderBtn">Load Videos</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Local Folder Browser Modal -->
+        <div id="localFolderModal" class="modal">
+            <div class="modal-content modal-large">
+                <div class="modal-header">
+                    <h2><i class="fas fa-hard-drive"></i> Browse Local Video Folder</h2>
+                    <button class="modal-close" id="closeLocalFolderModalBtn">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="localFolderPath">Folder Path *</label>
+                        <input type="text" id="localFolderPath" required placeholder="C:\Videos\MyProject">
+                        <small class="form-hint">Enter the absolute path to your video folder (Windows: C:\path\to\folder, Linux/Mac: /path/to/folder)</small>
+                    </div>
+                    <button id="browseLocalFolderBtn" class="btn btn-primary" style="margin-bottom: 1rem;">
+                        <i class="fas fa-search"></i> Browse Folder
+                    </button>
+                    
+                    <div id="localVideosContainer" style="display: none;">
+                        <h3>Found Videos (<span id="localVideoCount">0</span>)</h3>
+                        <div id="localVideosList" class="videos-list-scrollable" style="max-height: 400px;">
+                            <!-- Local videos will be populated here -->
+                        </div>
+                    </div>
+                    
+                    <div class="modal-actions">
+                        <button class="btn btn-secondary" id="cancelLocalBtn">Close</button>
                     </div>
                 </div>
             </div>
