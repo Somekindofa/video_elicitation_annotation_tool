@@ -8,8 +8,13 @@ import sqlite3
 import sys
 from pathlib import Path
 
-# Get database path
-DB_PATH = Path(__file__).parent.parent / "data" / "annotations.db"
+# Get database path from config
+# Import config to get the actual database path
+import sys
+sys.path.insert(0, str(Path(__file__).parent))
+from config import CHROMA_DIR
+
+DB_PATH = CHROMA_DIR / "annotations.db"
 
 def migrate():
     """Add is_local and source_type columns to videos table"""
