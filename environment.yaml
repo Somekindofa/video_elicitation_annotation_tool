@@ -1,0 +1,46 @@
+name: video_elicitation_annotation_tool
+channels:
+  - conda-forge
+  - defaults
+  - sdy623
+dependencies:
+  # Python version
+  - python=3.11
+  
+  # Core Framework
+  - fastapi
+  - uvicorn
+  - python-multipart
+  - python-dotenv
+  
+  # WebSocket Support
+  - websockets
+  - sqlalchemy
+  - aiosqlite
+  
+  # Audio Processing & Tanscription
+  - aiohttp
+  - numpy
+  - pysoundfile
+  
+  # File Handling
+  - aiofiles
+  - python-magic-bin
+  
+  # Data Processing
+  - pydantic
+  - python-dateutil
+  
+  # CORS Support
+  - starlette
+  
+  # Optional: Progress bars for downloads
+  - tqdm
+  
+  # Optional: Better logging
+  - colorlog
+  
+  # Pip-only packages (if any package is not available via conda)
+  - pip
+  - pip:
+    # Add any packages here that are only available via pip
