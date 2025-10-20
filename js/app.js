@@ -54,6 +54,8 @@ async function initializeApp() {
 
 // Event Listeners Setup
 function setupEventListeners() {
+    console.log('=== Setting up event listeners ===');
+    
     // Video selection
     document.getElementById('selectVideoBtn').addEventListener('click', () => {
         if (state.videos.length > 0) {
@@ -76,10 +78,50 @@ function setupEventListeners() {
     document.getElementById('reloadGDriveBtn').addEventListener('click', reloadGDriveFolder);
     
     // Local folder buttons
-    document.getElementById('browseLocalBtn').addEventListener('click', openLocalFolderModal);
+    console.log('--- Setting up local folder buttons ---');
+    const browseLocalBtn = document.getElementById('browseLocalBtn');
+    console.log('browseLocalBtn element:', browseLocalBtn);
+    console.log('browseLocalBtn disabled?', browseLocalBtn?.disabled);
+    console.log('browseLocalBtn style.display:', browseLocalBtn?.style.display);
+    console.log('browseLocalBtn computed style:', browseLocalBtn ? window.getComputedStyle(browseLocalBtn).display : 'N/A');
+    
+    if (browseLocalBtn) {
+        browseLocalBtn.addEventListener('click', (e) => {
+            console.log('=== browseLocalBtn CLICKED! ===');
+            console.log('Event:', e);
+            console.log('Target:', e.target);
+            console.log('CurrentTarget:', e.currentTarget);
+            openLocalFolderModal();
+        }, { capture: false });
+        console.log('✅ Event listener added to browseLocalBtn');
+    } else {
+        console.error('❌ browseLocalBtn element not found!');
+    }
+    
     document.getElementById('closeLocalFolderModalBtn').addEventListener('click', closeLocalFolderModal);
     document.getElementById('cancelLocalBtn').addEventListener('click', closeLocalFolderModal);
     document.getElementById('browseLocalFolderBtn').addEventListener('click', handleBrowseLocalFolder);
+    
+    console.log('=== Event listeners setup complete ===');
+    
+    // Test if we can access the button after 2 seconds
+    setTimeout(() => {
+        console.log('--- Testing button accessibility after 2 seconds ---');
+        const testBtn = document.getElementById('browseLocalBtn');
+        if (testBtn) {
+            console.log('Test button found, attributes:', {
+                id: testBtn.id,
+                className: testBtn.className,
+                disabled: testBtn.disabled,
+                offsetWidth: testBtn.offsetWidth,
+                offsetHeight: testBtn.offsetHeight,
+                visibility: window.getComputedStyle(testBtn).visibility,
+                display: window.getComputedStyle(testBtn).display,
+                pointerEvents: window.getComputedStyle(testBtn).pointerEvents,
+                zIndex: window.getComputedStyle(testBtn).zIndex
+            });
+        }
+    }, 2000);
     
     document.getElementById('videoFileInput').addEventListener('change', handleVideoUpload);
     
@@ -1683,9 +1725,16 @@ async function loadSelectedGDriveVideo() {
 // ============================================================================
 
 function openLocalFolderModal() {
-    document.getElementById('localFolderModal').style.display = 'flex';
-    document.getElementById('localVideosContainer').style.display = 'none';
-    document.getElementById('localFolderPath').value = '';
+    console.log('openLocalFolderModal called!');
+    const modal = document.getElementById('localFolderModal');
+    console.log('Modal element:', modal);
+    if (modal) {
+        modal.style.display = 'flex';
+        document.getElementById('localVideosContainer').style.display = 'none';
+        document.getElementById('localFolderPath').value = '';
+    } else {
+        console.error('localFolderModal not found!');
+    }
 }
 
 function closeLocalFolderModal() {
