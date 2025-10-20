@@ -1,0 +1,36 @@
+# Video Elicitation Annotation Tool - Python Dependencies
+
+# Core Framework
+fastapi
+uvicorn[standard]
+python-multipart
+python-dotenv
+requests
+
+# WebSocket Support
+websockets
+sqlalchemy
+aiosqlite
+
+# Audio Processing & Transcription
+# Using Fireworks.ai API instead of local Whisper
+aiohttp
+numpy
+soundfile
+
+# File Handling
+aiofiles
+python-magic-bin
+
+# Data Processing
+pydantic
+python-dateutil
+
+# CORS Support
+starlette
+
+# Optional: Progress bars for downloads
+tqdm
+
+# Optional: Better logging
+colorlog
