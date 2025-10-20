@@ -10,6 +10,8 @@ load_dotenv()
 
 # Base directories
 BASE_DIR = Path(__file__).resolve().parent.parent
+CHROMA_DIR = Path("C:/Users/Theo Akbas/Documents/aiassistant_backend/chroma_langchain_db")
+ELICITATION_DIR = CHROMA_DIR / "elicitations_db"
 DATA_DIR = BASE_DIR / "data"
 VIDEOS_DIR = DATA_DIR / "videos"
 AUDIO_DIR = DATA_DIR / "audio"
@@ -21,7 +23,7 @@ for directory in [DATA_DIR, VIDEOS_DIR, AUDIO_DIR, EXPORTS_DIR]:
     directory.mkdir(parents=True, exist_ok=True)
 
 # Database
-DATABASE_URL = f"sqlite+aiosqlite:///{DATA_DIR / 'annotations.db'}"
+DATABASE_URL = f"sqlite+aiosqlite:///{CHROMA_DIR / 'annotations.db'}"
 
 # Server settings
 HOST = "0.0.0.0"
