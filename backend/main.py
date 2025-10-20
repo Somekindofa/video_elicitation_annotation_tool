@@ -10,20 +10,23 @@ from pathlib import Path
 from typing import List, Optional
 import uuid
 
-from fastapi import FastAPI, File, UploadFile, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, UploadFile, Depends, HTTPException, WebSocket, WebSocketDisconnect, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 import aiofiles
+from starlette.types import Scope
 
 # Use absolute imports to allow running main.py directly
 import database as db
 import models
 from transcription import transcribe_audio_simple, preload_model, get_model_info
+import gdrive_service
 from config import (
     HOST, PORT, CORS_ORIGINS, VIDEOS_DIR, AUDIO_DIR, EXPORTS_DIR,
-    STATIC_DIR, FRONTEND_DIR, SUPPORTED_VIDEO_FORMATS, MAX_UPLOAD_SIZE
+    STATIC_DIR, FRONTEND_DIR, SUPPORTED_VIDEO_FORMATS, MAX_UPLOAD_SIZE,
+    GOOGLE_DRIVE_API_KEY, GOOGLE_DRIVE_DEFAULT_FOLDER_ID
 )
 
 # Configure logging
@@ -242,9 +245,10 @@ async def get_video(
 @app.get("/api/videos/{video_id}/file")
 async def get_video_file(
     video_id: int,
+    request: Request,
     session: AsyncSession = Depends(db.get_session)
 ):
-    """Serve video file"""
+    """Serve video file with HTTP Range request support for streaming"""
     try:
         video = await db.get_video(session, video_id)
         if not video:
@@ -253,7 +257,56 @@ async def get_video_file(
         if not os.path.exists(video.filepath):
             raise HTTPException(status_code=404, detail="Video file not found on disk")
         
-        return FileResponse(video.filepath)
+        # Get file info
+        file_size = os.path.getsize(video.filepath)
+        
+        # Handle Range requests for streaming
+        range_header = request.headers.get("range")
+        
+        if range_header:
+            # Parse range header (e.g., "bytes=0-1023")
+            range_match = range_header.replace("bytes=", "").split("-")
+            start = int(range_match[0]) if range_match[0] else 0
+            end = int(range_match[1]) if len(range_match) > 1 and range_match[1] else file_size - 1
+            
+            # Ensure valid range
+            if start >= file_size or end >= file_size:
+                raise HTTPException(status_code=416, detail="Range not satisfiable")
+            
+            chunk_size = end - start + 1
+            
+            # Stream the requested chunk
+            def iter_file():
+                with open(video.filepath, "rb") as f:
+                    f.seek(start)
+                    remaining = chunk_size
+                    while remaining > 0:
+                        read_size = min(8192, remaining)
+                        data = f.read(read_size)
+                        if not data:
+                            break
+                        remaining -= len(data)
+                        yield data
+            
+            headers = {
+                "Content-Range": f"bytes {start}-{end}/{file_size}",
+                "Accept-Ranges": "bytes",
+                "Content-Length": str(chunk_size),
+                "Content-Type": video.mime_type or "video/mp4",
+            }
+            
+            return StreamingResponse(
+                iter_file(),
+                status_code=206,  # Partial Content
+                headers=headers
+            )
+        else:
+            # No range header - serve entire file
+            return FileResponse(
+                video.filepath,
+                media_type=video.mime_type or "video/mp4",
+                headers={"Accept-Ranges": "bytes"}
+            )
         
     except HTTPException:
         raise
@@ -307,8 +360,8 @@ async def delete_video(
         if not video:
             raise HTTPException(status_code=404, detail="Video not found")
         
-        # Delete video file
-        if os.path.exists(video.filepath):
+        # Only delete video file if it was uploaded (not local)
+        if video.is_local == 0 and os.path.exists(video.filepath):
             os.remove(video.filepath)
         
         # Delete annotation audio files
@@ -326,6 +379,143 @@ async def delete_video(
         raise
     except Exception as e:
         logger.error(f"Error deleting video: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# LOCAL VIDEO ENDPOINTS
+# ============================================================================
+
+@app.get("/api/videos/local/browse")
+async def browse_local_directory(directory: str):
+    """
+    Browse a local directory for video files
+    
+    Args:
+        directory: Absolute path to directory to browse
+        
+    Returns:
+        List of video files with metadata
+    """
+    try:
+        dir_path = Path(directory)
+        
+        # Security check - ensure directory exists and is accessible
+        if not dir_path.exists():
+            raise HTTPException(status_code=404, detail="Directory not found")
+        
+        if not dir_path.is_dir():
+            raise HTTPException(status_code=400, detail="Path is not a directory")
+        
+        # List all video files in directory
+        video_files = []
+        
+        for file_path in dir_path.iterdir():
+            if file_path.is_file():
+                file_ext = file_path.suffix.lower()
+                if file_ext in SUPPORTED_VIDEO_FORMATS:
+                    try:
+                        file_size = file_path.stat().st_size
+                        video_files.append({
+                            "filename": file_path.name,
+                            "filepath": str(file_path.absolute()),
+                            "file_size": file_size,
+                            "file_size_mb": round(file_size / (1024 * 1024), 2)
+                        })
+                    except Exception as e:
+                        logger.warning(f"Could not read file {file_path}: {e}")
+                        continue
+        
+        # Sort by filename
+        video_files.sort(key=lambda x: x["filename"])
+        
+        logger.info(f"Found {len(video_files)} video files in {directory}")
+        return {
+            "directory": str(dir_path.absolute()),
+            "video_count": len(video_files),
+            "videos": video_files
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error browsing local directory: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/videos/local/register", response_model=models.VideoResponse)
+async def register_local_video(
+    request: models.LocalVideoRegisterRequest,
+    session: AsyncSession = Depends(db.get_session)
+):
+    """
+    Register a local video file without copying it
+    
+    Args:
+        request: Request body containing filepath
+        
+    Returns:
+        Video metadata
+    """
+    try:
+        logger.info(f"Attempting to register local video: {request.filepath}")
+        file_path = Path(request.filepath)
+        
+        # Validate file exists
+        if not file_path.exists():
+            logger.error(f"File not found: {request.filepath} (resolved to: {file_path.absolute()})")
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Video file not found at path: {request.filepath}"
+            )
+        
+        if not file_path.is_file():
+            logger.error(f"Path is not a file: {request.filepath}")
+            raise HTTPException(status_code=400, detail="Path is not a file")
+        
+        # Validate file type
+        file_ext = file_path.suffix.lower()
+        if file_ext not in SUPPORTED_VIDEO_FORMATS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported video format. Supported: {', '.join(SUPPORTED_VIDEO_FORMATS)}"
+            )
+        
+        # Get file metadata
+        file_size = file_path.stat().st_size
+        
+        # Determine MIME type
+        mime_type = "video/mp4"  # Default
+        if file_ext == ".webm":
+            mime_type = "video/webm"
+        elif file_ext == ".mov":
+            mime_type = "video/quicktime"
+        elif file_ext == ".avi":
+            mime_type = "video/x-msvideo"
+        
+        # Create database record (no file copying)
+        video_data = models.VideoCreate(
+            filename=file_path.name,
+            filepath=str(file_path.absolute()),
+            file_size=file_size,
+            mime_type=mime_type,
+            is_local=1,
+            source_type="local"
+        )
+        
+        video = await db.create_video(session, video_data)
+        logger.info(f"Local video registered: {file_path.name} (ID={video.id}, {round(file_size/(1024*1024*1024), 2)}GB)")
+        
+        # Add annotation count
+        response_data = models.VideoResponse.model_validate(video)
+        response_data.annotation_count = 0
+        
+        return response_data
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error registering local video: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -857,8 +1047,98 @@ async def export_annotations(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# Mount static files (frontend)
-app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
+# Custom StaticFiles with no-cache headers for development
+class NoCacheStaticFiles(StaticFiles):
+    """Static files with no-cache headers to prevent browser caching during development"""
+    
+    async def get_response(self, path: str, scope: Scope) -> Response:
+        response = await super().get_response(path, scope)
+        # Add no-cache headers for CSS, JS, and HTML files
+        if path.endswith(('.css', '.js', '.html')):
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+        return response
+
+
+# ============================================================================
+# GOOGLE DRIVE ENDPOINTS
+# ============================================================================
+
+@app.get("/api/gdrive/videos")
+async def get_gdrive_videos(folder_id: str):
+    """
+    Get list of video files from a public Google Drive folder
+    
+    Args:
+        folder_id: Google Drive folder ID
+        
+    Returns:
+        List of video file metadata
+    """
+    try:
+        if not folder_id:
+            raise HTTPException(status_code=400, detail="folder_id is required")
+        
+        # Use API key if available, otherwise try without (for truly public folders)
+        api_key = GOOGLE_DRIVE_API_KEY if GOOGLE_DRIVE_API_KEY else None
+        
+        videos = gdrive_service.list_videos_from_folder(folder_id, api_key)
+        
+        logger.info(f"Retrieved {len(videos)} videos from Google Drive folder {folder_id}")
+        return videos
+        
+    except Exception as e:
+        logger.error(f"Error fetching Google Drive videos: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/gdrive/video/{file_id}/stream")
+async def stream_gdrive_video(file_id: str):
+    """
+    Stream a video file from Google Drive
+    
+    Args:
+        file_id: Google Drive file ID
+        
+    Returns:
+        Streaming video response
+    """
+    try:
+        api_key = GOOGLE_DRIVE_API_KEY if GOOGLE_DRIVE_API_KEY else None
+        
+        # Return streaming response that proxies Google Drive video
+        async def video_stream():
+            async for chunk in gdrive_service.stream_video_from_gdrive(file_id, api_key):
+                yield chunk
+        
+        return StreamingResponse(
+            video_stream(),
+            media_type="video/mp4",
+            headers={
+                "Accept-Ranges": "bytes",
+                "Cache-Control": "public, max-age=3600"
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Error streaming Google Drive video: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Mount static files (frontend) with no-cache for development
+app.mount("/static", NoCacheStaticFiles(directory=str(FRONTEND_DIR)), name="static")
+
+
+# Serve index.html at root with no-cache headers
+@app.get("/")
+async def serve_index():
+    """Serve the main index.html file with no-cache headers"""
+    response = FileResponse(FRONTEND_DIR / "index.html")
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
 
 
 # Run the application
