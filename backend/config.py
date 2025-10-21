@@ -23,7 +23,7 @@ for directory in [DATA_DIR, VIDEOS_DIR, AUDIO_DIR, EXPORTS_DIR]:
     directory.mkdir(parents=True, exist_ok=True)
 
 # Database
-DATABASE_URL = f"sqlite+aiosqlite:///{CHROMA_DIR / 'annotations.db'}"
+DATABASE_URL = f"sqlite+aiosqlite:///{ELICITATION_DIR / 'annotations.db'}"
 
 # Server settings
 HOST = "0.0.0.0"
