@@ -6,13 +6,13 @@ A localhost web application for annotating expert craftsmen videos with synchron
 
 ## Features
 
-- 🎥 **Video Annotation**: Seamless recording while video plays
-- 🎤 **Real-time Audio Capture**: Record explanations synchronized with video
-- 📝 **Automatic Transcription**: OpenAI Whisper integration for speech-to-text
-- 📊 **Visual Timeline**: Color-coded annotation segments on video timeline
-- 📦 **Batch Processing**: Load and annotate multiple videos in sequence
-- 💾 **Data Export**: JSON/CSV export for RAG system integration
-- 🔄 **Real-time Updates**: WebSocket support for transcription progress
+- **Video Annotation**: Seamless recording while video plays
+- **Real-time Audio Capture**: Record explanations synchronized with video
+- **Automatic Transcription**: OpenAI Whisper integration for speech-to-text
+- **Visual Timeline**: Color-coded annotation segments on video timeline
+- **Batch Processing**: Load and annotate multiple videos in sequence
+- **Data Export**: JSON/CSV export for RAG system integration
+- **Real-time Updates**: WebSocket support for transcription progress
 
 ## System Requirements
 
