@@ -6,13 +6,13 @@ A localhost web application for annotating expert craftsmen videos with synchron
 
 ## Features
 
-- 🎥 **Video Annotation**: Seamless recording while video plays
-- 🎤 **Real-time Audio Capture**: Record explanations synchronized with video
-- 📝 **Automatic Transcription**: OpenAI Whisper integration for speech-to-text
-- 📊 **Visual Timeline**: Color-coded annotation segments on video timeline
-- 📦 **Batch Processing**: Load and annotate multiple videos in sequence
-- 💾 **Data Export**: JSON/CSV export for RAG system integration
-- 🔄 **Real-time Updates**: WebSocket support for transcription progress
+- **Video Annotation**: Seamless recording while video plays
+- **Real-time Audio Capture**: Record explanations synchronized with video
+- **Automatic Transcription**: OpenAI Whisper integration for speech-to-text
+- **Visual Timeline**: Color-coded annotation segments on video timeline
+- **Batch Processing**: Load and annotate multiple videos in sequence
+- **Data Export**: JSON/CSV export for RAG system integration
+- **Real-time Updates**: WebSocket support for transcription progress
 
 ## System Requirements
 
@@ -260,7 +260,27 @@ For technical issues:
 
 ## License
 
-[Specify your license here - typically for academic research projects]
+MIT License
+
+Copyright (c) 2025 Théo Akbas
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 ## Acknowledgments
 
