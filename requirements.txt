@@ -5,6 +5,7 @@ fastapi
 uvicorn[standard]
 python-multipart
 python-dotenv
+requests
 
 # WebSocket Support
 websockets
