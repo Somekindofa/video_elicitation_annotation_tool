@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Elicitation Annotation Tool</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-content">
+                <h1>Video Elicitation Annotation Tool</h1>
+                <p class="subtitle">ReSource Project - Expert Knowledge Capture</p>
+            </div>
+            <div class="header-actions">
+                <button id="selectVideoBtn" class="btn btn-secondary">
+                    <i class="fas fa-video"></i> Select Video
+                </button>
+                <button id="addVideosBtn" class="btn btn-primary">
+                    <i class="fas fa-folder-open"></i> Add Videos
+                </button>
+                <button id="browseLocalBtn" class="btn btn-secondary">
+                    <i class="fas fa-hard-drive"></i> Browse Local Folder
+                </button>
+                <button id="loadGDriveBtn" class="btn btn-secondary">
+                    <i class="fa-brands fa-google-drive"></i> Load Google Drive Videos
+                </button>
+                <input type="file" id="videoFileInput" accept="video/*" multiple style="display: none;">
+            </div>
+        </header>
+
+        <!-- Tab Navigation -->
+        <div class="tab-navigation">
+            <button class="tab-btn active" data-tab="annotate">
+                <i class="fas fa-pen-to-square"></i> Annotate
+            </button>
+            <button class="tab-btn" data-tab="gdrive" id="gdriveTab" style="display: none;">
+                <i class="fa-brands fa-google-drive"></i> Google Drive Videos
+            </button>
+            <button class="tab-btn" data-tab="projects">
+                <i class="fas fa-folder-tree"></i> Projects
+            </button>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content" id="annotateTab">
+            <!-- Video Player -->
+            <div class="video-panel">
+                <!-- Video Selection -->
+                <div class="video-selector" id="videoSelector">
+                    <div class="empty-state">
+                        <i class="fas fa-film empty-icon"></i>
+                        <h3>No Video Loaded</h3>
+                        <p>Click "Add Videos" to get started</p>
+                    </div>
+                </div>
+
+                <!-- Video Player -->
+                <div class="video-player-container" id="videoPlayerContainer" style="display: none;">
+                    <div class="video-with-controls">
+                        <!-- Recording Controls (On Top of Video) -->
+                        <div class="recording-controls-sidebar" id="recordingControls" style="display: none;">
+                            <div class="control-buttons-group">
+                                <button id="skipBackBtn" class="btn-playback" title="Skip back 10 seconds">
+                                    <i class="fas fa-backward"></i>
+                                </button>
+                                
+                                <div class="record-button-container">
+                                    <button id="recordBtn" class="btn-record-round" title="Start Recording">
+                                        <i class="fas fa-circle record-icon"></i>
+                                    </button>
+                                    <div class="recording-pulse" id="recordingPulse" style="display: none;"></div>
+                                </div>
+                                
+                                <button id="skipForwardBtn" class="btn-playback" title="Skip forward 10 seconds">
+                                    <i class="fas fa-forward"></i>
+                                </button>
+
+                                <div class="recording-status-sidebar">
+                                    <div class="status-indicator-compact" id="statusIndicator">
+                                        <span class="status-dot"></span>
+                                        <span class="status-text" id="statusText">Ready</span>
+                                    </div>
+                                    <div class="recording-timer" id="recordingTimer" style="display: none;">
+                                        <i class="fas fa-clock timer-icon"></i>
+                                        <span id="timerDisplay">0:00</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            
+                        </div>
+                        
+                        <!-- Video Player -->
+                        <div class="video-content">
+                            <video id="videoPlayer" controls controlsList="nodownload">
+                                <source id="videoSource" src="" type="video/mp4">
+                                Your browser does not support the video tag.
+                            </video>
+                            
+                            <!-- Custom Timeline with Annotations -->
+                            <div class="timeline-container">
+                                <div class="timeline-track" id="timelineTrack">
+                                    <!-- Annotation segments will be added here -->
+                                </div>
+                                <div class="timeline-labels">
+                                    <span id="currentTimeLabel">0:00</span>
+                                    <span id="durationLabel">0:00</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Video Info -->
+                <div class="video-info" id="videoInfo" style="display: none;">
+                    <div class="info-item">
+                        <span class="info-label">Video:</span>
+                        <span class="info-value" id="videoName">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Annotations:</span>
+                        <span class="info-value" id="annotationCount">0</span>
+                    </div>
+                    <div class="info-item">
+                        <button id="exportBtn" class="btn btn-secondary btn-small">
+                            <i class="fas fa-download"></i> Export Annotations
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel: Annotations Sidebar -->
+            <div class="annotations-panel">
+                <div class="panel-header">
+                    <h2>Annotations</h2>
+                    <button id="refreshAnnotationsBtn" class="btn btn-icon" title="Refresh">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                </div>
+
+                <div class="annotations-list" id="annotationsList">
+                    <div class="empty-state">
+                        <i class="fas fa-pen-to-square empty-icon"></i>
+                        <p>No annotations yet</p>
+                        <p class="hint">Start recording to create your first annotation</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Projects Tab Content -->
+        <div class="projects-content" id="projectsTab" style="display: none;">
+            <div class="projects-header">
+                <h2><i class="fas fa-folder-tree"></i> Projects</h2>
+                <button id="createProjectBtn" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> New Project
+                </button>
+            </div>
+
+            <div class="projects-grid" id="projectsGrid">
+                <div class="empty-state">
+                    <i class="fas fa-folder-tree empty-icon"></i>
+                    <h3>No Projects Yet</h3>
+                    <p>Create a project to organize your videos for batch annotation</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Google Drive Videos Tab Content -->
+        <div class="gdrive-content" id="gdriveVideosTab" style="display: none;">
+            <div class="gdrive-header">
+                <h2><i class="fa-brands fa-google-drive"></i> Google Drive Videos</h2>
+                <button id="reloadGDriveBtn" class="btn btn-secondary">
+                    <i class="fas fa-sync-alt"></i> Reload Folder
+                </button>
+            </div>
+
+            <div class="gdrive-videos-grid" id="gdriveVideosGrid">
+                <div class="empty-state">
+                    <i class="fa-brands fa-google-drive empty-icon"></i>
+                    <h3>No Videos Loaded</h3>
+                    <p>Click "Load Google Drive Videos" to get started</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Video List Modal -->
+        <div id="videoListModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Select Video</h2>
+                    <button class="modal-close" id="closeModalBtn">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div id="videoListContainer" class="video-list">
+                        <!-- Video items will be populated here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Project Modal -->
+        <div id="projectModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 id="projectModalTitle">Create Project</h2>
+                    <button class="modal-close" id="closeProjectModalBtn">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <form id="projectForm">
+                        <div class="form-group">
+                            <label for="projectName">Project Name *</label>
+                            <input type="text" id="projectName" required placeholder="Enter project name">
+                        </div>
+                        <div class="form-group">
+                            <label for="projectDescription">Description</label>
+                            <textarea id="projectDescription" rows="3" placeholder="Optional description"></textarea>
+                        </div>
+                        <div class="modal-actions">
+                            <button type="button" class="btn btn-secondary" id="cancelProjectBtn">Cancel</button>
+                            <button type="submit" class="btn btn-primary" id="saveProjectBtn">Save Project</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Assign Videos to Project Modal -->
+        <div id="assignVideosModal" class="modal">
+            <div class="modal-content modal-large">
+                <div class="modal-header">
+                    <h2>Assign Videos to <span id="assignProjectName"></span></h2>
+                    <button class="modal-close" id="closeAssignVideosModalBtn">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="assign-videos-container">
+                        <div class="available-videos-section">
+                            <h3>Available Videos</h3>
+                            <div id="availableVideosList" class="videos-list-scrollable">
+                                <!-- Available videos will be populated here -->
+                            </div>
+                        </div>
+                        <div class="assigned-videos-section">
+                            <h3>Videos in Project (Drag to reorder)</h3>
+                            <div id="assignedVideosList" class="videos-list-scrollable">
+                                <!-- Assigned videos will be populated here -->
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-actions">
+                        <button class="btn btn-secondary" id="closeAssignVideosBtn">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Google Drive Folder ID Modal -->
+        <div id="gdriveFolderModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2><i class="fa-brands fa-google-drive"></i> Load Google Drive Videos</h2>
+                    <button class="modal-close" id="closeGDriveFolderModalBtn">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <form id="gdriveFolderForm">
+                        <div class="form-group">
+                            <label for="gdriveFolderId">Google Drive Folder ID *</label>
+                            <input type="text" id="gdriveFolderId" required placeholder="Enter folder ID from URL">
+                            <small class="form-hint">Example: From URL https://drive.google.com/drive/folders/<strong>FOLDER_ID_HERE</strong></small>
+                        </div>
+                        <div class="modal-actions">
+                            <button type="button" class="btn btn-secondary" id="cancelGDriveBtn">Cancel</button>
+                            <button type="submit" class="btn btn-primary" id="loadGDriveFolderBtn">Load Videos</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Local Folder Browser Modal -->
+        <div id="localFolderModal" class="modal">
+            <div class="modal-content modal-large">
+                <div class="modal-header">
+                    <h2><i class="fas fa-hard-drive"></i> Browse Local Video Folder</h2>
+                    <button class="modal-close" id="closeLocalFolderModalBtn">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="localFolderPath">Folder Path *</label>
+                        <input type="text" id="localFolderPath" required placeholder="C:\Videos\MyProject">
+                        <small class="form-hint">Enter the absolute path to your video folder (Windows: C:\path\to\folder, Linux/Mac: /path/to/folder)</small>
+                    </div>
+                    <button id="browseLocalFolderBtn" class="btn btn-primary" style="margin-bottom: 1rem;">
+                        <i class="fas fa-search"></i> Browse Folder
+                    </button>
+                    
+                    <div id="localVideosContainer" style="display: none;">
+                        <h3>Found Videos (<span id="localVideoCount">0</span>)</h3>
+                        <div id="localVideosList" class="videos-list-scrollable" style="max-height: 400px;">
+                            <!-- Local videos will be populated here -->
+                        </div>
+                    </div>
+                    
+                    <div class="modal-actions">
+                        <button class="btn btn-secondary" id="cancelLocalBtn">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading Overlay -->
+        <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+            <div class="loading-spinner"></div>
+            <p id="loadingMessage">Processing...</p>
+        </div>
+
+        <!-- Toast Notifications -->
+        <div id="toastContainer" class="toast-container"></div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
