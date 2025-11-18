@@ -122,6 +122,9 @@ Transcription étendue (ajouter des détails sur les gestes, les erreurs courant
         logger.error(f"Unexpected error generating extended transcript: {e}")
         return None
 
+async def tag_transcript(transcription: str) -> Optional[str]:
+    #TODO
+    return
 
 async def test_llm_connection() -> bool:
     """
