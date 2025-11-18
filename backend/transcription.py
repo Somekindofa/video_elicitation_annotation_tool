@@ -69,9 +69,7 @@ async def transcribe_audio(audio_path: str) -> dict:
                 }
 
                 async with session.post(
-                    FIREWORKS_API_URL,
-                    headers=headers,
-                    data=form
+                    FIREWORKS_API_URL, headers=headers, data=form
                 ) as response:
                     if response.status != 200:
                         error_text = await response.text()
