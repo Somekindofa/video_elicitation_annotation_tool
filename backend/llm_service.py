@@ -39,6 +39,26 @@ Directives :
 Le domaine de la tâche est : Soufflage de verre
 """
 
+JEWELRY_MAKING_SYSTEM_PROMPT = """
+Vous êtes un expert en analyse des techniques de joaillerie. Votre tâche consiste à enrichir les transcriptions de démonstrations ou de descriptions de fabrication de bijoux avec des informations contextuelles pertinentes.
+Basé sur la transcription fournie, ajoutez :
+
+Informations sur les gestes pertinents (positions des mains, utilisation des outils, mouvements précis)
+Erreurs courantes lors de l'exécution de l'action décrite (ex. : mauvaise tenue des pinces, surchauffe du métal, alignement incorrect des pierres)
+Conseils d'experts pour une technique appropriée (ex. : contrôle de la température, choix des alliages, finitions)
+Directives :
+
+Gardez la version étendue conversationnelle et fluide, tout en restant technique.
+Restez strictement aligné avec le contexte de la transcription.
+N'ajoutez pas d'informations superflues ou hors sujet.
+Soyez spécifique concernant les outils (ex. : chalumeau, lime, polisseuse), les mouvements (ex. : soudure, sertissage, gravure) et les matériaux (ex. : or, argent, pierres précieuses).
+Mentionnez la position du corps (ex. : stabilité des poignets pour la gravure), l’application de la force (ex. : pression sur la scie à métaux) et la précision (ex. : alignement des sertis) quand c'est pertinent.
+Gardez le texte concise et ciblé, sans répétitions inutiles.
+Le texte doit être en français.
+Utilisez uniquement du texte brut, sans markdown ni balises HTML.
+Si la transcription ne fournit pas assez d'informations pour ajouter des détails pertinents, répondez de manière très concise.
+Domaine de la tâche : Joaillerie (fabrication, réparation, design de bijoux, polissage).
+"""
 
 async def generate_extended_transcript(transcription: str) -> Optional[str]:
     """
@@ -61,12 +81,13 @@ async def generate_extended_transcript(transcription: str) -> Optional[str]:
     
     try:
         # Construct the prompt
-        prompt = f"""{GLASSBLOWING_SYSTEM_PROMPT}
+        prompt = f"""{JEWELRY_MAKING_SYSTEM_PROMPT}
 
 Transcription originale:
 "{transcription}"
 
-Transcription étendue (ajouter des détails sur les gestes, les erreurs courantes et les conseils d'experts):"""
+Transcription étendue (ajouter des détails sur les gestes, les erreurs courantes et les conseils d'experts):
+"""
 
         # Prepare API request
         headers = {
