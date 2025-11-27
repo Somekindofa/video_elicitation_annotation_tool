@@ -11,7 +11,7 @@ load_dotenv()
 # Base directories
 BASE_DIR = Path(__file__).resolve().parent.parent
 CHROMA_DIR = Path("C:/Users/Theo Akbas/Documents/aiassistant_backend/chroma_langchain_db")
-ELICITATION_DIR = CHROMA_DIR / "elicitations_db"
+ELICITATION_DIR = BASE_DIR / "elicitations_db"
 DATA_DIR = BASE_DIR / "data"
 VIDEOS_DIR = DATA_DIR / "videos"
 AUDIO_DIR = DATA_DIR / "audio"
@@ -47,7 +47,7 @@ FIREWORKS_LANGUAGE = "fr"
 # Fireworks.ai LLM settings for extended transcripts
 FIREWORKS_LLM_API_URL = "https://api.fireworks.ai/inference/v1/completions"
 FIREWORKS_LLM_MODEL = "accounts/fireworks/models/llama-v3p3-70b-instruct"
-FIREWORKS_LLM_MAX_TOKENS = 360
+FIREWORKS_LLM_MAX_TOKENS = 512
 FIREWORKS_LLM_TEMPERATURE = 0.9
 
 # Google Drive API settings
