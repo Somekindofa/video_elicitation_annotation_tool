@@ -17,12 +17,14 @@ cd backend
 python main.py
 ```
 
-**Port**: `8005` (not 8000 - see `config.py`)
+**Port**: `8005` (not 8000 - see `config.py`, README.md is outdated)
 
 ### Environment Requirements
 - **FIREWORKS_API_KEY** required in `.env` or environment - used for BOTH Whisper transcription AND LLM extended transcripts
+- **GOOGLE_DRIVE_API_KEY** optional in `.env` - enables public Google Drive folder access
+- Virtual environment automatically created by `start.bat` (`.venv/` directory)
 - No local Whisper model - all transcription is cloud-based via Fireworks.ai
-- Database auto-migrates on startup (SQLite async via aiosqlite)
+- Database auto-migrates on startup (SQLite async via aiosqlite in `elicitations_db/`)
 
 ## Architecture Deep Dive
 
@@ -156,7 +158,7 @@ sqlite_web data/annotations.db
 ```
 frontend/
 ├── index.html          # Single-page app
-├── js/app.js          # All JS logic (1491 lines - no bundler)
+├── js/app.js          # All JS logic (~1500 lines - no bundler)
 └── css/styles.css     # Complete styling
 
 backend/
@@ -164,12 +166,19 @@ backend/
 ├── database.py        # Async SQLAlchemy operations
 ├── models.py          # SQLAlchemy ORM + Pydantic schemas
 ├── transcription.py   # Fireworks Whisper client
-└── llm_service.py     # Fireworks LLM client
+├── llm_service.py     # Fireworks LLM client (Llama 3.3 70B)
+├── gdrive_service.py  # Google Drive video streaming integration
+└── config.py          # Centralized configuration and paths
+
+elicitations_db/       # SQLite database directory
+└── annotations.db     # Main database file
 
 data/                  # Git-ignored runtime data
 ├── videos/            # Uploaded videos (UUID prefixed)
 ├── audio/             # WAV recordings (annotation_{uuid}.wav)
 └── exports/           # JSON exports with timestamps
+
+.venv/                 # Python virtual environment (created by start.bat)
 ```
 
 ### Error Handling Pattern
@@ -202,14 +211,43 @@ except Exception as e:
 - Native File API for video uploads
 - WebSocket for bidirectional real-time updates
 
+## Key Features & Components
+
+### Projects System
+Videos can be organized into projects (datasets) with batch ordering:
+```python
+# Projects have many videos, videos belong to optional project
+project.videos  # Ordered by batch_position
+video.project_id  # Nullable - videos can exist standalone
+video.batch_position  # Integer position in batch (for ordered annotation workflows)
+```
+
+API endpoints: `POST /api/projects`, `GET /api/projects/{id}/videos`, `PUT /api/videos/{id}` to assign project/position
+
+### Video Source Types
+Three ways to load videos (see `video.source_type` and `video.is_local`):
+1. **Uploaded** (`source_type="uploaded"`, `is_local=0`) - File copied to `data/videos/`
+2. **Local** (`source_type="local"`, `is_local=1`) - File referenced by absolute path, no copying (for large GB files)
+3. **Google Drive** (`source_type="gdrive"`) - Streamed from public GDrive folders via `gdrive_service.py`
+
+Local video workflow: `GET /api/videos/local/browse?directory=C:\path` → `POST /api/videos/local/register` with filepath
+
+### LLM Prompt Customization
+`llm_service.py` contains domain-specific system prompts:
+- `GLASSBLOWING_SYSTEM_PROMPT` - Default for glassblowing videos
+- `JEWELRY_MAKING_SYSTEM_PROMPT` - Alternative for jewelry crafts
+- **Currently active**: Jewelry prompt (line 87: `prompt = f"""{JEWELRY_MAKING_SYSTEM_PROMPT}...`)
+- Change by swapping prompt variable in `generate_extended_transcript()`
+
 ## Key Files Reference
 
-- `backend/config.py` - ALL configuration, file paths, API settings
-- `backend/main.py` - Complete API surface, WebSocket manager, background tasks
-- `backend/llm_service.py` - Glassblowing-specific system prompt for LLM
-- `frontend/js/app.js` - Complete frontend logic (search for function names)
-- `EXTENDED_TRANSCRIPT_FEATURE.md` - Extended transcript feature architecture
-- `TESTING_GUIDE.md` - Manual testing procedures
+- `backend/config.py` - ALL configuration, file paths, API settings, environment variables
+- `backend/main.py` - Complete API surface (26 endpoints), WebSocket manager, background task launchers
+- `backend/llm_service.py` - Domain-specific system prompts for LLM (glassblowing/jewelry)
+- `backend/database.py` - All CRUD operations, uses `AsyncSessionLocal()` for background tasks
+- `backend/gdrive_service.py` - Google Drive API integration for video streaming
+- `frontend/js/app.js` - Complete frontend logic (search for function names like `loadVideos`, `recordAnnotation`)
+- `start.bat` - Windows startup script (venv creation, dependency install, server launch)
 
 ## Avoiding Common Mistakes
 
