@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import List, Optional
 import uuid
 
-from fastapi import FastAPI, File, UploadFile, Depends, HTTPException, WebSocket, WebSocketDisconnect, Request
+from fastapi import FastAPI, File, UploadFile, Depends, HTTPException, WebSocket, WebSocketDisconnect, Request, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -646,6 +646,7 @@ async def create_annotation(
     start_time: float,
     end_time: float,
     audio_blob: UploadFile = File(...),
+    craft: Optional[str] = Form(None),
     session: AsyncSession = Depends(db.get_session)
 ):
     """Create a new annotation with audio recording"""
@@ -682,6 +683,7 @@ async def create_annotation(
             end_time=end_time,
             audio_filename=audio_filename,
             audio_filepath=str(audio_filepath)
+            ,craft=craft
         )
         
         annotation = await db.create_annotation(session, annotation_data)
@@ -799,9 +801,16 @@ async def process_extended_transcript(annotation_id: int, transcription: str):
         })
         
         logger.info(f"Starting extended transcript generation for annotation {annotation_id}")
-        
-        # Generate extended transcript using LLM
-        extended_transcript = await generate_extended_transcript(transcription)
+
+        # Read annotation from DB to get craft/domain if present
+        craft_value = None
+        async with db.AsyncSessionLocal() as session:
+            ann = await db.get_annotation(session, annotation_id)
+            if ann and hasattr(ann, 'craft'):
+                craft_value = ann.craft
+
+        # Generate extended transcript using LLM with craft selection
+        extended_transcript = await generate_extended_transcript(transcription, craft=craft_value)
         
         if extended_transcript:
             # Update annotation with extended transcript

@@ -61,6 +61,8 @@ class Annotation(Base):
     transcription_status = Column(String, default="pending")  # pending, processing, completed, failed
     extended_transcript = Column(Text, nullable=True)  # LLM-enhanced transcript
     extended_transcript_status = Column(String, default="pending")  # pending, processing, completed, failed
+    # Craft/domain for prompt selection (e.g., 'glassblowing', 'jewelry')
+    craft = Column(String, nullable=True)
     feedback = Column(Integer, nullable=True)  # 1 for thumbs up, 0 for thumbs down, null for no feedback
     feedback_choices = Column(String, nullable=True)  # JSON string storing array of 1s and 0s
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -136,6 +138,7 @@ class AnnotationCreate(BaseModel):
     end_time: float = Field(..., gt=0)
     audio_filename: str
     audio_filepath: str
+    craft: Optional[str] = None
 
 
 class AnnotationUpdate(BaseModel):
@@ -146,6 +149,7 @@ class AnnotationUpdate(BaseModel):
     extended_transcript_status: Optional[str] = None
     feedback: Optional[int] = None
     feedback_choices: Optional[str] = None
+    craft: Optional[str] = None
 
 
 class AnnotationResponse(BaseModel):
@@ -162,6 +166,7 @@ class AnnotationResponse(BaseModel):
     extended_transcript_status: str
     feedback: Optional[int] = None
     feedback_choices: Optional[str] = None
+    craft: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     

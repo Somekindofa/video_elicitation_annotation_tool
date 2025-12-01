@@ -60,7 +60,7 @@ Si la transcription ne fournit pas assez d'informations pour ajouter des détail
 Domaine de la tâche : Joaillerie (fabrication, réparation, design de bijoux, polissage).
 """
 
-async def generate_extended_transcript(transcription: str) -> Optional[str]:
+async def generate_extended_transcript(transcription: str, craft: Optional[str] = None) -> Optional[str]:
     """
     Generate extended transcript using Fireworks.ai LLM API
     
@@ -80,8 +80,18 @@ async def generate_extended_transcript(transcription: str) -> Optional[str]:
         return None
     
     try:
+        # Choose system prompt based on craft/domain (whitelist to avoid injection)
+        craft_normalized = (craft or "").strip().lower()
+        if craft_normalized == 'glassblowing' or craft_normalized == 'soufflage' or craft_normalized == 'soufflage de verre':
+            system_prompt = GLASSBLOWING_SYSTEM_PROMPT
+        elif craft_normalized == 'jewelry' or craft_normalized == 'jewellery' or craft_normalized == 'joaillerie':
+            system_prompt = JEWELRY_MAKING_SYSTEM_PROMPT
+        else:
+            # Default to glassblowing for backward compatibility
+            system_prompt = GLASSBLOWING_SYSTEM_PROMPT
+
         # Construct the prompt
-        prompt = f"""{JEWELRY_MAKING_SYSTEM_PROMPT}
+        prompt = f"""{system_prompt}
 
 Transcription originale:
 "{transcription}"
