@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Video Elicitation Annotation Tool</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/styles.css">
 </head>
 <body>
@@ -12,22 +13,22 @@
         <!-- Header -->
         <header class="app-header">
             <div class="header-content">
-                <h1>Video Elicitation Annotation Tool</h1>
+                <h1>Video Elicitation Tool</h1>
                 <p class="subtitle">ReSource Project - Expert Knowledge Capture</p>
             </div>
             <div class="header-actions">
+                <button id="addVideosBtn" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> Add Videos
+                </button>
                 <button id="selectVideoBtn" class="btn btn-secondary">
                     <i class="fas fa-video"></i> Select Video
                 </button>
-                <button id="addVideosBtn" class="btn btn-primary">
-                    <i class="fas fa-folder-open"></i> Add Videos
-                </button>
                 <button id="browseLocalBtn" class="btn btn-secondary">
-                    <i class="fas fa-hard-drive"></i> Browse Local Folder
+                    <i class="fas fa-upload"></i> Browse Local Folder
                 </button>
-                <button id="loadGDriveBtn" class="btn btn-secondary">
+                <!-- <button id="loadGDriveBtn" class="btn btn-secondary">
                     <i class="fa-brands fa-google-drive"></i> Load Google Drive Videos
-                </button>
+                </button> -->
                 <input type="file" id="videoFileInput" accept="video/*" multiple style="display: none;">
             </div>
         </header>
@@ -37,9 +38,9 @@
             <button class="tab-btn active" data-tab="annotate">
                 <i class="fas fa-pen-to-square"></i> Annotate
             </button>
-            <button class="tab-btn" data-tab="gdrive" id="gdriveTab" style="display: none;">
+            <!-- <button class="tab-btn" data-tab="gdrive" id="gdriveTab" style="display: none;">
                 <i class="fa-brands fa-google-drive"></i> Google Drive Videos
-            </button>
+            </button> -->
             <button class="tab-btn" data-tab="projects">
                 <i class="fas fa-folder-tree"></i> Projects
             </button>
@@ -122,7 +123,7 @@
                         <span class="info-value" id="videoName">-</span>
                     </div>
                     <div class="info-item">
-                        <span class="info-label">Annotations:</span>
+                        <span class="info-label">Elicitations:</span>
                         <span class="info-value" id="annotationCount">0</span>
                     </div>
                     <div class="info-item">
@@ -136,7 +137,7 @@
             <!-- Right Panel: Annotations Sidebar -->
             <div class="annotations-panel">
                 <div class="panel-header">
-                    <h2>Annotations</h2>
+                    <h2>Elicitations</h2>
                     <button id="refreshAnnotationsBtn" class="btn btn-icon" title="Refresh">
                         <i class="fas fa-sync-alt"></i>
                     </button>
@@ -146,7 +147,7 @@
                     <div class="empty-state">
                         <i class="fas fa-pen-to-square empty-icon"></i>
                         <p>No annotations yet</p>
-                        <p class="hint">Start recording to create your first annotation</p>
+                        <p class="hint">Start recording to create your first elicitation</p>
                     </div>
                 </div>
             </div>
@@ -165,12 +166,12 @@
                 <div class="empty-state">
                     <i class="fas fa-folder-tree empty-icon"></i>
                     <h3>No Projects Yet</h3>
-                    <p>Create a project to organize your videos for batch annotation</p>
+                    <p>Create a project to organize your videos for batch elicitation</p>
                 </div>
             </div>
         </div>
 
-        <!-- Google Drive Videos Tab Content -->
+        <!-- Google Drive Videos Tab Content
         <div class="gdrive-content" id="gdriveVideosTab" style="display: none;">
             <div class="gdrive-header">
                 <h2><i class="fa-brands fa-google-drive"></i> Google Drive Videos</h2>
@@ -186,7 +187,7 @@
                     <p>Click "Load Google Drive Videos" to get started</p>
                 </div>
             </div>
-        </div>
+        </div> -->
 
         <!-- Video List Modal -->
         <div id="videoListModal" class="modal">
@@ -258,7 +259,7 @@
             </div>
         </div>
 
-        <!-- Google Drive Folder ID Modal -->
+        <!-- Google Drive Folder ID Modal
         <div id="gdriveFolderModal" class="modal">
             <div class="modal-content">
                 <div class="modal-header">
@@ -279,7 +280,7 @@
                     </form>
                 </div>
             </div>
-        </div>
+        </div> -->
 
         <!-- Local Folder Browser Modal -->
         <div id="localFolderModal" class="modal">

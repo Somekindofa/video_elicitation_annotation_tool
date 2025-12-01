@@ -24,6 +24,9 @@ const state = {
     gdriveVideos: [],
     gdriveSelectedVideo: null,
     gdriveFolderId: null
+    ,
+    // Craft/domain selection
+    craft: 'glassblowing'
 };
 
 // API Base URL
@@ -46,10 +49,68 @@ async function initializeApp() {
     // Check microphone permissions
     checkMicrophonePermission();
     
+    // Load craft selection from localStorage (default to glassblowing)
+    state.craft = localStorage.getItem('craft') || 'glassblowing';
+    // Create craft selector UI
+    createCraftSelectorUI();
+    
     // Load existing videos
     await loadVideos();
     
     console.log('Application initialized successfully');
+}
+
+// Create a small craft selector UI under the recording controls
+function createCraftSelectorUI() {
+    try {
+        const controls = document.getElementById('recordingControls');
+        if (!controls) return;
+
+        // Create container
+        const wrapper = document.createElement('div');
+        wrapper.className = 'craft-selector';
+        wrapper.style.margin = '10px 0';
+
+        const label = document.createElement('div');
+        label.textContent = 'Select your craft domain';
+        label.style.fontSize = '0.9rem';
+        label.style.marginBottom = '6px';
+
+        const select = document.createElement('select');
+        select.id = 'craftSelector';
+        select.style.padding = '6px 8px';
+        select.style.borderRadius = '4px';
+        select.style.border = '1px solid #ccc';
+
+        const opts = [
+            { value: 'glassblowing', label: 'Glassblowing' },
+            { value: 'jewelry', label: 'Jewelry' }
+        ];
+
+        opts.forEach(o => {
+            const option = document.createElement('option');
+            option.value = o.value;
+            option.textContent = o.label;
+            select.appendChild(option);
+        });
+
+        // Set current value
+        select.value = state.craft || 'glassblowing';
+
+        // On change, update state and persist
+        select.addEventListener('change', (e) => {
+            state.craft = e.target.value;
+            try { localStorage.setItem('craft', state.craft); } catch (e) {}
+        });
+
+        wrapper.appendChild(label);
+        wrapper.appendChild(select);
+
+        // Insert at top of recording controls
+        controls.insertBefore(wrapper, controls.firstChild);
+    } catch (e) {
+        console.error('Failed to create craft selector UI', e);
+    }
 }
 
 // Event Listeners Setup
@@ -70,12 +131,18 @@ function setupEventListeners() {
         document.getElementById('videoFileInput').click();
     });
     
-    // Google Drive buttons
-    document.getElementById('loadGDriveBtn').addEventListener('click', openGDriveFolderModal);
-    document.getElementById('closeGDriveFolderModalBtn').addEventListener('click', closeGDriveFolderModal);
-    document.getElementById('cancelGDriveBtn').addEventListener('click', closeGDriveFolderModal);
-    document.getElementById('gdriveFolderForm').addEventListener('submit', handleGDriveFolderSubmit);
-    document.getElementById('reloadGDriveBtn').addEventListener('click', reloadGDriveFolder);
+    // Google Drive buttons (may not exist if commented out in HTML)
+    const loadGDriveBtn = document.getElementById('loadGDriveBtn');
+    const closeGDriveFolderModalBtn = document.getElementById('closeGDriveFolderModalBtn');
+    const cancelGDriveBtn = document.getElementById('cancelGDriveBtn');
+    const gdriveFolderForm = document.getElementById('gdriveFolderForm');
+    const reloadGDriveBtn = document.getElementById('reloadGDriveBtn');
+    
+    if (loadGDriveBtn) loadGDriveBtn.addEventListener('click', openGDriveFolderModal);
+    if (closeGDriveFolderModalBtn) closeGDriveFolderModalBtn.addEventListener('click', closeGDriveFolderModal);
+    if (cancelGDriveBtn) cancelGDriveBtn.addEventListener('click', closeGDriveFolderModal);
+    if (gdriveFolderForm) gdriveFolderForm.addEventListener('submit', handleGDriveFolderSubmit);
+    if (reloadGDriveBtn) reloadGDriveBtn.addEventListener('click', reloadGDriveFolder);
     
     // Local folder buttons
     console.log('--- Setting up local folder buttons ---');
@@ -503,6 +570,12 @@ async function handleRecordingStop() {
         // Create FormData for multipart upload
         const formData = new FormData();
         formData.append('audio_blob', audioBlob, 'recording.wav');
+        // Attach craft/domain selection so backend can use domain-specific prompts
+        try {
+            formData.append('craft', state.craft || 'glassblowing');
+        } catch (e) {
+            console.warn('Could not append craft to FormData', e);
+        }
         
         const response = await fetch(`${API_BASE}/api/annotations?video_id=${state.currentVideoId}&start_time=${startTime}&end_time=${endTime}`, {
             method: 'POST',
@@ -595,8 +668,8 @@ function renderAnnotations() {
         container.innerHTML = `
             <div class="empty-state">
                 <i class="fas fa-pen-to-square empty-icon"></i>
-                <p>No annotations yet</p>
-                <p class="hint">Start recording to create your first annotation</p>
+                <p>No elicitation yet</p>
+                <p class="hint">Start recording to create your first elicitation</p>
             </div>
         `;
         return;
