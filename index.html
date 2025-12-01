@@ -97,7 +97,7 @@
                         
                         <!-- Video Player -->
                         <div class="video-content">
-                            <video id="videoPlayer" controls controlsList="nodownload">
+                            <video id="videoPlayer" controls controlsList="nodownload" muted>
                                 <source id="videoSource" src="" type="video/mp4">
                                 Your browser does not support the video tag.
                             </video>
@@ -138,9 +138,27 @@
             <div class="annotations-panel">
                 <div class="panel-header">
                     <h2>Elicitations</h2>
-                    <button id="refreshAnnotationsBtn" class="btn btn-icon" title="Refresh">
-                        <i class="fas fa-sync-alt"></i>
-                    </button>
+                    <div class="panel-header-actions">
+                        <div class="sort-dropdown">
+                            <button id="sortAnnotationsBtn" class="btn btn-icon" title="Sort">
+                                <i class="fas fa-sort"></i>
+                            </button>
+                            <div id="sortDropdownMenu" class="sort-dropdown-menu" style="display: none;">
+                                <button class="sort-option" data-sort="timely-asc">
+                                    <i class="fas fa-clock"></i> Timely (Asc)
+                                </button>
+                                <button class="sort-option" data-sort="timely-desc">
+                                    <i class="fas fa-clock"></i> Timely (Desc)
+                                </button>
+                                <button class="sort-option active" data-sort="newest">
+                                    <i class="fas fa-calendar-plus"></i> Newest
+                                </button>
+                            </div>
+                        </div>
+                        <button id="refreshAnnotationsBtn" class="btn btn-icon" title="Refresh">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </div>
                 </div>
 
                 <div class="annotations-list" id="annotationsList">
