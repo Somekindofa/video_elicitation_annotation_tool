@@ -402,19 +402,24 @@ function showVideoModal() {
             if (state.currentVideoId === video.id) {
                 item.classList.add('active');
             }
-            
+
             item.innerHTML = `
                 <div class="video-list-name">${video.filename}</div>
                 <div class="video-list-meta">
                     ${formatFileSize(video.file_size)} • ${video.annotation_count} annotations
                 </div>
+                <div class="video-list-actions">
+                    <button class="btn btn-icon btn-small btn-danger video-delete-btn" title="Delete video" onclick="event.stopPropagation(); deleteVideo(${video.id})">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
             `;
-            
+
             item.addEventListener('click', () => {
                 loadVideo(video.id);
                 closeVideoModal();
             });
-            
+
             container.appendChild(item);
         });
     }
@@ -1430,6 +1435,52 @@ async function deleteProject(projectId) {
     }
 }
 
+async function deleteVideo(videoId) {
+    const video = state.videos.find(v => v.id === videoId);
+    const name = video ? video.filename : `ID ${videoId}`;
+
+    if (!confirm(`Delete video "${name}" and ALL its elicitations?\n\nThis will remove the video file and all associated annotations. Continue?`)) {
+        return;
+    }
+
+    try {
+        showLoading('Deleting video...');
+
+        const response = await fetch(`${API_BASE}/api/videos/${videoId}`, {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(errText || 'Failed to delete video');
+        }
+
+        // Remove from local state
+        state.videos = state.videos.filter(v => v.id !== videoId);
+
+        // If the deleted video is currently loaded, clear the player
+        if (state.currentVideoId === videoId) {
+            state.currentVideo = null;
+            state.currentVideoId = null;
+            document.getElementById('videoPlayerContainer').style.display = 'none';
+            document.getElementById('recordingControls').style.display = 'none';
+            document.getElementById('videoSelector').style.display = 'flex';
+            document.getElementById('videoInfo').style.display = 'none';
+        }
+
+        // Refresh videos in case of ordering or counts
+        await loadVideos();
+
+        showToast('Deleted', 'Video and its elicitations were deleted', 'success');
+    } catch (error) {
+        console.error('Error deleting video:', error);
+        showToast('Error', 'Failed to delete video', 'error');
+    } finally {
+        hideLoading();
+        closeVideoModal();
+    }
+}
+
 async function assignVideos(projectId) {
     const project = state.projects.find(p => p.id === projectId);
     if (!project) return;
@@ -1960,3 +2011,4 @@ window.assignVideos = assignVideos;
 window.addVideoToProject = addVideoToProject;
 window.removeVideoFromProject = removeVideoFromProject;
 window.selectGDriveVideo = selectGDriveVideo;
+window.deleteVideo = deleteVideo;
