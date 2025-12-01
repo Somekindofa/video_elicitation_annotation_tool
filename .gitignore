@@ -46,8 +46,8 @@ data/exports/*.json
 !data/exports/.gitkeep
 
 # Database (comment out if you want to version control)
-data/annotations.db
-data/*.db
+elicitations_db/annotations.db
+elicitations_db/*.db
 
 # Logs
 *.log
