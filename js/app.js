@@ -1,5 +1,5 @@
 /**
- * Video Elicitation Annotation Tool - Frontend Application
+ * Video Elicitation Tool - Frontend Application
  * Main JavaScript file handling all client-side functionality
  */
 
@@ -35,7 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 async function initializeApp() {
-    console.log('Initializing Video Elicitation Annotation Tool...');
+    console.log('Initializing Video Elicitation Tool...');
     
     // Set up event listeners
     setupEventListeners();
@@ -603,16 +603,18 @@ function renderAnnotations() {
     }
     
     container.innerHTML = '';
-    
-    state.annotations.forEach((annotation, index) => {
+
+    // Render newest annotations first by iterating in reverse
+    for (let i = state.annotations.length - 1; i >= 0; i--) {
+        const annotation = state.annotations[i];
         const item = document.createElement('div');
         item.className = 'annotation-item';
         item.dataset.id = annotation.id;
-        
+
         const duration = annotation.end_time - annotation.start_time;
         const statusText = getStatusText(annotation.transcription_status);
         const statusClass = annotation.transcription_status;
-        
+
         // Extended transcript UI logic
         let extendedTranscriptHTML = '';
         if (annotation.transcription && annotation.transcription_status === 'completed') {
@@ -655,7 +657,7 @@ function renderAnnotations() {
                 `;
             }
         }
-        
+
         item.innerHTML = `
             <div class="annotation-header">
                 <span class="annotation-time">
@@ -679,15 +681,15 @@ function renderAnnotations() {
             </div>
             ${extendedTranscriptHTML}
         `;
-        
+
         item.addEventListener('click', (e) => {
             if (!e.target.closest('button') && !e.target.closest('.extended-transcript-toggle') && !e.target.closest('.feedback-btn')) {
                 seekToAnnotation(annotation.start_time);
             }
         });
-        
+
         container.appendChild(item);
-    });
+    }
 }
 
 function renderTimeline() {
