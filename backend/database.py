@@ -9,7 +9,7 @@ from sqlalchemy.future import select
 from sqlalchemy import func
 from datetime import datetime
 
-from models import Base, Project, Video, Annotation, ProjectCreate, ProjectUpdate, VideoCreate, AnnotationCreate, AnnotationUpdate
+from models import Base, Project, Video, Annotation, Tag, ProjectCreate, ProjectUpdate, VideoCreate, AnnotationCreate, AnnotationUpdate, TagCreate
 from config import DATABASE_URL
 
 
@@ -242,3 +242,53 @@ async def get_videos_by_project(
         .order_by(Video.batch_position.nulls_last(), Video.uploaded_at)
     )
     return result.scalars().all()
+
+
+# Tag CRUD Operations
+
+async def create_tag(session: AsyncSession, tag_data: TagCreate) -> Tag:
+    """Create a new tag"""
+    tag = Tag(**tag_data.model_dump())
+    session.add(tag)
+    await session.commit()
+    await session.refresh(tag)
+    return tag
+
+
+async def get_tag_by_name(session: AsyncSession, name: str) -> Optional[Tag]:
+    """Get a tag by name"""
+    result = await session.execute(
+        select(Tag).where(Tag.name == name)
+    )
+    return result.scalar_one_or_none()
+
+
+async def get_all_tags(session: AsyncSession, skip: int = 0, limit: int = 1000) -> List[Tag]:
+    """Get all tags ordered by usage count"""
+    result = await session.execute(
+        select(Tag)
+        .offset(skip)
+        .limit(limit)
+        .order_by(Tag.usage_count.desc(), Tag.name)
+    )
+    return result.scalars().all()
+
+
+async def increment_tag_usage(session: AsyncSession, tag_name: str) -> Optional[Tag]:
+    """Increment the usage count for a tag"""
+    tag = await get_tag_by_name(session, tag_name)
+    if tag:
+        tag.usage_count += 1
+        tag.updated_at = datetime.utcnow()
+        await session.commit()
+        await session.refresh(tag)
+    return tag
+
+
+async def get_or_create_tag(session: AsyncSession, name: str, category: str) -> Tag:
+    """Get existing tag or create new one"""
+    tag = await get_tag_by_name(session, name)
+    if not tag:
+        tag_data = TagCreate(name=name, category=category)
+        tag = await create_tag(session, tag_data)
+    return tag

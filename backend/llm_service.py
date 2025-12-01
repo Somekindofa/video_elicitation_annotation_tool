@@ -1,9 +1,10 @@
 """
-LLM service for generating extended transcripts using Fireworks.ai
+LLM service for generating extended transcripts and tags using Fireworks.ai
 """
 import logging
 import aiohttp
-from typing import Optional
+import json
+from typing import Optional, List, Dict, Tuple
 
 from config import (
     FIREWORKS_API_KEY,
@@ -26,7 +27,7 @@ Basé sur la transcription fournie, ajoutez :
 
 Directives :
 - Gardez la version étendue conversationnelle et fluide
-- Restez étroitement aligné avec le contexte de la transcription
+- Reste strictement aligné avec le contexte de la transcription sans la répéter ou la paraphraser.
 - N'ajoutez pas d'informations excessives ou non pertinentes
 - Soyez spécifique concernant les outils, mouvements et techniques
 - Mentionnez la position du corps, l'application de la force et la précision quand c'est pertinent
@@ -35,28 +36,32 @@ Directives :
 - Le texte doit être en français
 - Utiliser que du texte brut, sans markdown ni balises HTML
 - S'il n'y a pas assez d'informations dans la transcription pour ajouter des détails pertinents, répondre de manière très concise.
+- Si tu remarques que la transcription concerne un autre domaine que le soufflage de verre, informe l'utilisateur que tu ne peux pas traiter cette demande en écrivant : "Désolé, je ne peux traiter que des transcriptions liées au soufflage de verre."
 
 Le domaine de la tâche est : Soufflage de verre
 """
 
 JEWELRY_MAKING_SYSTEM_PROMPT = """
 Vous êtes un expert en analyse des techniques de joaillerie. Votre tâche consiste à enrichir les transcriptions de démonstrations ou de descriptions de fabrication de bijoux avec des informations contextuelles pertinentes.
+Ton rôle sert principalement à augmenter la compréhension technique des transcriptions à des fins de recherche sémantique et d'analyse.
 Basé sur la transcription fournie, ajoutez :
 
 Informations sur les gestes pertinents (positions des mains, utilisation des outils, mouvements précis)
-Erreurs courantes lors de l'exécution de l'action décrite (ex. : mauvaise tenue des pinces, surchauffe du métal, alignement incorrect des pierres)
-Conseils d'experts pour une technique appropriée (ex. : contrôle de la température, choix des alliages, finitions)
+Erreurs courantes lors de l'exécution de l'action décrite (ex. : mauvaise tenue des pinces, surchauffe du métal, alignement incorrect des pierres, prises délicates)
+Conseils d'experts pour une technique appropriée (ex. : contrôle de la température, choix des alliages, finitions, choix des outils adaptés)
 Directives :
 
-Gardez la version étendue conversationnelle et fluide, tout en restant technique.
-Restez strictement aligné avec le contexte de la transcription.
-N'ajoutez pas d'informations superflues ou hors sujet.
-Soyez spécifique concernant les outils (ex. : chalumeau, lime, polisseuse), les mouvements (ex. : soudure, sertissage, gravure) et les matériaux (ex. : or, argent, pierres précieuses).
-Mentionnez la position du corps (ex. : stabilité des poignets pour la gravure), l’application de la force (ex. : pression sur la scie à métaux) et la précision (ex. : alignement des sertis) quand c'est pertinent.
-Gardez le texte concise et ciblé, sans répétitions inutiles.
-Le texte doit être en français.
-Utilisez uniquement du texte brut, sans markdown ni balises HTML.
-Si la transcription ne fournit pas assez d'informations pour ajouter des détails pertinents, répondez de manière très concise.
+- Garde la version étendue conversationnelle et fluide, tout en restant technique.
+- Reste strictement aligné avec le contexte de la transcription sans la répéter ou la paraphraser.
+- N'ajoute pas d'informations superflues ou hors sujet.
+- Soit spécifique concernant les outils (ex. : chalumeau, lime, polisseuse), les mouvements (ex. : soudure, sertissage, gravure) et les matériaux (ex. : or, argent, pierres précieuses).
+- Mentionne la position du corps (ex. : stabilité des poignets pour la gravure), l’application de la force (ex. : pression sur la scie à métaux) et la précision (ex. : alignement des sertis) quand c'est pertinent.
+- Garde le texte concise et ciblé, sans répétitions inutiles.
+- Le texte doit être en français.
+- Utilise uniquement du texte brut, sans markdown ni balises HTML. Utilise des paragraphes pour structurer le texte si nécessaire.
+- Si la transcription ne fournit pas assez d'informations pour ajouter des détails pertinents, répond de manière très concise.
+- Si tu remarques que la transcription concerne un autre domaine que la joaillerie, informe l'utilisateur que tu ne peux pas traiter cette demande en écrivant : "Désolé, je ne peux traiter que des transcriptions liées à la joaillerie."
+
 Domaine de la tâche : Joaillerie (fabrication, réparation, design de bijoux, polissage).
 """
 
@@ -153,9 +158,197 @@ Transcription étendue (ajouter des détails sur les gestes, les erreurs courant
         logger.error(f"Unexpected error generating extended transcript: {e}")
         return None
 
-async def tag_transcript(transcription: str) -> Optional[str]:
-    #TODO
-    return
+TAGGING_SYSTEM_PROMPT = """
+Vous êtes un expert en annotation et catégorisation de transcriptions d'artisanat. Votre tâche est d'analyser des transcriptions de démonstrations artisanales et de générer des tags pertinents et informatifs.
+
+Votre rôle :
+1. Analyser la transcription originale ET la transcription étendue
+2. Identifier des tags précis d'un seul mot qui capturent les éléments clés
+3. Catégoriser chaque tag selon son type
+4. Réutiliser les tags existants quand c'est approprié
+5. Créer de nouveaux tags uniquement si nécessaire
+
+Types de tags (catégories) :
+- "tool" : Outils utilisés (ex: ciseaux, chalumeau, pince, lime)
+- "material" : Matériaux mentionnés (ex: verre, métal, jaconas, or, argent)
+- "technique" : Techniques employées (ex: couper, souder, polir, graver, enfiler)
+- "handling" : Manière de manipuler (ex: deux-mains, délicate, précis, rotation)
+
+Directives :
+- Chaque tag DOIT être un seul mot en français (pas d'espaces, pas de tirets)
+- Privilégiez les tags existants fournis pour maintenir la cohérence du corpus
+- Ne créez de nouveaux tags que si aucun tag existant ne convient
+- Limitez-vous à 3-5 tags maximum par transcription
+- Soyez spécifique mais pas redondant
+- Les tags doivent être en minuscules
+- Évitez les tags trop génériques ou vagues
+
+Format de réponse STRICTEMENT JSON :
+{
+  "tags": [
+    {"name": "ciseaux", "category": "tool"},
+    {"name": "couper", "category": "technique"},
+    {"name": "jaconas", "category": "material"}
+  ],
+  "reasoning": "Brève explication de vos choix (optionnel)"
+}
+
+IMPORTANT : Répondez UNIQUEMENT avec du JSON valide, sans texte avant ou après.
+"""
+
+async def tag_transcript(
+    transcription: str, 
+    extended_transcript: str, 
+    existing_tags: List[Dict[str, str]],
+    craft: Optional[str] = None
+) -> Optional[List[Dict[str, str]]]:
+    """
+    Generate tags for a transcript using Fireworks.ai LLM API
+    
+    Args:
+        transcription: The original Whisper transcription
+        extended_transcript: The LLM-enhanced transcript with gesture info
+        existing_tags: List of existing tags from database [{"name": "...", "category": "..."}]
+        craft: Optional craft/domain context
+        
+    Returns:
+        List of tag dicts with name and category, or None if generation fails
+        Example: [{"name": "ciseaux", "category": "tool"}, {"name": "couper", "category": "technique"}]
+    """
+    if not FIREWORKS_API_KEY:
+        logger.error("FIREWORKS_API_KEY not set in environment")
+        return None
+    
+    if not transcription or not transcription.strip():
+        logger.warning("Empty transcription provided for tagging")
+        return None
+    
+    try:
+        # Format existing tags for the prompt
+        existing_tags_str = "Aucun tag existant." if not existing_tags else "\n".join([
+            f"- {tag['name']} ({tag['category']})" for tag in existing_tags
+        ])
+        
+        # Add craft context if provided
+        craft_context = ""
+        if craft:
+            craft_normalized = craft.strip().lower()
+            if craft_normalized in ['jewelry', 'jewellery', 'joaillerie']:
+                craft_context = "\nContexte du domaine : Joaillerie (fabrication de bijoux)"
+            elif craft_normalized in ['glassblowing', 'soufflage', 'soufflage de verre']:
+                craft_context = "\nContexte du domaine : Soufflage de verre"
+        
+        # Construct the prompt
+        prompt = f"""{TAGGING_SYSTEM_PROMPT}
+
+{craft_context}
+
+Tags existants à privilégier :
+{existing_tags_str}
+
+Transcription originale :
+"{transcription}"
+
+Transcription étendue :
+"{extended_transcript if extended_transcript else 'Non disponible'}"
+
+Générez les tags au format JSON :
+"""
+
+        # Prepare API request
+        headers = {
+            "Authorization": f"Bearer {FIREWORKS_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "model": FIREWORKS_LLM_MODEL,
+            "prompt": prompt,
+            "max_tokens": 300,  # Reduced since we only need JSON output
+            "temperature": 0.3,  # Lower temperature for more consistent tagging
+            "top_p": 0.9,
+            "stop": ["\n\nTranscription", "\n\n---"]
+        }
+        
+        logger.info(f"Calling Fireworks.ai LLM API for tag generation...")
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                FIREWORKS_LLM_API_URL,
+                headers=headers,
+                json=payload,
+                timeout=aiohttp.ClientTimeout(total=45)
+            ) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    logger.error(f"LLM API error (status {response.status}): {error_text}")
+                    return None
+                
+                result = await response.json()
+                
+                # Extract the generated text
+                if "choices" in result and len(result["choices"]) > 0:
+                    generated_text = result["choices"][0].get("text", "").strip()
+                    
+                    if not generated_text:
+                        logger.warning("LLM returned empty text for tagging")
+                        return None
+                    
+                    # Parse JSON response
+                    try:
+                        # Try to extract JSON if there's extra text
+                        json_start = generated_text.find('{')
+                        json_end = generated_text.rfind('}') + 1
+                        if json_start >= 0 and json_end > json_start:
+                            json_str = generated_text[json_start:json_end]
+                            parsed = json.loads(json_str)
+                        else:
+                            parsed = json.loads(generated_text)
+                        
+                        # Validate structure
+                        if "tags" in parsed and isinstance(parsed["tags"], list):
+                            tags = parsed["tags"]
+                            # Validate each tag has name and category
+                            valid_tags = []
+                            valid_categories = {"tool", "material", "technique", "handling"}
+                            
+                            for tag in tags:
+                                if isinstance(tag, dict) and "name" in tag and "category" in tag:
+                                    # Normalize tag name (lowercase, no spaces)
+                                    tag_name = tag["name"].strip().lower().replace(" ", "").replace("-", "")
+                                    tag_category = tag["category"].strip().lower()
+                                    
+                                    # Validate category
+                                    if tag_category in valid_categories and tag_name:
+                                        valid_tags.append({
+                                            "name": tag_name,
+                                            "category": tag_category
+                                        })
+                            
+                            if valid_tags:
+                                logger.info(f"Generated {len(valid_tags)} tags successfully")
+                                return valid_tags
+                            else:
+                                logger.warning("No valid tags in LLM response")
+                                return None
+                        else:
+                            logger.error(f"Invalid JSON structure from LLM: {parsed}")
+                            return None
+                            
+                    except json.JSONDecodeError as e:
+                        logger.error(f"Failed to parse JSON from LLM response: {e}")
+                        logger.error(f"Generated text: {generated_text}")
+                        return None
+                else:
+                    logger.error(f"Unexpected LLM API response format: {result}")
+                    return None
+                    
+    except aiohttp.ClientError as e:
+        logger.error(f"Network error calling LLM API for tagging: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Unexpected error generating tags: {e}")
+        return None
 
 async def test_llm_connection() -> bool:
     """

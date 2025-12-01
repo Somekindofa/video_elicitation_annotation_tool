@@ -47,6 +47,18 @@ class Video(Base):
     annotations = relationship("Annotation", back_populates="video", cascade="all, delete-orphan")
 
 
+class Tag(Base):
+    """Tag for categorizing annotations"""
+    __tablename__ = "tags"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, unique=True, index=True)  # Single word tag (e.g., "scissors", "cutting")
+    category = Column(String, nullable=False)  # tool, material, technique, handling
+    usage_count = Column(Integer, default=0)  # Track how often this tag is used
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class Annotation(Base):
     """Video annotation with audio and transcription"""
     __tablename__ = "annotations"
@@ -61,6 +73,8 @@ class Annotation(Base):
     transcription_status = Column(String, default="pending")  # pending, processing, completed, failed
     extended_transcript = Column(Text, nullable=True)  # LLM-enhanced transcript
     extended_transcript_status = Column(String, default="pending")  # pending, processing, completed, failed
+    tags = Column(Text, nullable=True)  # JSON string storing array of tag names ["scissors", "cutting"]
+    tagging_status = Column(String, default="pending")  # pending, processing, completed, failed
     # Craft/domain for prompt selection (e.g., 'glassblowing', 'jewelry')
     craft = Column(String, nullable=True)
     feedback = Column(Integer, nullable=True)  # 1 for thumbs up, 0 for thumbs down, null for no feedback
@@ -147,6 +161,8 @@ class AnnotationUpdate(BaseModel):
     transcription_status: Optional[str] = None
     extended_transcript: Optional[str] = None
     extended_transcript_status: Optional[str] = None
+    tags: Optional[str] = None
+    tagging_status: Optional[str] = None
     feedback: Optional[int] = None
     feedback_choices: Optional[str] = None
     craft: Optional[str] = None
@@ -164,6 +180,8 @@ class AnnotationResponse(BaseModel):
     transcription_status: str
     extended_transcript: Optional[str] = None
     extended_transcript_status: str
+    tags: Optional[str] = None
+    tagging_status: str
     feedback: Optional[int] = None
     feedback_choices: Optional[str] = None
     craft: Optional[str] = None
@@ -211,6 +229,25 @@ class FeedbackRequest(BaseModel):
 class LocalVideoRegisterRequest(BaseModel):
     """Schema for registering a local video file"""
     filepath: str
+
+
+class TagCreate(BaseModel):
+    """Schema for creating a tag"""
+    name: str
+    category: str  # tool, material, technique, handling
+
+
+class TagResponse(BaseModel):
+    """Schema for tag response"""
+    id: int
+    name: str
+    category: str
+    usage_count: int
+    created_at: datetime
+    updated_at: datetime
+    
+    class Config:
+        from_attributes = True
 
 
 class StatusResponse(BaseModel):

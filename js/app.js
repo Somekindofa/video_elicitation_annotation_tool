@@ -26,7 +26,9 @@ const state = {
     gdriveFolderId: null
     ,
     // Craft/domain selection
-    craft: 'glassblowing'
+    craft: 'glassblowing',
+    // Sorting
+    sortBy: 'newest'
 };
 
 // API Base URL
@@ -224,6 +226,20 @@ function setupEventListeners() {
         }
     });
     
+    // Sort annotations
+    document.getElementById('sortAnnotationsBtn').addEventListener('click', toggleSortDropdown);
+    document.querySelectorAll('.sort-option').forEach(option => {
+        option.addEventListener('click', handleSortChange);
+    });
+    // Close sort dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+        const dropdown = document.getElementById('sortDropdownMenu');
+        const sortBtn = document.getElementById('sortAnnotationsBtn');
+        if (dropdown && !dropdown.contains(e.target) && !sortBtn.contains(e.target)) {
+            dropdown.style.display = 'none';
+        }
+    });
+    
     // Modal
     document.getElementById('closeModalBtn').addEventListener('click', closeVideoModal);
     
@@ -306,6 +322,22 @@ function handleWebSocketMessage(message) {
         case 'extended_transcript_error':
             showToast('Extended Transcript Error', message.error, 'error');
             updateExtendedTranscriptStatus(message.annotation_id, 'failed');
+            break;
+            
+        case 'tagging_status':
+            updateTaggingStatus(message.annotation_id, message.status);
+            break;
+            
+        case 'tagging_complete':
+            updateTags(message.annotation_id, message.tags);
+            if (state.currentVideoId) {
+                loadAnnotations(state.currentVideoId);
+            }
+            break;
+            
+        case 'tagging_error':
+            showToast('Tagging Error', message.error, 'error');
+            updateTaggingStatus(message.annotation_id, 'failed');
             break;
             
         case 'annotation_deleted':
@@ -682,9 +714,11 @@ function renderAnnotations() {
     
     container.innerHTML = '';
 
-    // Render newest annotations first by iterating in reverse
-    for (let i = state.annotations.length - 1; i >= 0; i--) {
-        const annotation = state.annotations[i];
+    // Sort annotations based on current sort option
+    const sortedAnnotations = getSortedAnnotations();
+
+    // Render sorted annotations
+    sortedAnnotations.forEach(annotation => {
         const item = document.createElement('div');
         item.className = 'annotation-item';
         item.dataset.id = annotation.id;
@@ -736,6 +770,32 @@ function renderAnnotations() {
             }
         }
 
+        // Tags UI logic
+        let tagsHTML = '';
+        if (annotation.extended_transcript_status === 'completed') {
+            if (annotation.tagging_status === 'processing') {
+                tagsHTML = `
+                    <div class="tagging-progress">
+                        <i class="fa-solid fa-tag"></i>
+                        <span>Generating tags...</span>
+                    </div>
+                `;
+            } else if (annotation.tagging_status === 'completed' && annotation.tags && annotation.tags.length > 0) {
+                tagsHTML = `<div class="annotation-tags">`;
+                
+                annotation.tags.forEach(tag => {
+                    const categoryClass = tag.category ? `category-${tag.category}` : '';
+                    tagsHTML += `
+                        <span class="annotation-tag ${categoryClass}" title="${tag.category || 'tag'}">
+                            ${tag.name}
+                        </span>
+                    `;
+                });
+                
+                tagsHTML += `</div>`;
+            }
+        }
+
         item.innerHTML = `
             <div class="annotation-header">
                 <span class="annotation-time">
@@ -745,6 +805,9 @@ function renderAnnotations() {
                 <div class="annotation-actions">
                     <button class="btn btn-icon btn-small" onclick="seekToAnnotation(${annotation.start_time})" title="Jump to time">
                         <i class="fas fa-play"></i>
+                    </button>
+                    <button class="btn btn-icon btn-small" onclick="startEditTranscription(${annotation.id})" title="Edit transcription">
+                        <i class="fas fa-pencil-alt"></i>
                     </button>
                     <button class="btn btn-icon btn-small" onclick="deleteAnnotation(${annotation.id})" title="Delete">
                         <i class="fas fa-trash"></i>
@@ -757,6 +820,7 @@ function renderAnnotations() {
             <div class="annotation-status ${statusClass}">
                 ${statusText}
             </div>
+            ${tagsHTML}
             ${extendedTranscriptHTML}
         `;
 
@@ -767,7 +831,7 @@ function renderAnnotations() {
         });
 
         container.appendChild(item);
-    }
+    });
 }
 
 function renderTimeline() {
@@ -920,6 +984,99 @@ function updateAnnotationTranscription(annotationId, transcription) {
     }
 }
 
+// Inline transcription editing
+function startEditTranscription(annotationId) {
+    const item = document.querySelector(`.annotation-item[data-id="${annotationId}"]`);
+    if (!item) return;
+
+    const transcriptionDiv = item.querySelector('.annotation-transcription');
+    if (!transcriptionDiv) return;
+
+    // Prevent multiple editors
+    if (item.querySelector('.transcription-editor')) return;
+
+    const originalText = transcriptionDiv.textContent.trim();
+
+    // Create editor elements
+    const editor = document.createElement('div');
+    editor.className = 'transcription-editor';
+
+    const textarea = document.createElement('textarea');
+    textarea.className = 'transcription-textarea';
+    textarea.value = (originalText === 'Transcription pending...' || originalText === '') ? '' : originalText;
+
+    const actions = document.createElement('div');
+    actions.className = 'transcription-editor-actions';
+
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'btn btn-primary btn-small';
+    saveBtn.textContent = 'Save';
+    saveBtn.addEventListener('click', () => saveTranscriptionEdit(annotationId, textarea.value, item));
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'btn btn-secondary btn-small';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.addEventListener('click', () => cancelTranscriptionEdit(item, transcriptionDiv, originalText));
+
+    actions.appendChild(saveBtn);
+    actions.appendChild(cancelBtn);
+
+    editor.appendChild(textarea);
+    editor.appendChild(actions);
+
+    // Replace transcriptionDiv content with editor
+    transcriptionDiv.style.display = 'none';
+    transcriptionDiv.parentNode.insertBefore(editor, transcriptionDiv.nextSibling);
+
+    textarea.focus();
+}
+
+async function saveTranscriptionEdit(annotationId, newText, itemElement) {
+    try {
+        showLoading('Saving transcription...');
+
+        const payload = { transcription: newText };
+
+        const response = await fetch(`${API_BASE}/api/annotations/${annotationId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(errText || 'Failed to save transcription');
+        }
+
+        const updated = await response.json();
+
+        // Update local state
+        const annotation = state.annotations.find(a => a.id === annotationId);
+        if (annotation) {
+            annotation.transcription = updated.transcription;
+            annotation.updated_at = updated.updated_at;
+            annotation.transcription_status = updated.transcription_status || annotation.transcription_status;
+        }
+
+        // Remove editor and re-render
+        renderAnnotations();
+        renderTimeline();
+        showToast('Saved', 'Transcription updated', 'success');
+    } catch (error) {
+        console.error('Error saving transcription edit:', error);
+        showToast('Error', 'Failed to save transcription', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+function cancelTranscriptionEdit(itemElement, transcriptionDiv, originalText) {
+    // Remove editor if exists
+    const editor = itemElement.querySelector('.transcription-editor');
+    if (editor) editor.remove();
+    transcriptionDiv.style.display = '';
+}
+
 // Export Annotations
 async function exportAnnotations() {
     if (!state.currentVideoId) {
@@ -949,6 +1106,61 @@ async function exportAnnotations() {
         showToast('Error', 'Failed to export annotations', 'error');
     } finally {
         hideLoading();
+    }
+}
+
+// Sorting Functions
+function toggleSortDropdown(event) {
+    event.stopPropagation();
+    const dropdown = document.getElementById('sortDropdownMenu');
+    dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+}
+
+function handleSortChange(event) {
+    const sortOption = event.currentTarget.dataset.sort;
+    state.sortBy = sortOption;
+    
+    // Update active state in UI
+    document.querySelectorAll('.sort-option').forEach(option => {
+        option.classList.remove('active');
+    });
+    event.currentTarget.classList.add('active');
+    
+    // Close dropdown
+    document.getElementById('sortDropdownMenu').style.display = 'none';
+    
+    // Re-render annotations with new sort
+    renderAnnotations();
+}
+
+function getSortedAnnotations() {
+    const annotations = [...state.annotations]; // Create a copy to avoid mutating state
+    
+    switch (state.sortBy) {
+        case 'timely-asc':
+            // Sort by start_time ascending (earliest first)
+            return annotations.sort((a, b) => {
+                const A = Number(a.start_time || 0);
+                const B = Number(b.start_time || 0);
+                return A - B;
+            });
+        
+        case 'timely-desc':
+            // Sort by start_time descending (latest first)
+            return annotations.sort((a, b) => {
+                const A = Number(a.start_time || 0);
+                const B = Number(b.start_time || 0);
+                return B - A;
+            });
+        
+        case 'newest':
+        default:
+            // Sort by updated_at descending (most recently updated first)
+            return annotations.sort((a, b) => {
+                const dateA = new Date(a.updated_at || a.created_at || 0).getTime();
+                const dateB = new Date(b.updated_at || b.created_at || 0).getTime();
+                return dateB - dateA;
+            });
     }
 }
 
@@ -1013,6 +1225,23 @@ function updateExtendedTranscript(annotationId, extendedTranscript) {
     if (annotation) {
         annotation.extended_transcript = extendedTranscript;
         annotation.extended_transcript_status = 'completed';
+        renderAnnotations();
+    }
+}
+
+function updateTaggingStatus(annotationId, status) {
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (annotation) {
+        annotation.tagging_status = status;
+        renderAnnotations();
+    }
+}
+
+function updateTags(annotationId, tags) {
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (annotation) {
+        annotation.tags = tags;
+        annotation.tagging_status = 'completed';
         renderAnnotations();
     }
 }

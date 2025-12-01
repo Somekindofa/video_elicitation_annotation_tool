@@ -48,7 +48,7 @@ FIREWORKS_LANGUAGE = "fr"
 FIREWORKS_LLM_API_URL = "https://api.fireworks.ai/inference/v1/completions"
 FIREWORKS_LLM_MODEL = "accounts/fireworks/models/llama-v3p3-70b-instruct"
 FIREWORKS_LLM_MAX_TOKENS = 512
-FIREWORKS_LLM_TEMPERATURE = 0.9
+FIREWORKS_LLM_TEMPERATURE = 0.7
 
 # Google Drive API settings
 GOOGLE_DRIVE_API_KEY = os.getenv("GOOGLE_DRIVE_API_KEY", "")  # Optional: for accessing public folders

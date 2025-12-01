@@ -397,6 +397,63 @@ body {
     font-weight: 600;
 }
 
+.panel-header-actions {
+    display: flex;
+    gap: var(--spacing-sm);
+    align-items: center;
+}
+
+.sort-dropdown {
+    position: relative;
+}
+
+.sort-dropdown-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: var(--spacing-xs);
+    background: var(--surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    min-width: 180px;
+    z-index: 1000;
+    overflow: hidden;
+}
+
+.sort-option {
+    width: 100%;
+    padding: var(--spacing-md);
+    background: none;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    transition: var(--transition);
+}
+
+.sort-option:hover {
+    background: var(--surface-hover);
+}
+
+.sort-option.active {
+    background: var(--primary-color);
+    color: white;
+}
+
+.sort-option.active:hover {
+    background: var(--primary-hover);
+}
+
+.sort-option i {
+    width: 16px;
+    text-align: center;
+}
+
 .annotations-list {
     flex: 1;
     overflow-y: auto;
@@ -441,6 +498,32 @@ body {
     color: var(--text-primary);
     line-height: 1.5;
     margin-bottom: var(--spacing-sm);
+}
+
+.transcription-editor {
+    margin-top: 0.5rem;
+}
+
+.transcription-textarea {
+    width: 100%;
+    min-height: 80px;
+    padding: 0.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    font-size: 0.875rem;
+    resize: vertical;
+}
+
+.transcription-editor-actions {
+    margin-top: 0.5rem;
+    display: flex;
+    gap: 0.5rem;
+    justify-content: flex-end;
+}
+
+.btn-small {
+    padding: 0.35rem 0.6rem;
+    font-size: 0.8rem;
 }
 
 .annotation-status {
@@ -1800,4 +1883,139 @@ body {
     font-size: 0.75rem;
 }
 
+/* ============================================================================
+   ANNOTATION TAGS
+   ============================================================================ */
+
+.annotation-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: var(--spacing-sm);
+    padding-top: var(--spacing-sm);
+    border-top: 1px dashed var(--border-color);
+}
+
+.annotation-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    background: var(--surface-hover);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    transition: var(--transition);
+}
+
+.annotation-tag:hover {
+    transform: scale(1.05);
+    box-shadow: var(--shadow-sm);
+}
+
+/* Category-based tag colors */
+.annotation-tag.category-tool {
+    background: rgba(59, 130, 246, 0.15);
+    border-color: rgba(59, 130, 246, 0.4);
+    color: #1d4ed8;
+}
+
+.annotation-tag.category-material {
+    background: rgba(16, 185, 129, 0.15);
+    border-color: rgba(16, 185, 129, 0.4);
+    color: #047857;
+}
+
+.annotation-tag.category-technique {
+    background: rgba(168, 85, 247, 0.15);
+    border-color: rgba(168, 85, 247, 0.4);
+    color: #7c3aed;
+}
+
+.annotation-tag.category-handling {
+    background: rgba(245, 158, 11, 0.15);
+    border-color: rgba(245, 158, 11, 0.4);
+    color: #b45309;
+}
+
+.annotation-tag.category-action {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.4);
+    color: #b91c1c;
+}
+
+/* Tagging progress indicator */
+.tagging-progress {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm);
+    background: rgba(168, 85, 247, 0.1);
+    border: 1px solid rgba(168, 85, 247, 0.3);
+    border-radius: var(--radius-sm);
+    font-size: 0.813rem;
+    color: #7c3aed;
+    margin-top: var(--spacing-sm);
+}
+
+.tagging-progress i {
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+/* Tag badges */
+.tags-container {
+    margin-top: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.tag-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+    color: white;
+    transition: transform 0.2s;
+}
+
+.tag-badge:hover {
+    transform: scale(1.05);
+}
+
+/* Category-based colors */
+.tag-badge.tool {
+    background-color: #2196f3; /* Blue */
+}
+
+.tag-badge.material {
+    background-color: #ff9800; /* Orange */
+}
+
+.tag-badge.technique {
+    background-color: #4caf50; /* Green */
+}
+
+.tag-badge.handling {
+    background-color: #9c27b0; /* Purple */
+}
+
+.tag-badge.action {
+    background-color: #f44336; /* Red */
+}
+
+.tag-badge.other {
+    background-color: #607d8b; /* Gray */
+}
+
+.tagging-status {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #666;
+    font-style: italic;
+}
 

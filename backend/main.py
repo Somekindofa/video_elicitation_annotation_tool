@@ -640,6 +640,39 @@ async def delete_project(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# Tag API Endpoints
+
+@app.get("/api/tags", response_model=List[models.TagResponse])
+async def get_all_tags(
+    session: AsyncSession = Depends(db.get_session)
+):
+    """Get all available tags ordered by usage count"""
+    try:
+        tags = await db.get_all_tags(session)
+        return [models.TagResponse.model_validate(tag) for tag in tags]
+    except Exception as e:
+        logger.error(f"Error getting tags: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/tags/{tag_name}", response_model=models.TagResponse)
+async def get_tag(
+    tag_name: str,
+    session: AsyncSession = Depends(db.get_session)
+):
+    """Get a specific tag by name"""
+    try:
+        tag = await db.get_tag_by_name(session, tag_name)
+        if not tag:
+            raise HTTPException(status_code=404, detail="Tag not found")
+        return models.TagResponse.model_validate(tag)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting tag: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/annotations", response_model=models.AnnotationResponse)
 async def create_annotation(
     video_id: int,
@@ -832,6 +865,10 @@ async def process_extended_transcript(annotation_id: int, transcription: str):
                 "annotation_id": annotation_id,
                 "extended_transcript": extended_transcript
             })
+            
+            # Start tagging process in background
+            import asyncio
+            asyncio.create_task(process_tags(annotation_id, transcription, extended_transcript))
         else:
             raise Exception("LLM returned no extended transcript")
         
@@ -849,6 +886,107 @@ async def process_extended_transcript(annotation_id: int, transcription: str):
             
             await manager.broadcast({
                 "type": "extended_transcript_error",
+                "annotation_id": annotation_id,
+                "error": str(e)
+            })
+        except:
+            pass
+
+
+async def process_tags(annotation_id: int, transcription: str, extended_transcript: str):
+    """Background task to generate and apply tags using LLM"""
+    from llm_service import tag_transcript
+    
+    try:
+        # Update status to processing
+        async with db.AsyncSessionLocal() as session:
+            await db.update_annotation(
+                session,
+                annotation_id,
+                models.AnnotationUpdate(tagging_status="processing")
+            )
+        
+        # Broadcast status
+        await manager.broadcast({
+            "type": "tagging_status",
+            "annotation_id": annotation_id,
+            "status": "processing"
+        })
+        
+        logger.info(f"Starting tag generation for annotation {annotation_id}")
+        
+        # Get craft/domain and existing tags from database
+        craft_value = None
+        existing_tags = []
+        async with db.AsyncSessionLocal() as session:
+            ann = await db.get_annotation(session, annotation_id)
+            if ann and hasattr(ann, 'craft'):
+                craft_value = ann.craft
+            
+            # Fetch all existing tags from database
+            all_tags = await db.get_all_tags(session)
+            existing_tags = [{"name": tag.name, "category": tag.category} for tag in all_tags]
+        
+        # Generate tags using LLM
+        generated_tags = await tag_transcript(
+            transcription, 
+            extended_transcript, 
+            existing_tags,
+            craft=craft_value
+        )
+        
+        if generated_tags:
+            # Store tags in database and update usage counts
+            tag_names = []
+            async with db.AsyncSessionLocal() as session:
+                for tag_info in generated_tags:
+                    tag_name = tag_info["name"]
+                    tag_category = tag_info["category"]
+                    
+                    # Get or create tag
+                    tag = await db.get_or_create_tag(session, tag_name, tag_category)
+                    
+                    # Increment usage count
+                    await db.increment_tag_usage(session, tag_name)
+                    
+                    tag_names.append(tag_name)
+                
+                # Store tag names as JSON array in annotation
+                tags_json = json.dumps(tag_names)
+                await db.update_annotation(
+                    session,
+                    annotation_id,
+                    models.AnnotationUpdate(
+                        tags=tags_json,
+                        tagging_status="completed"
+                    )
+                )
+            
+            logger.info(f"Tagging completed for annotation {annotation_id}: {tag_names}")
+            
+            # Broadcast completion with tag details
+            await manager.broadcast({
+                "type": "tagging_complete",
+                "annotation_id": annotation_id,
+                "tags": generated_tags  # Include category info for frontend
+            })
+        else:
+            raise Exception("LLM returned no tags")
+        
+    except Exception as e:
+        logger.error(f"Tagging error for annotation {annotation_id}: {e}")
+        
+        # Update status to failed
+        try:
+            async with db.AsyncSessionLocal() as session:
+                await db.update_annotation(
+                    session,
+                    annotation_id,
+                    models.AnnotationUpdate(tagging_status="failed")
+                )
+            
+            await manager.broadcast({
+                "type": "tagging_error",
                 "annotation_id": annotation_id,
                 "error": str(e)
             })
