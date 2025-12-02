@@ -123,7 +123,7 @@ Transcription étendue (rédigez 2-3 phrases concises ajoutant des détails sur 
                 "\n\nOriginal Transcript:", 
                 "\n\n---",
                 "\n\nTranscription",
-                "Désolé, ",  # Stop after refusal message
+                "Désolé ",  # Stop after refusal message
                 "Aucune information",  # Stop after no-info message
                 "\n\n\n",  # Stop on multiple newlines (natural paragraph break)
                 "</s>",  # Stop on end-of-sequence token
