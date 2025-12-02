@@ -1137,6 +1137,9 @@ async function saveTranscriptionEdit(annotationId, newText, itemElement) {
         renderAnnotations();
         renderTimeline();
         showToast('Saved', 'Transcription updated', 'success');
+        // Trigger extended transcript regeneration
+        await regenerateExtendedTranscript(annotationId);
+
     } catch (error) {
         console.error('Error saving transcription edit:', error);
         showToast('Error', 'Failed to save transcription', 'error');
@@ -1165,10 +1168,11 @@ async function regenerateExtendedTranscript(annotationId) {
                 extendedDiv.innerHTML = '<em>Regenerating extended transcript...</em>';
             }
         }
+        showToast('Extended Transcript', 'Regeneration triggered', 'info');
 
     } catch (error) {
         console.error('Error regenerating extended transcript:', error);
-        showNotification('Failed to regenerate extended transcript', 'warning');
+        showToast("Error", 'Failed to regenerate extended transcript', 'error');
     }
 }
 
