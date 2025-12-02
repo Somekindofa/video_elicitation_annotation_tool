@@ -31,12 +31,13 @@ Directives :
 - N'ajoutez pas d'informations excessives ou non pertinentes
 - Soyez spécifique concernant les outils, mouvements et techniques
 - Mentionnez la position du corps, l'application de la force et la précision quand c'est pertinent
-- Gardez la forme du texte concise et ciblée
+- Gardez la forme du texte concise et ciblée (2-3 phrases maximum si pertinent)
 - Évitez les répétitions inutiles
 - Le texte doit être en français
 - Utiliser que du texte brut, sans markdown ni balises HTML
-- S'il n'y a pas assez d'informations dans la transcription pour ajouter des détails pertinents, répondre de manière très concise.
-- Si tu remarques que la transcription concerne un autre domaine que le soufflage de verre, informe l'utilisateur que tu ne peux pas traiter cette demande en écrivant : "Désolé, je ne peux traiter que des transcriptions liées au soufflage de verre."
+- IMPORTANT : S'il n'y a pas assez d'informations dans la transcription pour ajouter des détails pertinents, répondre UNIQUEMENT : "Aucune information additionnelle pertinente."
+- Si tu remarques que la transcription concerne un autre domaine que le soufflage de verre, répondre UNIQUEMENT : "Désolé, je ne peux traiter que des transcriptions liées au soufflage de verre."
+- Ne jamais compléter ou inventer du texte au-delà de ce qui est demandé
 
 Le domaine de la tâche est : Soufflage de verre
 """
@@ -116,9 +117,15 @@ Transcription étendue (ajouter des détails sur les gestes, les erreurs courant
             "max_tokens": FIREWORKS_LLM_MAX_TOKENS,
             "temperature": FIREWORKS_LLM_TEMPERATURE,
             "top_p": 0.9,
-            "frequency_penalty": 0.5,
-            "presence_penalty": 0.3,
-            "stop": ["\n\nOriginal Transcript:", "\n\n---"]
+            "frequency_penalty": 0.8,  # Increased to discourage repetition
+            "presence_penalty": 0.5,    # Increased to encourage conciseness
+            "stop": [
+                "\n\nOriginal Transcript:", 
+                "\n\n---",
+                "\n\nTranscription",
+                "Désolé, je ne peux traiter que",  # Stop after refusal message
+                "Aucune information additionnelle"  # Stop after no-info message
+            ]
         }
         
         logger.info(f"Calling Fireworks.ai LLM API for extended transcript generation...")
