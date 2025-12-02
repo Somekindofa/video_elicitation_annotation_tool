@@ -891,6 +891,58 @@ async def process_extended_transcript(annotation_id: int, transcription: str):
         except:
             pass
 
+@app.post("/api/annotations/{annotation_id}/regenerate-extended")
+async def regenerate_extended_transcript(
+    annotation_id: int,
+    session: AsyncSession = Depends(db.get_session)
+):
+    """Regenerate extended transcript after transcription edit"""
+    try:
+        # Verify annotation exists and has transcription
+        annotation = await db.get_annotation(session, annotation_id)
+        if not annotation:
+            raise HTTPException(status_code=404, detail="Annotation not found")
+        
+        if not annotation.transcription:
+            raise HTTPException(
+                status_code=400, 
+                detail="Cannot regenerate extended transcript: no transcription available"
+            )
+        
+        logger.info(f"Triggering extended transcript regeneration for annotation {annotation_id}")
+        
+        # Reset extended transcript status to processing
+        await db.update_annotation(
+            session,
+            annotation_id,
+            models.AnnotationUpdate(
+                extended_transcript=None,
+                extended_transcript_status="processing"
+            )
+        )
+        
+        # Broadcast status update
+        await manager.broadcast({
+            "type": "extended_transcript_status",
+            "annotation_id": annotation_id,
+            "status": "processing"
+        })
+        
+        # Start extended transcript generation in background
+        import asyncio
+        asyncio.create_task(process_extended_transcript(annotation_id, annotation.transcription))
+        
+        return {
+            "status": "success",
+            "message": "Extended transcript regeneration started",
+            "annotation_id": annotation_id
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error triggering extended transcript regeneration: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 async def process_tags(annotation_id: int, transcription: str, extended_transcript: str):
     """Background task to generate and apply tags using LLM"""
