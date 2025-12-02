@@ -22,7 +22,6 @@ from starlette.types import Scope
 import database as db
 import models
 from transcription import transcribe_audio_simple, preload_model, get_model_info
-import gdrive_service
 from config import (
     HOST, PORT, CORS_ORIGINS, VIDEOS_DIR, AUDIO_DIR, EXPORTS_DIR,
     STATIC_DIR, FRONTEND_DIR, SUPPORTED_VIDEO_FORMATS, MAX_UPLOAD_SIZE,
@@ -1207,70 +1206,6 @@ class NoCacheStaticFiles(StaticFiles):
             response.headers['Expires'] = '0'
         return response
 
-
-# ============================================================================
-# GOOGLE DRIVE ENDPOINTS
-# ============================================================================
-
-@app.get("/api/gdrive/videos")
-async def get_gdrive_videos(folder_id: str):
-    """
-    Get list of video files from a public Google Drive folder
-    
-    Args:
-        folder_id: Google Drive folder ID
-        
-    Returns:
-        List of video file metadata
-    """
-    try:
-        if not folder_id:
-            raise HTTPException(status_code=400, detail="folder_id is required")
-        
-        # Use API key if available, otherwise try without (for truly public folders)
-        api_key = GOOGLE_DRIVE_API_KEY if GOOGLE_DRIVE_API_KEY else None
-        
-        videos = gdrive_service.list_videos_from_folder(folder_id, api_key)
-        
-        logger.info(f"Retrieved {len(videos)} videos from Google Drive folder {folder_id}")
-        return videos
-        
-    except Exception as e:
-        logger.error(f"Error fetching Google Drive videos: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/api/gdrive/video/{file_id}/stream")
-async def stream_gdrive_video(file_id: str):
-    """
-    Stream a video file from Google Drive
-    
-    Args:
-        file_id: Google Drive file ID
-        
-    Returns:
-        Streaming video response
-    """
-    try:
-        api_key = GOOGLE_DRIVE_API_KEY if GOOGLE_DRIVE_API_KEY else None
-        
-        # Return streaming response that proxies Google Drive video
-        async def video_stream():
-            async for chunk in gdrive_service.stream_video_from_gdrive(file_id, api_key):
-                yield chunk
-        
-        return StreamingResponse(
-            video_stream(),
-            media_type="video/mp4",
-            headers={
-                "Accept-Ranges": "bytes",
-                "Cache-Control": "public, max-age=3600"
-            }
-        )
-        
-    except Exception as e:
-        logger.error(f"Error streaming Google Drive video: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 # Mount static files (frontend) with no-cache for development
