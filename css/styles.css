@@ -206,21 +206,134 @@ body {
 
 .timeline-segment {
     position: absolute;
+    width: 4px;
     height: 100%;
-    background: linear-gradient(135deg, rgba(37, 99, 235, 0.7), rgba(59, 130, 246, 0.7));
-    border-right: 2px solid var(--primary-color);
+    background: linear-gradient(180deg, rgba(37, 99, 235, 0.8), rgba(59, 130, 246, 0.9));
     cursor: pointer;
-    transition: var(--transition);
+    transition: all 0.2s ease;
     z-index: 5;
+    border-radius: 2px;
 }
 
 .timeline-segment:hover {
-    background: linear-gradient(135deg, rgba(37, 99, 235, 0.9), rgba(59, 130, 246, 0.9));
+    width: 6px;
+    background: linear-gradient(180deg, rgba(37, 99, 235, 1), rgba(59, 130, 246, 1));
+    box-shadow: 0 0 8px rgba(37, 99, 235, 0.6);
+    z-index: 15;
 }
 
 .timeline-segment.processing {
-    background: linear-gradient(135deg, rgba(245, 158, 11, 0.7), rgba(251, 191, 36, 0.7));
+    background: linear-gradient(180deg, rgba(245, 158, 11, 0.8), rgba(251, 191, 36, 0.9));
     animation: pulse 1.5s ease-in-out infinite;
+}
+
+.timeline-segment.processing:hover {
+    background: linear-gradient(180deg, rgba(245, 158, 11, 1), rgba(251, 191, 36, 1));
+}
+
+/* Timeline bar tooltip */
+.timeline-tooltip {
+    position: absolute;
+    bottom: 120%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(30, 41, 59, 0.98);
+    color: white;
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    z-index: 100;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    min-width: 200px;
+    max-width: 400px;
+    white-space: normal;
+}
+
+.timeline-tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-top-color: rgba(30, 41, 59, 0.98);
+}
+
+.timeline-segment:hover .timeline-tooltip {
+    opacity: 1;
+}
+
+.timeline-tooltip-time {
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #60a5fa;
+    display: block;
+}
+
+.timeline-tooltip-transcript {
+    font-size: 0.813rem;
+    color: #e2e8f0;
+    margin-bottom: 8px;
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.timeline-tooltip-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.timeline-tooltip-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.timeline-tooltip-tag.category-tool {
+    background: rgba(59, 130, 246, 0.3);
+    border-color: rgba(59, 130, 246, 0.5);
+}
+
+.timeline-tooltip-tag.category-material {
+    background: rgba(16, 185, 129, 0.3);
+    border-color: rgba(16, 185, 129, 0.5);
+}
+
+.timeline-tooltip-tag.category-technique {
+    background: rgba(168, 85, 247, 0.3);
+    border-color: rgba(168, 85, 247, 0.5);
+}
+
+.timeline-tooltip-tag.category-handling {
+    background: rgba(245, 158, 11, 0.3);
+    border-color: rgba(245, 158, 11, 0.5);
+}
+
+.timeline-tooltip-tag.category-action {
+    background: rgba(239, 68, 68, 0.3);
+    border-color: rgba(239, 68, 68, 0.5);
+}
+
+.timeline-tooltip-no-tags {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    font-style: italic;
+    margin-top: 4px;
 }
 
 .timeline-labels {
