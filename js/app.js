@@ -59,6 +59,21 @@ async function initializeApp() {
     // Load existing videos
     await loadVideos();
     
+    // Restore previously loaded video if exists
+    const savedVideoId = localStorage.getItem('currentVideoId');
+    if (savedVideoId) {
+        // Verify the video still exists in loaded videos
+        const videoExists = state.videos.some(v => v.id === parseInt(savedVideoId));
+        if (videoExists) {
+            console.log('Restoring previous video:', savedVideoId);
+            await loadVideo(parseInt(savedVideoId));
+        } else {
+            // Video no longer exists, clear saved state
+            console.log('Saved video no longer exists, clearing state');
+            localStorage.removeItem('currentVideoId');
+        }
+    }
+    
     console.log('Application initialized successfully');
 }
 
@@ -474,6 +489,13 @@ async function loadVideo(videoId) {
         const video = await response.json();
         state.currentVideo = video;
         state.currentVideoId = videoId;
+        
+        // Persist current video ID to localStorage
+        try {
+            localStorage.setItem('currentVideoId', videoId);
+        } catch (e) {
+            console.error('Failed to save video state:', e);
+        }
         
         // Update UI
         document.getElementById('videoSelector').style.display = 'none';
@@ -1740,6 +1762,12 @@ async function deleteVideo(videoId) {
         if (state.currentVideoId === videoId) {
             state.currentVideo = null;
             state.currentVideoId = null;
+            // Clear persisted video state
+            try {
+                localStorage.removeItem('currentVideoId');
+            } catch (e) {
+                console.error('Failed to clear video state:', e);
+            }
             document.getElementById('videoPlayerContainer').style.display = 'none';
             document.getElementById('recordingControls').style.display = 'none';
             document.getElementById('videoSelector').style.display = 'flex';
