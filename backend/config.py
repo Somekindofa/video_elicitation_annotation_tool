@@ -47,8 +47,8 @@ FIREWORKS_LANGUAGE = "fr"
 # Fireworks.ai LLM settings for extended transcripts
 FIREWORKS_LLM_API_URL = "https://api.fireworks.ai/inference/v1/completions"
 FIREWORKS_LLM_MODEL = "accounts/fireworks/models/llama-v3p3-70b-instruct"
-FIREWORKS_LLM_MAX_TOKENS = 512  # Reduced to prevent unnecessary verbosity
-FIREWORKS_LLM_TEMPERATURE = 0.7  # Lower for more focused, concise outputs
+FIREWORKS_LLM_MAX_TOKENS = 250  # Reduced to encourage concise, complete responses
+FIREWORKS_LLM_TEMPERATURE = 0.5  # Lower for more focused, concise outputs
 
 # Google Drive API settings
 GOOGLE_DRIVE_API_KEY = os.getenv("GOOGLE_DRIVE_API_KEY", "")  # Optional: for accessing public folders
