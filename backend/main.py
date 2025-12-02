@@ -865,9 +865,9 @@ async def process_extended_transcript(annotation_id: int, transcription: str):
                 "extended_transcript": extended_transcript
             })
             
-            # Start tagging process in background
-            import asyncio
-            asyncio.create_task(process_tags(annotation_id, transcription, extended_transcript))
+            # # Start tagging process in background
+            # import asyncio
+            # asyncio.create_task(process_tags(annotation_id, transcription, extended_transcript))
         else:
             raise Exception("LLM returned no extended transcript")
         
