@@ -39,11 +39,73 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeApp();
 });
 
+// Reset interface to initial empty state
+function resetInterface() {
+    console.log('Resetting interface to empty state...');
+    
+    // Clear current video state
+    state.currentVideo = null;
+    state.currentVideoId = null;
+    state.annotations = [];
+    
+    // Clear localStorage
+    try {
+        localStorage.removeItem('currentVideoId');
+    } catch (e) {
+        console.error('Failed to clear video state:', e);
+    }
+    
+    // Hide video player and related elements
+    document.getElementById('videoPlayerContainer').style.display = 'none';
+    document.getElementById('recordingControls').style.display = 'none';
+    document.getElementById('videoInfo').style.display = 'none';
+    
+    // Show video selector with empty state
+    const videoSelector = document.getElementById('videoSelector');
+    videoSelector.style.display = 'flex';
+    videoSelector.className = 'video-selector';
+    
+    // Ensure empty state content is present
+    videoSelector.innerHTML = `
+        <div class="empty-state">
+            <i class="fas fa-film empty-icon"></i>
+            <h3>No Video Loaded</h3>
+            <p>Click "Add Videos" to get started</p>
+        </div>
+    `;
+    
+    // Clear annotations panel
+    const annotationsList = document.getElementById('annotationsList');
+    annotationsList.innerHTML = `
+        <div class="empty-state">
+            <i class="fas fa-pen-to-square empty-icon"></i>
+            <p>No annotations yet</p>
+            <p class="hint">Start recording to create your first elicitation</p>
+        </div>
+    `;
+    
+    // Pause and reset video player
+    const videoPlayer = document.getElementById('videoPlayer');
+    videoPlayer.pause();
+    videoPlayer.currentTime = 0;
+    videoPlayer.src = '';
+    
+    console.log('Interface reset complete');
+}
+
 async function initializeApp() {
     console.log('Initializing Video Elicitation Tool...');
     
     // Set up event listeners
     setupEventListeners();
+    
+    // Add header title click listener for reset
+    const headerTitle = document.getElementById('headerTitle');
+    if (headerTitle) {
+        headerTitle.addEventListener('click', () => {
+            resetInterface();
+        });
+    }
     
     // Connect WebSocket
     connectWebSocket();
