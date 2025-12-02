@@ -792,31 +792,31 @@ function renderAnnotations() {
             }
         }
 
-        // // Tags UI logic
-        // let tagsHTML = '';
-        // if (annotation.extended_transcript_status === 'completed') {
-        //     if (annotation.tagging_status === 'processing') {
-        //         tagsHTML = `
-        //             <div class="tagging-progress">
-        //                 <i class="fa-solid fa-tag"></i>
-        //                 <span>Generating tags...</span>
-        //             </div>
-        //         `;
-        //     } else if (annotation.tagging_status === 'completed' && annotation.tags && annotation.tags.length > 0) {
-        //         tagsHTML = `<div class="annotation-tags">`;
+        // Tags UI logic
+        let tagsHTML = '';
+        if (annotation.extended_transcript_status === 'completed') {
+            if (annotation.tagging_status === 'processing') {
+                tagsHTML = `
+                    <div class="tagging-progress">
+                        <i class="fa-solid fa-tag"></i>
+                        <span>Generating tags...</span>
+                    </div>
+                `;
+            } else if (annotation.tagging_status === 'completed' && annotation.tags && annotation.tags.length > 0) {
+                tagsHTML = `<div class="annotation-tags">`;
                 
-        //         annotation.tags.forEach(tag => {
-        //             const categoryClass = tag.category ? `category-${tag.category}` : '';
-        //             tagsHTML += `
-        //                 <span class="annotation-tag ${categoryClass}" title="${tag.category || 'tag'}">
-        //                     ${tag.name}
-        //                 </span>
-        //             `;
-        //         });
+                annotation.tags.forEach(tag => {
+                    const categoryClass = tag.category ? `category-${tag.category}` : '';
+                    tagsHTML += `
+                        <span class="annotation-tag ${categoryClass}" title="${tag.category || 'tag'}">
+                            ${tag.name}
+                        </span>
+                    `;
+                });
                 
-        //         tagsHTML += `</div>`;
-        //     }
-        // }
+                tagsHTML += `</div>`;
+            }
+        }
 
         item.innerHTML = `
             <div class="annotation-header">
@@ -842,7 +842,7 @@ function renderAnnotations() {
             <div class="annotation-status ${statusClass}">
                 ${statusText}
             </div>
-            // ${tagsHTML}
+            ${tagsHTML}
             ${extendedTranscriptHTML}
         `;
 
@@ -1142,6 +1142,33 @@ async function saveTranscriptionEdit(annotationId, newText, itemElement) {
         showToast('Error', 'Failed to save transcription', 'error');
     } finally {
         hideLoading();
+    }
+}
+
+async function regenerateExtendedTranscript(annotationId) {
+    try {
+        // Call the new endpoint to trigger regeneration
+        const response = await fetch(`/api/annotations/${annotationId}/regenerate-extended`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to trigger extended transcript regeneration');
+        }
+
+        // Update UI to show processing status
+        const item = document.querySelector(`.annotation-item[data-id="${annotationId}"]`);
+        if (item) {
+            const extendedDiv = item.querySelector('.annotation-extended');
+            if (extendedDiv) {
+                extendedDiv.innerHTML = '<em>Regenerating extended transcript...</em>';
+            }
+        }
+
+    } catch (error) {
+        console.error('Error regenerating extended transcript:', error);
+        showNotification('Failed to regenerate extended transcript', 'warning');
     }
 }
 
