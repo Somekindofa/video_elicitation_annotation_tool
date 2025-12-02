@@ -1531,22 +1531,22 @@ function switchTab(tabName) {
     const projectsTab = document.getElementById('projectsTab');
     const gdriveTab = document.getElementById('gdriveVideosTab');
     
-    // Hide all tabs first
-    annotateTab.style.display = 'none';
-    projectsTab.style.display = 'none';
-    gdriveTab.style.display = 'none';
+    // Hide all tabs first (with null checks)
+    if (annotateTab) annotateTab.style.display = 'none';
+    if (projectsTab) projectsTab.style.display = 'none';
+    if (gdriveTab) gdriveTab.style.display = 'none';
     
     if (tabName === 'annotate') {
-        annotateTab.style.display = 'flex';
+        if (annotateTab) annotateTab.style.display = 'flex';
         // Auto-load selected Google Drive video if available
         if (state.gdriveSelectedVideo && !state.currentVideoId) {
             loadSelectedGDriveVideo();
         }
     } else if (tabName === 'projects') {
-        projectsTab.style.display = 'block';
+        if (projectsTab) projectsTab.style.display = 'block';
         loadProjects();
     } else if (tabName === 'gdrive') {
-        gdriveTab.style.display = 'block';
+        if (gdriveTab) gdriveTab.style.display = 'block';
     }
 }
 
