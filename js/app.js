@@ -62,7 +62,7 @@ function resetInterface() {
     
     // Show video selector with empty state
     const videoSelector = document.getElementById('videoSelector');
-    videoSelector.style.display = 'flex';
+    videoSelector.style.display = 'block';
     videoSelector.className = 'video-selector';
     
     // Ensure empty state content is present
@@ -86,9 +86,11 @@ function resetInterface() {
     
     // Pause and reset video player
     const videoPlayer = document.getElementById('videoPlayer');
+    const videoSource = document.getElementById('videoSource');
     videoPlayer.pause();
     videoPlayer.currentTime = 0;
-    videoPlayer.src = '';
+    videoSource.src = '';
+    videoPlayer.load(); // Important: reload to clear the source properly
     
     console.log('Interface reset complete');
 }
@@ -515,7 +517,7 @@ function showVideoModal() {
             item.innerHTML = `
                 <div class="video-list-name">${video.filename}</div>
                 <div class="video-list-meta">
-                    ${formatFileSize(video.file_size)} • ${video.annotation_count} annotations
+                    ${formatFileSize(video.file_size)} • ${video.annotation_count} elicitations
                 </div>
                 <div class="video-list-actions">
                     <button class="btn btn-icon btn-small btn-danger video-delete-btn" title="Delete video" onclick="event.stopPropagation(); deleteVideo(${video.id})">
