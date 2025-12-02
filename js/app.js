@@ -844,31 +844,80 @@ function renderTimeline() {
     // Clear existing segments only (keep progress bar and playhead)
     track.querySelectorAll('.timeline-segment').forEach(el => el.remove());
     
-    // Add annotation segments
+    // Add annotation vertical bars at start_time
     state.annotations.forEach(annotation => {
-        const segment = document.createElement('div');
-        segment.className = 'timeline-segment';
-        segment.dataset.id = annotation.id;
+        const bar = document.createElement('div');
+        bar.className = 'timeline-segment';
+        bar.dataset.id = annotation.id;
         
-        if (annotation.transcription_status === 'processing') {
-            segment.classList.add('processing');
+        if (annotation.transcription_status === 'processing' || annotation.tagging_status === 'processing') {
+            bar.classList.add('processing');
         }
         
+        // Position bar at start_time (vertical bar, not segment)
         const startPercent = (annotation.start_time / duration) * 100;
-        const widthPercent = ((annotation.end_time - annotation.start_time) / duration) * 100;
+        bar.style.left = `${startPercent}%`;
         
-        segment.style.left = `${startPercent}%`;
-        segment.style.width = `${widthPercent}%`;
+        // Build tooltip content
+        const tooltip = document.createElement('div');
+        tooltip.className = 'timeline-tooltip';
         
-        // Add tooltip showing time range
-        segment.title = `${formatTime(annotation.start_time)} - ${formatTime(annotation.end_time)}`;
+        // Time range
+        const timeSpan = document.createElement('span');
+        timeSpan.className = 'timeline-tooltip-time';
+        timeSpan.textContent = `${formatTime(annotation.start_time)} - ${formatTime(annotation.end_time)}`;
+        tooltip.appendChild(timeSpan);
         
-        segment.addEventListener('click', (e) => {
+        // Transcription preview (first 100 chars)
+        if (annotation.transcription) {
+            const transcriptDiv = document.createElement('div');
+            transcriptDiv.className = 'timeline-tooltip-transcript';
+            const preview = annotation.transcription.length > 100 
+                ? annotation.transcription.substring(0, 100) + '...' 
+                : annotation.transcription;
+            transcriptDiv.textContent = preview;
+            tooltip.appendChild(transcriptDiv);
+        }
+        
+        // Tags section
+        if (annotation.tags && annotation.tags.length > 0) {
+            const tagsContainer = document.createElement('div');
+            tagsContainer.className = 'timeline-tooltip-tags';
+            
+            annotation.tags.forEach(tag => {
+                const tagSpan = document.createElement('span');
+                tagSpan.className = 'timeline-tooltip-tag';
+                if (tag.category) {
+                    tagSpan.classList.add(`category-${tag.category}`);
+                }
+                tagSpan.textContent = tag.name;
+                tagsContainer.appendChild(tagSpan);
+            });
+            
+            tooltip.appendChild(tagsContainer);
+        } else if (annotation.tagging_status === 'completed') {
+            // No tags but tagging was completed
+            const noTags = document.createElement('div');
+            noTags.className = 'timeline-tooltip-no-tags';
+            noTags.textContent = 'No tags generated';
+            tooltip.appendChild(noTags);
+        } else if (annotation.tagging_status === 'processing') {
+            // Still processing tags
+            const processingTags = document.createElement('div');
+            processingTags.className = 'timeline-tooltip-no-tags';
+            processingTags.textContent = 'Generating tags...';
+            tooltip.appendChild(processingTags);
+        }
+        
+        bar.appendChild(tooltip);
+        
+        // Click to seek
+        bar.addEventListener('click', (e) => {
             e.stopPropagation();
             seekToAnnotation(annotation.start_time);
         });
         
-        track.appendChild(segment);
+        track.appendChild(bar);
     });
     
     // Ensure progress indicator is on top
