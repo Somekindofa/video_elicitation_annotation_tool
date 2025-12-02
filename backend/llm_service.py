@@ -102,7 +102,7 @@ async def generate_extended_transcript(transcription: str, craft: Optional[str] 
 Transcription originale:
 "{transcription}"
 
-Transcription étendue (ajouter des détails sur les gestes, les erreurs courantes et les conseils d'experts):
+Transcription étendue (rédigez 2-3 phrases concises ajoutant des détails sur les gestes, les erreurs courantes et les conseils d'experts):
 """
 
         # Prepare API request
@@ -124,7 +124,10 @@ Transcription étendue (ajouter des détails sur les gestes, les erreurs courant
                 "\n\n---",
                 "\n\nTranscription",
                 "Désolé, ",  # Stop after refusal message
-                "Aucune information"  # Stop after no-info message
+                "Aucune information",  # Stop after no-info message
+                "\n\n\n",  # Stop on multiple newlines (natural paragraph break)
+                "</s>",  # Stop on end-of-sequence token
+                "[END]"  # Explicit end marker
             ]
         }
         
