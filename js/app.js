@@ -1537,7 +1537,7 @@ function switchTab(tabName) {
     if (gdriveTab) gdriveTab.style.display = 'none';
     
     if (tabName === 'annotate') {
-        if (annotateTab) annotateTab.style.display = 'flex';
+        if (annotateTab) annotateTab.style.display = '';
         // Auto-load selected Google Drive video if available
         if (state.gdriveSelectedVideo && !state.currentVideoId) {
             loadSelectedGDriveVideo();
