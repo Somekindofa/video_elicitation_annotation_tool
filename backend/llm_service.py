@@ -118,13 +118,13 @@ Transcription étendue (ajouter des détails sur les gestes, les erreurs courant
             "temperature": FIREWORKS_LLM_TEMPERATURE,
             "top_p": 0.9,
             "frequency_penalty": 0.8,  # Increased to discourage repetition
-            "presence_penalty": 0.5,    # Increased to encourage conciseness
+            "presence_penalty": 0.5,   # Increased to encourage conciseness
             "stop": [
                 "\n\nOriginal Transcript:", 
                 "\n\n---",
                 "\n\nTranscription",
-                "Désolé, je ne peux traiter que",  # Stop after refusal message
-                "Aucune information additionnelle"  # Stop after no-info message
+                "Désolé, ",  # Stop after refusal message
+                "Aucune information"  # Stop after no-info message
             ]
         }
         
