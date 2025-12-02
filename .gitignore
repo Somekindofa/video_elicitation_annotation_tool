@@ -48,6 +48,7 @@ data/exports/*.json
 # Database (comment out if you want to version control)
 elicitations_db/annotations.db
 elicitations_db/*.db
+*json
 
 # Logs
 *.log
