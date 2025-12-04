@@ -300,11 +300,22 @@ async def get_video_file(
                 headers=headers
             )
         else:
-            # No range header - serve entire file
-            return FileResponse(
-                video.filepath,
+            # No range header - stream entire file
+            def iter_file():
+                with open(video.filepath, "rb") as f:
+                    while chunk := f.read(8192):
+                        yield chunk
+            
+            headers = {
+                "Accept-Ranges": "bytes",
+                "Content-Length": str(file_size),
+                "Content-Type": video.mime_type or "video/mp4",
+            }
+            
+            return StreamingResponse(
+                iter_file(),
                 media_type=video.mime_type or "video/mp4",
-                headers={"Accept-Ranges": "bytes"}
+                headers=headers
             )
         
     except HTTPException:
