@@ -15,19 +15,11 @@ const state = {
     audioChunks: [],
     websocket: null,
     recordingTimer: null,
-    // Projects
     projects: [],
     currentProject: null,
     currentTab: 'annotate',
     editingProjectId: null,
-    // Google Drive
-    gdriveVideos: [],
-    gdriveSelectedVideo: null,
-    gdriveFolderId: null
-    ,
-    // Craft/domain selection
     craft: 'glassblowing',
-    // Sorting
     sortBy: 'newest'
 };
 
@@ -211,19 +203,6 @@ function setupEventListeners() {
     document.getElementById('addVideosBtn').addEventListener('click', () => {
         document.getElementById('videoFileInput').click();
     });
-    
-    // Google Drive buttons (may not exist if commented out in HTML)
-    const loadGDriveBtn = document.getElementById('loadGDriveBtn');
-    const closeGDriveFolderModalBtn = document.getElementById('closeGDriveFolderModalBtn');
-    const cancelGDriveBtn = document.getElementById('cancelGDriveBtn');
-    const gdriveFolderForm = document.getElementById('gdriveFolderForm');
-    const reloadGDriveBtn = document.getElementById('reloadGDriveBtn');
-    
-    if (loadGDriveBtn) loadGDriveBtn.addEventListener('click', openGDriveFolderModal);
-    if (closeGDriveFolderModalBtn) closeGDriveFolderModalBtn.addEventListener('click', closeGDriveFolderModal);
-    if (cancelGDriveBtn) cancelGDriveBtn.addEventListener('click', closeGDriveFolderModal);
-    if (gdriveFolderForm) gdriveFolderForm.addEventListener('submit', handleGDriveFolderSubmit);
-    if (reloadGDriveBtn) reloadGDriveBtn.addEventListener('click', reloadGDriveFolder);
     
     // Local folder buttons
     console.log('--- Setting up local folder buttons ---');
@@ -1650,24 +1629,16 @@ function switchTab(tabName) {
     // Show/hide content
     const annotateTab = document.getElementById('annotateTab');
     const projectsTab = document.getElementById('projectsTab');
-    const gdriveTab = document.getElementById('gdriveVideosTab');
     
     // Hide all tabs first (with null checks)
     if (annotateTab) annotateTab.style.display = 'none';
     if (projectsTab) projectsTab.style.display = 'none';
-    if (gdriveTab) gdriveTab.style.display = 'none';
     
     if (tabName === 'annotate') {
         if (annotateTab) annotateTab.style.display = '';
-        // Auto-load selected Google Drive video if available
-        if (state.gdriveSelectedVideo && !state.currentVideoId) {
-            loadSelectedGDriveVideo();
-        }
     } else if (tabName === 'projects') {
         if (projectsTab) projectsTab.style.display = 'block';
         loadProjects();
-    } else if (tabName === 'gdrive') {
-        if (gdriveTab) gdriveTab.style.display = 'block';
     }
 }
 
@@ -2078,180 +2049,6 @@ function formatDate(dateString) {
 }
 
 // ============================================================================
-// GOOGLE DRIVE INTEGRATION
-// ============================================================================
-
-function openGDriveFolderModal() {
-    const modal = document.getElementById('gdriveFolderModal');
-    document.getElementById('gdriveFolderId').value = state.gdriveFolderId || '';
-    modal.classList.add('active');
-    document.getElementById('gdriveFolderId').focus();
-}
-
-function closeGDriveFolderModal() {
-    const modal = document.getElementById('gdriveFolderModal');
-    modal.classList.remove('active');
-}
-
-async function handleGDriveFolderSubmit(event) {
-    event.preventDefault();
-    
-    const folderId = document.getElementById('gdriveFolderId').value.trim();
-    
-    if (!folderId) {
-        showToast('Error', 'Please enter a Google Drive folder ID', 'error');
-        return;
-    }
-    
-    state.gdriveFolderId = folderId;
-    closeGDriveFolderModal();
-    
-    await loadGDriveVideos();
-}
-
-async function loadGDriveVideos() {
-    const folderId = state.gdriveFolderId;
-    
-    if (!folderId) {
-        showToast('Error', 'No folder ID specified', 'error');
-        return;
-    }
-    
-    try {
-        showLoading('Loading Google Drive videos...');
-        
-        const response = await fetch(`${API_BASE}/api/gdrive/videos?folder_id=${encodeURIComponent(folderId)}`);
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Failed to load Google Drive videos');
-        }
-        
-        const videos = await response.json();
-        
-        if (videos.length === 0) {
-            showToast('No Videos', 'No video files found in this folder', 'info');
-            return;
-        }
-        
-        state.gdriveVideos = videos;
-        
-        // Show the Google Drive tab
-        document.getElementById('gdriveTab').style.display = 'inline-flex';
-        
-        // Render videos
-        renderGDriveVideos();
-        
-        // Switch to Google Drive tab
-        switchTab('gdrive');
-        
-        showToast('Success', `Loaded ${videos.length} video(s) from Google Drive`, 'success');
-        
-    } catch (error) {
-        console.error('Error loading Google Drive videos:', error);
-        showToast('Error', error.message, 'error');
-    } finally {
-        hideLoading();
-    }
-}
-
-async function reloadGDriveFolder() {
-    if (state.gdriveFolderId) {
-        await loadGDriveVideos();
-    } else {
-        openGDriveFolderModal();
-    }
-}
-
-function renderGDriveVideos() {
-    const container = document.getElementById('gdriveVideosGrid');
-    
-    if (state.gdriveVideos.length === 0) {
-        container.innerHTML = `
-            <div class="empty-state">
-                <i class="fa-brands fa-google-drive empty-icon"></i>
-                <h3>No Videos Found</h3>
-                <p>No videos found in this folder</p>
-            </div>
-        `;
-        return;
-    }
-    
-    container.innerHTML = state.gdriveVideos.map(video => `
-        <div class="gdrive-video-card ${state.gdriveSelectedVideo && state.gdriveSelectedVideo.id === video.id ? 'selected' : ''}" 
-             onclick="selectGDriveVideo('${video.id}', '${escapeHtml(video.name).replace(/'/g, "\\'")}')">
-            <div class="gdrive-video-card-icon">
-                <i class="fas fa-video"></i>
-            </div>
-            <div class="gdrive-video-card-name">${escapeHtml(video.name)}</div>
-            <div class="gdrive-video-card-meta">
-                <span class="gdrive-video-card-size">
-                    <i class="fas fa-hdd"></i>
-                    ${formatFileSize(video.size)}
-                </span>
-                ${video.duration ? `
-                <span class="gdrive-video-card-duration">
-                    <i class="fas fa-clock"></i>
-                    ${video.duration}
-                </span>
-                ` : ''}
-            </div>
-        </div>
-    `).join('');
-}
-
-function selectGDriveVideo(videoId, videoName) {
-    // Find video in state
-    const video = state.gdriveVideos.find(v => v.id === videoId);
-    if (!video) return;
-    
-    // Update selection
-    state.gdriveSelectedVideo = video;
-    
-    // Re-render to update visual selection
-    renderGDriveVideos();
-    
-    showToast('Video Selected', `Selected: ${video.name}`, 'success');
-}
-
-async function loadSelectedGDriveVideo() {
-    if (!state.gdriveSelectedVideo) return;
-    
-    const video = state.gdriveSelectedVideo;
-    
-    try {
-        showLoading('Loading video from Google Drive...');
-        
-        // Hide video selector
-        document.getElementById('videoSelector').style.display = 'none';
-        document.getElementById('videoPlayerContainer').style.display = 'block';
-        document.getElementById('recordingControls').style.display = 'block';
-        document.getElementById('videoInfo').style.display = 'flex';
-        
-        // Set video source to Google Drive stream endpoint
-        const videoPlayer = document.getElementById('videoPlayer');
-        const videoSource = document.getElementById('videoSource');
-        videoSource.src = `${API_BASE}/api/gdrive/video/${video.id}/stream`;
-        videoPlayer.load();
-        
-        // Update video info
-        document.getElementById('videoName').textContent = video.name;
-        document.getElementById('annotationCount').textContent = '0'; // GDrive videos don't have saved annotations yet
-        
-        // Store current video info
-        state.currentVideo = { filename: video.name, id: null };
-        state.currentVideoId = null; // GDrive videos aren't in DB
-        
-        showToast('Video Loaded', video.name, 'success');
-        
-    } catch (error) {
-        console.error('Error loading Google Drive video:', error);
-        showToast('Error', 'Failed to load video from Google Drive', 'error');
-    } finally {
-        hideLoading();
-    }
-}
-
-// ============================================================================
 // LOCAL FOLDER BROWSER
 // ============================================================================
 
@@ -2407,7 +2204,6 @@ window.seekToAnnotation = seekToAnnotation;
 window.deleteAnnotation = deleteAnnotation;
 window.toggleExtendedTranscript = toggleExtendedTranscript;
 window.registerLocalVideo = registerLocalVideo;
-window.selectGDriveVideo = selectGDriveVideo;
 window.handleFeedback = handleFeedback;
 window.openProject = openProject;
 window.editProject = editProject;
@@ -2415,5 +2211,4 @@ window.deleteProject = deleteProject;
 window.assignVideos = assignVideos;
 window.addVideoToProject = addVideoToProject;
 window.removeVideoFromProject = removeVideoFromProject;
-window.selectGDriveVideo = selectGDriveVideo;
 window.deleteVideo = deleteVideo;
