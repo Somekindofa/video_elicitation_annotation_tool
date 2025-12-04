@@ -220,9 +220,6 @@ function setupEventListeners() {
             console.log('CurrentTarget:', e.currentTarget);
             openLocalFolderModal();
         }, { capture: false });
-        console.log('✅ Event listener added to browseLocalBtn');
-    } else {
-        console.error('❌ browseLocalBtn element not found!');
     }
     
     document.getElementById('closeLocalFolderModalBtn').addEventListener('click', closeLocalFolderModal);
