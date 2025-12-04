@@ -468,8 +468,7 @@ async function loadVideos() {
         if (!response.ok) throw new Error('Failed to load videos');
         
         state.videos = await response.json();
-        
-        // Don't auto-show modal, let user click "Select Video" button
+
     } catch (error) {
         console.error('Error loading videos:', error);
         showToast('Error', 'Failed to load videos', 'error');
