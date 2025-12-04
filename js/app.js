@@ -62,7 +62,7 @@ function resetInterface() {
         <div class="empty-state">
             <i class="fas fa-film empty-icon"></i>
             <h3>No Video Loaded</h3>
-            <p>Click "Add Videos" to get started</p>
+            <p>Click "Add Local Videos" to get started</p>
         </div>
     `;
     
@@ -199,55 +199,11 @@ function setupEventListeners() {
         }
     });
     
-    // Video upload
-    document.getElementById('addVideosBtn').addEventListener('click', () => {
-        document.getElementById('videoFileInput').click();
-    });
+    // Add Local Videos - opens file picker for local video registration
+    document.getElementById('addVideosBtn').addEventListener('click', handleAddLocalVideos);
     
-    // Local folder buttons
-    console.log('--- Setting up local folder buttons ---');
-    const browseLocalBtn = document.getElementById('browseLocalBtn');
-    console.log('browseLocalBtn element:', browseLocalBtn);
-    console.log('browseLocalBtn disabled?', browseLocalBtn?.disabled);
-    console.log('browseLocalBtn style.display:', browseLocalBtn?.style.display);
-    console.log('browseLocalBtn computed style:', browseLocalBtn ? window.getComputedStyle(browseLocalBtn).display : 'N/A');
-    
-    if (browseLocalBtn) {
-        browseLocalBtn.addEventListener('click', (e) => {
-            console.log('=== browseLocalBtn CLICKED! ===');
-            console.log('Event:', e);
-            console.log('Target:', e.target);
-            console.log('CurrentTarget:', e.currentTarget);
-            openLocalFolderModal();
-        }, { capture: false });
-    }
-    
-    document.getElementById('closeLocalFolderModalBtn').addEventListener('click', closeLocalFolderModal);
-    document.getElementById('cancelLocalBtn').addEventListener('click', closeLocalFolderModal);
-    document.getElementById('browseLocalFolderBtn').addEventListener('click', handleBrowseLocalFolder);
-    
-    console.log('=== Event listeners setup complete ===');
-    
-    // Test if we can access the button after 2 seconds
-    setTimeout(() => {
-        console.log('--- Testing button accessibility after 2 seconds ---');
-        const testBtn = document.getElementById('browseLocalBtn');
-        if (testBtn) {
-            console.log('Test button found, attributes:', {
-                id: testBtn.id,
-                className: testBtn.className,
-                disabled: testBtn.disabled,
-                offsetWidth: testBtn.offsetWidth,
-                offsetHeight: testBtn.offsetHeight,
-                visibility: window.getComputedStyle(testBtn).visibility,
-                display: window.getComputedStyle(testBtn).display,
-                pointerEvents: window.getComputedStyle(testBtn).pointerEvents,
-                zIndex: window.getComputedStyle(testBtn).zIndex
-            });
-        }
-    }, 2000);
-    
-    document.getElementById('videoFileInput').addEventListener('change', handleVideoUpload);
+    // Handle video file selection for local registration (not upload)
+    document.getElementById('videoFileInput').addEventListener('change', handleLocalVideoSelection);
     
     // Recording
     document.getElementById('recordBtn').addEventListener('click', toggleRecording);
@@ -417,45 +373,245 @@ async function checkMicrophonePermission() {
     }
 }
 
-// Video Upload
-async function handleVideoUpload(event) {
+// Handle Add Local Videos button click
+async function handleAddLocalVideos() {
+    // Check if File System Access API is available
+    if (window.showOpenFilePicker) {
+        try {
+            // Use modern File System Access API to get full file paths
+            const fileHandles = await window.showOpenFilePicker({
+                multiple: true,
+                types: [{
+                    description: 'Video Files',
+                    accept: {
+                        'video/*': ['.mp4', '.webm', '.mov', '.avi', '.mkv']
+                    }
+                }]
+            });
+            
+            showLoading(`Registering ${fileHandles.length} video(s)...`);
+            
+            let successCount = 0;
+            let duplicateCount = 0;
+            let lastRegisteredVideoId = null;
+            
+            for (const fileHandle of fileHandles) {
+                try {
+                    const file = await fileHandle.getFile();
+                    
+                    // Try to get the full path - this may not work in all browsers
+                    // In Electron or when using file:// protocol, we might have access
+                    let filepath = null;
+                    
+                    // Try different methods to get the file path
+                    if (file.path) {
+                        filepath = file.path;
+                    } else if (fileHandle.name && window.location.protocol === 'file:') {
+                        // Running locally, might have access to path
+                        filepath = fileHandle.name;
+                    }
+                    
+                    if (!filepath) {
+                        // Fallback: ask user to provide the full path
+                        filepath = prompt(
+                            `Please enter the full path for "${file.name}":\n\n` +
+                            `(Example: C:\\Videos\\${file.name})`,
+                            `C:\\Videos\\${file.name}`
+                        );
+                        
+                        if (!filepath) {
+                            console.log(`Skipped ${file.name} - no path provided`);
+                            continue;
+                        }
+                    }
+                    
+                    const video = await registerLocalVideo(filepath, file.name);
+                    
+                    if (video) {
+                        successCount++;
+                        lastRegisteredVideoId = video.id;
+                    } else {
+                        duplicateCount++;
+                    }
+                } catch (error) {
+                    if (error.message.includes('Already Registered') || error.message.includes('UNIQUE constraint')) {
+                        duplicateCount++;
+                    } else {
+                        console.error(`Failed to register video:`, error);
+                        showToast('Registration Error', error.message, 'error');
+                    }
+                }
+            }
+            
+            // Reload video list
+            await loadVideos();
+            
+            // Show summary message
+            if (successCount > 0) {
+                const message = duplicateCount > 0 
+                    ? `${successCount} video(s) registered, ${duplicateCount} already existed`
+                    : `${successCount} video(s) registered successfully`;
+                showToast('Registration Complete', message, 'success');
+                
+                // Auto-load the last registered video if only one was added
+                if (successCount === 1 && lastRegisteredVideoId) {
+                    await loadVideo(lastRegisteredVideoId);
+                }
+            } else if (duplicateCount > 0) {
+                showToast('Already Registered', `All video(s) were already in your library`, 'info');
+            }
+            
+            hideLoading();
+            
+        } catch (error) {
+            hideLoading();
+            
+            if (error.name === 'AbortError') {
+                // User cancelled the file picker
+                console.log('File selection cancelled');
+            } else {
+                console.error('Error selecting files:', error);
+                showToast('Error', 'Failed to select files: ' + error.message, 'error');
+            }
+        }
+    } else {
+        // Fallback: use traditional file input (won't have full paths)
+        // Show a warning and fall back to the old folder browser
+        showToast(
+            'Browser Limitation',
+            'Your browser doesn\'t support direct file selection. Please enter a folder path manually.',
+            'warning'
+        );
+        
+        // Prompt for folder path
+        const folderPath = prompt(
+            'Enter the full path to a folder containing videos:\n\n' +
+            '(Example: C:\\Users\\YourName\\Videos\\)',
+            ''
+        );
+        
+        if (folderPath) {
+            await handleBrowseFolder(folderPath);
+        }
+    }
+}
+
+// Browse folder and register all videos
+async function handleBrowseFolder(folderPath) {
+    try {
+        showLoading('Browsing folder...');
+        
+        const response = await fetch(`${API_BASE}/api/videos/local/browse?directory=${encodeURIComponent(folderPath)}`);
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to browse folder');
+        }
+        
+        const data = await response.json();
+        
+        if (data.videos.length === 0) {
+            showToast('No Videos', 'No video files found in this folder', 'info');
+            hideLoading();
+            return;
+        }
+        
+        // Register all found videos
+        let successCount = 0;
+        let duplicateCount = 0;
+        
+        for (const video of data.videos) {
+            try {
+                const result = await registerLocalVideo(video.filepath, video.filename);
+                if (result) {
+                    successCount++;
+                } else {
+                    duplicateCount++;
+                }
+            } catch (error) {
+                if (error.message.includes('Already Registered') || error.message.includes('UNIQUE constraint')) {
+                    duplicateCount++;
+                } else {
+                    console.error(`Failed to register ${video.filename}:`, error);
+                }
+            }
+        }
+        
+        await loadVideos();
+        
+        const message = duplicateCount > 0
+            ? `${successCount} video(s) registered, ${duplicateCount} already existed`
+            : `${successCount} video(s) registered successfully`;
+        showToast('Registration Complete', message, 'success');
+        
+    } catch (error) {
+        console.error('Error browsing folder:', error);
+        showToast('Error', error.message, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+// Local Video Selection - Register local videos without copying
+async function handleLocalVideoSelection(event) {
     const files = Array.from(event.target.files);
     
     if (files.length === 0) return;
     
-    showLoading(`Uploading ${files.length} video(s)...`);
+    showLoading(`Registering ${files.length} video(s)...`);
     
     try {
+        let successCount = 0;
+        let duplicateCount = 0;
+        let lastRegisteredVideoId = null;
+        
         for (const file of files) {
-            await uploadVideo(file);
+            try {
+                // Use the file's full path for registration
+                const filepath = file.path || file.webkitRelativePath || file.name;
+                const video = await registerLocalVideo(filepath, file.name);
+                
+                if (video) {
+                    successCount++;
+                    lastRegisteredVideoId = video.id;
+                } else {
+                    duplicateCount++;
+                }
+            } catch (error) {
+                if (error.message.includes('Already Registered') || error.message.includes('UNIQUE constraint')) {
+                    duplicateCount++;
+                } else {
+                    console.error(`Failed to register ${file.name}:`, error);
+                    showToast('Registration Error', `Failed to register ${file.name}: ${error.message}`, 'error');
+                }
+            }
         }
         
+        // Reload video list
         await loadVideos();
-        showToast('Upload Complete', `${files.length} video(s) uploaded successfully`, 'success');
+        
+        // Show summary message
+        if (successCount > 0) {
+            const message = duplicateCount > 0 
+                ? `${successCount} video(s) registered, ${duplicateCount} already existed`
+                : `${successCount} video(s) registered successfully`;
+            showToast('Registration Complete', message, 'success');
+            
+            // Auto-load the last registered video if only one was added
+            if (successCount === 1 && lastRegisteredVideoId) {
+                await loadVideo(lastRegisteredVideoId);
+            }
+        } else if (duplicateCount > 0) {
+            showToast('Already Registered', `All ${duplicateCount} video(s) were already in your library`, 'info');
+        }
+        
     } catch (error) {
-        console.error('Upload error:', error);
-        showToast('Upload Error', error.message, 'error');
+        console.error('Local video registration error:', error);
+        showToast('Registration Error', error.message, 'error');
     } finally {
         hideLoading();
         event.target.value = ''; // Reset input
     }
-}
-
-async function uploadVideo(file) {
-    const formData = new FormData();
-    formData.append('file', file);
-    
-    const response = await fetch(`${API_BASE}/api/videos/upload`, {
-        method: 'POST',
-        body: formData
-    });
-    
-    if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || 'Upload failed');
-    }
-    
-    return await response.json();
 }
 
 // Load Videos
@@ -2140,59 +2296,33 @@ function renderLocalVideos(videos) {
 }
 
 async function registerLocalVideo(filepath, filename) {
-    try {
-        console.log('Registering local video:', { filepath, filename });
-        showLoading(`Registering ${filename}...`);
+    console.log('Registering local video:', { filepath, filename });
+    
+    const response = await fetch(`${API_BASE}/api/videos/local/register`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ filepath })
+    });
+    
+    if (!response.ok) {
+        const error = await response.json();
+        console.error('Registration failed:', error);
         
-        const response = await fetch(`${API_BASE}/api/videos/local/register`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ filepath })
-        });
-        
-        if (!response.ok) {
-            const error = await response.json();
-            console.error('Registration failed:', error);
-            
-            // Check if it's a duplicate error
-            if (error.detail && error.detail.includes('UNIQUE constraint failed')) {
-                showToast('Already Registered', 'This video is already in your library', 'info');
-                closeLocalFolderModal();
-                
-                // Try to find and load the existing video
-                await loadVideos();
-                const existingVideo = state.videos.find(v => v.filepath === filepath);
-                if (existingVideo) {
-                    await loadVideo(existingVideo.id);
-                    showToast('Video Loaded', 'Loaded existing video from library', 'success');
-                }
-                return;
-            }
-            
-            throw new Error(error.detail || 'Failed to register video');
+        // Check if it's a duplicate error
+        if (error.detail && error.detail.includes('UNIQUE constraint failed')) {
+            // Don't show error, just return null to indicate duplicate
+            return null;
         }
         
-        const video = await response.json();
-        
-        showToast('Success', `Video registered: ${filename}`, 'success');
-        
-        // Reload videos list
-        await loadVideos();
-        
-        // Close modal
-        closeLocalFolderModal();
-        
-        // Optionally auto-select the video
-        await loadVideo(video.id);
-        
-    } catch (error) {
-        console.error('Error registering local video:', error);
-        showToast('Error', error.message, 'error');
-    } finally {
-        hideLoading();
+        throw new Error(error.detail || 'Failed to register video');
     }
+    
+    const video = await response.json();
+    console.log('Video registered successfully:', video.id);
+    
+    return video;
 }
 
 // Make functions globally available
