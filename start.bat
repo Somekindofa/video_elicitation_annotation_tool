@@ -66,9 +66,6 @@ if not exist "data\exports" mkdir data\exports
 
 echo Starting server...
 echo.
-echo The application will open in your browser at:
-echo http://localhost:8000
-echo.
 echo Press Ctrl+C to stop the server
 echo ========================================
 echo.
