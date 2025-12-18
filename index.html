@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,6 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/styles.css">
 </head>
+
 <body>
     <div class="app-container">
         <!-- Header -->
@@ -56,14 +58,14 @@
                                 <button id="skipBackBtn" class="btn-playback" title="Skip back 10 seconds">
                                     <i class="fas fa-backward"></i>
                                 </button>
-                                
+
                                 <div class="record-button-container">
                                     <button id="recordBtn" class="btn-record-round" title="Start Recording">
                                         <i class="fas fa-microphone record-icon"></i>
                                     </button>
                                     <div class="recording-pulse" id="recordingPulse" style="display: none;"></div>
                                 </div>
-                                
+
                                 <button id="skipForwardBtn" class="btn-playback" title="Skip forward 10 seconds">
                                     <i class="fas fa-forward"></i>
                                 </button>
@@ -79,17 +81,17 @@
                                     </div>
                                 </div>
                             </div>
-                            
-                            
+
+
                         </div>
-                        
+
                         <!-- Video Player -->
                         <div class="video-content">
                             <video id="videoPlayer" controls controlsList="nodownload" muted>
                                 <source id="videoSource" src="" type="video/mp4">
                                 Your browser does not support the video tag.
                             </video>
-                            
+
                             <!-- Custom Timeline with Annotations -->
                             <div class="timeline-container">
                                 <div class="timeline-track" id="timelineTrack">
@@ -258,19 +260,20 @@
                     <div class="form-group">
                         <label for="localFolderPath">Folder Path *</label>
                         <input type="text" id="localFolderPath" required placeholder="C:\Videos\MyProject">
-                        <small class="form-hint">Enter the absolute path to your video folder (Windows: C:\path\to\folder, Linux/Mac: /path/to/folder)</small>
+                        <small class="form-hint">Enter the absolute path to your video folder (Windows:
+                            C:\path\to\folder, Linux/Mac: /path/to/folder)</small>
                     </div>
                     <button id="browseLocalFolderBtn" class="btn btn-primary" style="margin-bottom: 1rem;">
                         <i class="fas fa-search"></i> Browse Folder
                     </button>
-                    
+
                     <div id="localVideosContainer" style="display: none;">
                         <h3>Found Videos (<span id="localVideoCount">0</span>)</h3>
                         <div id="localVideosList" class="videos-list-scrollable" style="max-height: 400px;">
                             <!-- Local videos will be populated here -->
                         </div>
                     </div>
-                    
+
                     <div class="modal-actions">
                         <button class="btn btn-secondary" id="cancelLocalBtn">Close</button>
                     </div>
@@ -289,6 +292,10 @@
     </div>
 
     <!-- Scripts -->
+    <!-- Markdown renderer and sanitizer -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
     <script src="/static/js/app.js"></script>
 </body>
+
 </html>
