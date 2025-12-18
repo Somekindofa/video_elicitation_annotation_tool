@@ -113,15 +113,16 @@ async def generate_extended_transcript(
 
         # Construct the prompt
         prompt = f"""{system_prompt}
-\n\n
+
 Transcription originale:
 "{transcription}"
-\n\n
 Pour la description étendue tu feras attention à ces points là : il y a 3 niveaux de commentaires à faire.
 1. Ce qui se passe à l'écran (description du geste, position des mains, mouvements du corps).
 2. Les commentaires sur la qualité de l'exécution du geste.
 3. Les conseils d'experts pour mieux guider l'apprentissage.
-
+La transcription étendue doit être en 3 paragraphes distincts, un pour chaque point mentionné ci-dessus.
+Les paragraphes doivent impérativement citer les phrases clés de la transcription originale pour rester alignés avec le contexte. 
+Il faut 2 sauts de ligne entre chaque paragraphe. Utilise le Markdown pour formater les paragraphes.
 Transcription étendue :
 """
 
