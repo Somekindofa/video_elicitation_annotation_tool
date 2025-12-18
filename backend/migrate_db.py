@@ -20,10 +20,11 @@ No hardcoded columns - everything is derived from SQLAlchemy models!
 import sqlite3
 import sys
 from pathlib import Path
-from config import ELICITATION_DIR
+from config import CHROMA_DIR
 from models import Base
 
-DB_PATH = ELICITATION_DIR / "annotations.db"
+# Use the same DB path as runtime (config.DATABASE_URL -> CHROMA_DIR/annotations.db)
+DB_PATH = CHROMA_DIR / "annotations.db"
 
 
 def get_table_columns(cursor, table_name):
@@ -59,7 +60,7 @@ def migrate_database():
     print(f"Checking database at: {DB_PATH}")
 
     # Ensure database directory exists
-    ELICITATION_DIR.mkdir(parents=True, exist_ok=True)
+    CHROMA_DIR.mkdir(parents=True, exist_ok=True)
 
     # Get expected schema from models
     expected_schema = get_expected_schema()
