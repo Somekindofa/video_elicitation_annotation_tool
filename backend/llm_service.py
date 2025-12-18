@@ -1,6 +1,7 @@
 """
 LLM service for generating extended transcripts and tags using Fireworks.ai
 """
+
 import logging
 import aiohttp
 import json
@@ -11,7 +12,7 @@ from config import (
     FIREWORKS_LLM_API_URL,
     FIREWORKS_LLM_MODEL,
     FIREWORKS_LLM_MAX_TOKENS,
-    FIREWORKS_LLM_TEMPERATURE
+    FIREWORKS_LLM_TEMPERATURE,
 )
 
 logger = logging.getLogger(__name__)
@@ -66,13 +67,16 @@ Directives :
 Domaine de la tâche : Joaillerie (fabrication, réparation, design de bijoux, polissage).
 """
 
-async def generate_extended_transcript(transcription: str, craft: Optional[str] = None) -> Optional[str]:
+
+async def generate_extended_transcript(
+    transcription: str, craft: Optional[str] = None
+) -> Optional[str]:
     """
     Generate extended transcript using Fireworks.ai LLM API
-    
+
     Args:
         transcription: The original Whisper transcription
-        
+
     Returns:
         Extended transcript with gesture info, common mistakes, and expert tips
         or None if generation fails
@@ -80,17 +84,28 @@ async def generate_extended_transcript(transcription: str, craft: Optional[str] 
     if not FIREWORKS_API_KEY:
         logger.error("FIREWORKS_API_KEY not set in environment")
         return None
-    
+
     if not transcription or not transcription.strip():
         logger.warning("Empty transcription provided")
         return None
-    
+
     try:
         # Choose system prompt based on craft/domain (whitelist to avoid injection)
         craft_normalized = (craft or "").strip().lower()
-        if craft_normalized == 'glassblowing' or craft_normalized == 'soufflage' or craft_normalized == 'soufflage de verre':
+        if craft_normalized in [
+            "glassblowing",
+            "soufflage",
+            "soufflage de verre",
+            "scientific glassblowing",
+            "scientific_glassblowing",
+            "verrerie scientifique",
+        ]:
             system_prompt = GLASSBLOWING_SYSTEM_PROMPT
-        elif craft_normalized == 'jewelry' or craft_normalized == 'jewellery' or craft_normalized == 'joaillerie':
+        elif (
+            craft_normalized == "jewelry"
+            or craft_normalized == "jewellery"
+            or craft_normalized == "joaillerie"
+        ):
             system_prompt = JEWELRY_MAKING_SYSTEM_PROMPT
         else:
             # Default to glassblowing for backward compatibility
@@ -98,19 +113,24 @@ async def generate_extended_transcript(transcription: str, craft: Optional[str] 
 
         # Construct the prompt
         prompt = f"""{system_prompt}
-
+\n\n
 Transcription originale:
 "{transcription}"
+\n\n
+Pour la description étendue tu feras attention à ces points là : il y a 3 niveaux de commentaires à faire.
+1. Ce qui se passe à l'écran (description du geste, position des mains, mouvements du corps).
+2. Les commentaires sur la qualité de l'exécution du geste.
+3. Les conseils d'experts pour mieux guider l'apprentissage.
 
-Transcription étendue (rédigez 2-3 phrases concises ajoutant des détails sur les gestes, les erreurs courantes et les conseils d'experts):
+Transcription étendue :
 """
 
         # Prepare API request
         headers = {
             "Authorization": f"Bearer {FIREWORKS_API_KEY}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
         }
-        
+
         payload = {
             "model": FIREWORKS_LLM_MODEL,
             "prompt": prompt,
@@ -118,39 +138,43 @@ Transcription étendue (rédigez 2-3 phrases concises ajoutant des détails sur 
             "temperature": FIREWORKS_LLM_TEMPERATURE,
             "top_p": 0.9,
             "frequency_penalty": 0.8,  # Increased to discourage repetition
-            "presence_penalty": 0.5,   # Increased to encourage conciseness
+            "presence_penalty": 0.5,  # Increased to encourage conciseness
             "stop": [
-                "\n\nOriginal Transcript:", 
+                "\n\nOriginal Transcript:",
                 "\n\n---",
                 "\n\nTranscription",
                 "Désolé ",  # Stop after refusal message
                 "Aucune information",  # Stop after no-info message
                 "\n\n\n",  # Stop on multiple newlines (natural paragraph break)
                 "</s>",  # Stop on end-of-sequence token
-                "[END]"  # Explicit end marker
-            ]
+                "[END]",  # Explicit end marker
+            ],
         }
-        
-        logger.info(f"Calling Fireworks.ai LLM API for extended transcript generation...")
-        
+
+        logger.info(
+            f"Calling Fireworks.ai LLM API for extended transcript generation..."
+        )
+
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 FIREWORKS_LLM_API_URL,
                 headers=headers,
                 json=payload,
-                timeout=aiohttp.ClientTimeout(total=60)
+                timeout=aiohttp.ClientTimeout(total=60),
             ) as response:
                 if response.status != 200:
                     error_text = await response.text()
-                    logger.error(f"LLM API error (status {response.status}): {error_text}")
+                    logger.error(
+                        f"LLM API error (status {response.status}): {error_text}"
+                    )
                     return None
-                
+
                 result = await response.json()
-                
+
                 # Extract the generated text
                 if "choices" in result and len(result["choices"]) > 0:
                     extended_text = result["choices"][0].get("text", "").strip()
-                    
+
                     if extended_text:
                         logger.info("Extended transcript generated successfully")
                         return extended_text
@@ -160,13 +184,14 @@ Transcription étendue (rédigez 2-3 phrases concises ajoutant des détails sur 
                 else:
                     logger.error(f"Unexpected LLM API response format: {result}")
                     return None
-                    
+
     except aiohttp.ClientError as e:
         logger.error(f"Network error calling LLM API: {e}")
         return None
     except Exception as e:
         logger.error(f"Unexpected error generating extended transcript: {e}")
         return None
+
 
 TAGGING_SYSTEM_PROMPT = """
 Vous êtes un expert en annotation et catégorisation de transcriptions d'artisanat. Votre tâche est d'analyser des transcriptions de démonstrations artisanales et de générer des tags pertinents et informatifs.
@@ -206,21 +231,22 @@ Format de réponse STRICTEMENT JSON :
 IMPORTANT : Répondez UNIQUEMENT avec du JSON valide, sans texte avant ou après.
 """
 
+
 async def tag_transcript(
-    transcription: str, 
-    extended_transcript: str, 
+    transcription: str,
+    extended_transcript: str,
     existing_tags: List[Dict[str, str]],
-    craft: Optional[str] = None
+    craft: Optional[str] = None,
 ) -> Optional[List[Dict[str, str]]]:
     """
     Generate tags for a transcript using Fireworks.ai LLM API
-    
+
     Args:
         transcription: The original Whisper transcription
         extended_transcript: The LLM-enhanced transcript with gesture info
         existing_tags: List of existing tags from database [{"name": "...", "category": "..."}]
         craft: Optional craft/domain context
-        
+
     Returns:
         List of tag dicts with name and category, or None if generation fails
         Example: [{"name": "ciseaux", "category": "tool"}, {"name": "couper", "category": "technique"}]
@@ -228,26 +254,39 @@ async def tag_transcript(
     if not FIREWORKS_API_KEY:
         logger.error("FIREWORKS_API_KEY not set in environment")
         return None
-    
+
     if not transcription or not transcription.strip():
         logger.warning("Empty transcription provided for tagging")
         return None
-    
+
     try:
         # Format existing tags for the prompt
-        existing_tags_str = "Aucun tag existant." if not existing_tags else "\n".join([
-            f"- {tag['name']} ({tag['category']})" for tag in existing_tags
-        ])
-        
+        existing_tags_str = (
+            "Aucun tag existant."
+            if not existing_tags
+            else "\n".join(
+                [f"- {tag['name']} ({tag['category']})" for tag in existing_tags]
+            )
+        )
+
         # Add craft context if provided
         craft_context = ""
         if craft:
             craft_normalized = craft.strip().lower()
-            if craft_normalized in ['jewelry', 'jewellery', 'joaillerie']:
-                craft_context = "\nContexte du domaine : Joaillerie (fabrication de bijoux)"
-            elif craft_normalized in ['glassblowing', 'soufflage', 'soufflage de verre']:
+            if craft_normalized in ["jewelry", "jewellery", "joaillerie"]:
+                craft_context = (
+                    "\nContexte du domaine : Joaillerie (fabrication de bijoux)"
+                )
+            elif craft_normalized in [
+                "glassblowing",
+                "soufflage",
+                "soufflage de verre",
+                "scientific glassblowing",
+                "scientific_glassblowing",
+                "verrerie scientifique",
+            ]:
                 craft_context = "\nContexte du domaine : Soufflage de verre"
-        
+
         # Construct the prompt
         prompt = f"""{TAGGING_SYSTEM_PROMPT}
 
@@ -268,75 +307,103 @@ Générez les tags au format JSON :
         # Prepare API request
         headers = {
             "Authorization": f"Bearer {FIREWORKS_API_KEY}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
         }
-        
+
         payload = {
             "model": FIREWORKS_LLM_MODEL,
-            "prompt": prompt,
-            "max_tokens": 300,  # Reduced since we only need JSON output
-            "temperature": 0.3,  # Lower temperature for more consistent tagging
+            "prompt": prompt + "\n\nRéponse attendue: du JSON valide uniquement.",
+            "max_tokens": 300,
+            "temperature": 0.2,  # more deterministic for schema adherence
             "top_p": 0.9,
-            "stop": ["\n\nTranscription", "\n\n---"]
         }
-        
+
         logger.info(f"Calling Fireworks.ai LLM API for tag generation...")
-        
+
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 FIREWORKS_LLM_API_URL,
                 headers=headers,
                 json=payload,
-                timeout=aiohttp.ClientTimeout(total=45)
+                timeout=aiohttp.ClientTimeout(total=45),
             ) as response:
                 if response.status != 200:
                     error_text = await response.text()
-                    logger.error(f"LLM API error (status {response.status}): {error_text}")
+                    logger.error(
+                        f"LLM API error (status {response.status}): {error_text}"
+                    )
                     return None
-                
+
                 result = await response.json()
-                
+
                 # Extract the generated text
                 if "choices" in result and len(result["choices"]) > 0:
                     generated_text = result["choices"][0].get("text", "").strip()
-                    
+
                     if not generated_text:
                         logger.warning("LLM returned empty text for tagging")
                         return None
-                    
-                    # Parse JSON response
+
+                    # Parse JSON response robustly
                     try:
-                        # Try to extract JSON if there's extra text
-                        json_start = generated_text.find('{')
-                        json_end = generated_text.rfind('}') + 1
-                        if json_start >= 0 and json_end > json_start:
-                            json_str = generated_text[json_start:json_end]
-                            parsed = json.loads(json_str)
-                        else:
-                            parsed = json.loads(generated_text)
-                        
+                        text = generated_text.strip()
+                        # Remove common code fences if present
+                        if text.startswith("```"):
+                            # strip opening fence
+                            first_newline = text.find("\n")
+                            if first_newline != -1:
+                                text = text[first_newline + 1 :]
+                            # strip trailing fence
+                            if text.endswith("```"):
+                                text = text[:-3]
+                        # Extract first JSON object heuristically
+                        json_start = text.find("{")
+                        json_end = text.rfind("}") + 1
+                        json_candidate = (
+                            text[json_start:json_end]
+                            if json_start >= 0 and json_end > json_start
+                            else text
+                        )
+                        parsed = json.loads(json_candidate)
+
                         # Validate structure
                         if "tags" in parsed and isinstance(parsed["tags"], list):
                             tags = parsed["tags"]
                             # Validate each tag has name and category
                             valid_tags = []
-                            valid_categories = {"tool", "material", "technique", "handling"}
-                            
+                            valid_categories = {
+                                "tool",
+                                "material",
+                                "technique",
+                                "handling",
+                            }
+
                             for tag in tags:
-                                if isinstance(tag, dict) and "name" in tag and "category" in tag:
+                                if (
+                                    isinstance(tag, dict)
+                                    and "name" in tag
+                                    and "category" in tag
+                                ):
                                     # Normalize tag name (lowercase, no spaces)
-                                    tag_name = tag["name"].strip().lower().replace(" ", "").replace("-", "")
+                                    tag_name = (
+                                        tag["name"]
+                                        .strip()
+                                        .lower()
+                                        .replace(" ", "")
+                                        .replace("-", "")
+                                    )
                                     tag_category = tag["category"].strip().lower()
-                                    
+
                                     # Validate category
                                     if tag_category in valid_categories and tag_name:
-                                        valid_tags.append({
-                                            "name": tag_name,
-                                            "category": tag_category
-                                        })
-                            
+                                        valid_tags.append(
+                                            {"name": tag_name, "category": tag_category}
+                                        )
+
                             if valid_tags:
-                                logger.info(f"Generated {len(valid_tags)} tags successfully")
+                                logger.info(
+                                    f"Generated {len(valid_tags)} tags successfully"
+                                )
                                 return valid_tags
                             else:
                                 logger.warning("No valid tags in LLM response")
@@ -344,7 +411,7 @@ Générez les tags au format JSON :
                         else:
                             logger.error(f"Invalid JSON structure from LLM: {parsed}")
                             return None
-                            
+
                     except json.JSONDecodeError as e:
                         logger.error(f"Failed to parse JSON from LLM response: {e}")
                         logger.error(f"Generated text: {generated_text}")
@@ -352,7 +419,7 @@ Générez les tags au format JSON :
                 else:
                     logger.error(f"Unexpected LLM API response format: {result}")
                     return None
-                    
+
     except aiohttp.ClientError as e:
         logger.error(f"Network error calling LLM API for tagging: {e}")
         return None
@@ -360,10 +427,11 @@ Générez les tags au format JSON :
         logger.error(f"Unexpected error generating tags: {e}")
         return None
 
+
 async def test_llm_connection() -> bool:
     """
     Test the LLM API connection
-    
+
     Returns:
         True if connection successful, False otherwise
     """
