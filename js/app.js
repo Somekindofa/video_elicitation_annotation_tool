@@ -89,6 +89,23 @@ function resetInterface() {
     console.log('Interface reset complete');
 }
 
+// Markdown rendering helper
+function mdToHtml(text) {
+    try {
+        const src = text || '';
+        if (window.marked && window.DOMPurify) {
+            // Enable line breaks like GitHub (single newline -> <br>)
+            const rawHtml = window.marked.parse(src, { breaks: true });
+            return window.DOMPurify.sanitize(rawHtml);
+        }
+        // Fallback: escape-less newline conversion (safe because used only as innerHTML in controlled context)
+        return (src + '').replace(/\n/g, '<br>');
+    } catch (e) {
+        console.warn('Markdown render failed, falling back to plain text', e);
+        return (text || '').replace(/\n/g, '<br>');
+    }
+}
+
 async function initializeApp() {
     console.log('Initializing Video Elicitation Tool...');
 
@@ -1133,6 +1150,7 @@ function renderAnnotations() {
             } else if (annotation.extended_transcript_status === 'completed' && annotation.extended_transcript) {
                 const feedbackClass = annotation.feedback !== null ?
                     (annotation.feedback === 1 ? 'thumbs-up' : 'thumbs-down') : '';
+                const extendedHtml = mdToHtml(annotation.extended_transcript);
                 extendedTranscriptHTML = `
                     <div class="extended-transcript-container">
                         <div class="extended-transcript-toggle" onclick="toggleExtendedTranscript(${annotation.id})">
@@ -1140,7 +1158,7 @@ function renderAnnotations() {
                             <span>See Extended Transcript</span>
                         </div>
                         <div class="extended-transcript-content" id="extended-${annotation.id}">
-                            <p>${annotation.extended_transcript}</p>
+                            <div class="md">${extendedHtml}</div>
                             <div class="feedback-buttons">
                                 <button class="feedback-btn thumbs-up ${annotation.feedback === 1 ? 'active' : ''}" 
                                     onclick="handleFeedback(${annotation.id}, 1, event)">
