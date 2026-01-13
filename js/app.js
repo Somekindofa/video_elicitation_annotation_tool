@@ -447,6 +447,19 @@ function setupEventListeners() {
     document.getElementById('projectForm').addEventListener('submit', handleProjectFormSubmit);
     document.getElementById('closeAssignVideosModalBtn').addEventListener('click', closeAssignVideosModal);
     document.getElementById('closeAssignVideosBtn').addEventListener('click', closeAssignVideosModal);
+
+    // Local Folder Browser
+    document.getElementById('browseLocalFolderBtn').addEventListener('click', handleBrowseLocalFolder);
+    document.getElementById('closeLocalFolderModalBtn').addEventListener('click', closeLocalFolderModal);
+    document.getElementById('cancelLocalBtn').addEventListener('click', closeLocalFolderModal);
+
+    // Allow Enter key in folder path input to trigger browse
+    document.getElementById('localFolderPath').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            handleBrowseLocalFolder();
+        }
+    });
 }
 
 // WebSocket Connection
@@ -556,124 +569,46 @@ async function checkMicrophonePermission() {
 
 // Handle Add Local Videos button click
 async function handleAddLocalVideos() {
-    // Check if File System Access API is available
-    if (window.showOpenFilePicker) {
+    // Check if File System Access API is available (for directory picking)
+    if (typeof window.showDirectoryPicker === 'function') {
         try {
-            // Use modern File System Access API to get full file paths
-            const fileHandles = await window.showOpenFilePicker({
-                multiple: true,
-                types: [{
-                    description: 'Video Files',
-                    accept: {
-                        'video/*': ['.mp4', '.webm', '.mov', '.avi', '.mkv']
-                    }
-                }]
-            });
+            // Use modern File System Access API to let user pick a directory
+            const directoryHandle = await window.showDirectoryPicker();
 
-            showLoading(`Registering ${fileHandles.length} video(s)...`);
+            // Get the directory path - we'll need to reconstruct it
+            // Note: The API doesn't directly give us the full path for security,
+            // but we can prompt the user to confirm/provide it
+            const dirName = directoryHandle.name;
 
-            let successCount = 0;
-            let duplicateCount = 0;
-            let lastRegisteredVideoId = null;
+            // Prompt user to provide or confirm the full path
+            const folderPath = prompt(
+                `Selected folder: "${dirName}"\n\n` +
+                `Please enter the complete path to this folder:\n` +
+                `(The browser doesn't expose full paths for security)`,
+                `C:\\Users\\dupon\\Documents\\${dirName}`
+            );
 
-            for (const fileHandle of fileHandles) {
-                try {
-                    const file = await fileHandle.getFile();
-
-                    // Try to get the full path - this may not work in all browsers
-                    // In Electron or when using file:// protocol, we might have access
-                    let filepath = null;
-
-                    // Try different methods to get the file path
-                    if (file.path) {
-                        filepath = file.path;
-                    } else if (fileHandle.name && window.location.protocol === 'file:') {
-                        // Running locally, might have access to path
-                        filepath = fileHandle.name;
-                    }
-
-                    if (!filepath) {
-                        // Fallback: ask user to provide the full path
-                        filepath = prompt(
-                            `Please enter the full path for "${file.name}":\n\n` +
-                            `(Example: C:\\Videos\\${file.name})`,
-                            `C:\\Videos\\${file.name}`
-                        );
-
-                        if (!filepath) {
-                            console.log(`Skipped ${file.name} - no path provided`);
-                            continue;
-                        }
-                    }
-
-                    const video = await registerLocalVideo(filepath, file.name);
-
-                    if (video) {
-                        successCount++;
-                        lastRegisteredVideoId = video.id;
-                    } else {
-                        duplicateCount++;
-                    }
-                } catch (error) {
-                    if (error.message.includes('Already Registered') || error.message.includes('UNIQUE constraint')) {
-                        duplicateCount++;
-                    } else {
-                        console.error(`Failed to register video:`, error);
-                        showToast('Registration Error', error.message, 'error');
-                    }
-                }
+            if (!folderPath) {
+                console.log('Folder selection cancelled');
+                return;
             }
 
-            // Reload video list
-            await loadVideos();
-
-            // Show summary message
-            if (successCount > 0) {
-                const message = duplicateCount > 0
-                    ? `${successCount} video(s) registered, ${duplicateCount} already existed`
-                    : `${successCount} video(s) registered successfully`;
-                showToast('Registration Complete', message, 'success');
-
-                // Auto-load the last registered video if only one was added
-                if (successCount === 1 && lastRegisteredVideoId) {
-                    await loadVideo(lastRegisteredVideoId);
-                }
-            } else if (duplicateCount > 0) {
-                showToast('Already Registered', `All video(s) were already in your library`, 'info');
-            }
-
-            hideLoading();
+            // Now browse and register all videos in that folder
+            await handleBrowseFolder(folderPath);
 
         } catch (error) {
-            hideLoading();
-
             if (error.name === 'AbortError') {
-                // User cancelled the file picker
-                console.log('File selection cancelled');
+                // User cancelled the picker
+                console.log('Folder selection cancelled');
             } else {
-                console.error('Error selecting files:', error);
-                showToast('Error', 'Failed to select files: ' + error.message, 'error');
+                console.error('Error selecting folder:', error);
+                showToast('Error', 'Failed to select folder: ' + error.message, 'error');
             }
         }
     } else {
-        // Fallback: use traditional file input (won't have full paths)
-        // Show a warning and fall back to the old folder browser
-        showToast(
-            'Browser Limitation',
-            'Your browser doesn\'t support direct file selection. Please enter a folder path manually.',
-            'warning'
-        );
-
-        // Prompt for folder path
-        const folderPath = prompt(
-            'Enter the full path to a folder containing videos:\n\n' +
-            '(Example: C:\\Users\\YourName\\Videos\\)',
-            ''
-        );
-
-        if (folderPath) {
-            await handleBrowseFolder(folderPath);
-        }
+        // Fallback: Open the manual folder path modal
+        // Brave and some browsers disable folder picker for privacy
+        openLocalFolderModal();
     }
 }
 
@@ -744,12 +679,32 @@ async function handleLocalVideoSelection(event) {
     try {
         let successCount = 0;
         let duplicateCount = 0;
+        let skippedCount = 0;
         let lastRegisteredVideoId = null;
 
         for (const file of files) {
             try {
-                // Use the file's full path for registration
-                const filepath = file.path || file.webkitRelativePath || file.name;
+                // Browsers don't expose full file paths for security reasons
+                // Try to get path from file object (works in some environments)
+                let filepath = file.path;
+
+                if (!filepath) {
+                    // Prompt user to provide the full path
+                    hideLoading(); // Hide loading while prompting
+                    filepath = prompt(
+                        `Please enter the full path for "${file.name}":\n\n` +
+                        `Example: C:\\Videos\\${file.name}`,
+                        `C:\\Videos\\${file.name}`
+                    );
+                    showLoading(`Registering ${files.length} video(s)...`); // Show loading again
+
+                    if (!filepath) {
+                        console.log(`Skipped ${file.name} - no path provided`);
+                        skippedCount++;
+                        continue;
+                    }
+                }
+
                 const video = await registerLocalVideo(filepath, file.name);
 
                 if (video) {
@@ -773,9 +728,9 @@ async function handleLocalVideoSelection(event) {
 
         // Show summary message
         if (successCount > 0) {
-            const message = duplicateCount > 0
-                ? `${successCount} video(s) registered, ${duplicateCount} already existed`
-                : `${successCount} video(s) registered successfully`;
+            let message = `${successCount} video(s) registered`;
+            if (duplicateCount > 0) message += `, ${duplicateCount} already existed`;
+            if (skippedCount > 0) message += `, ${skippedCount} skipped`;
             showToast('Registration Complete', message, 'success');
 
             // Auto-load the last registered video if only one was added
@@ -784,6 +739,8 @@ async function handleLocalVideoSelection(event) {
             }
         } else if (duplicateCount > 0) {
             showToast('Already Registered', `All ${duplicateCount} video(s) were already in your library`, 'info');
+        } else if (skippedCount > 0) {
+            showToast('No Videos Added', 'No videos were registered', 'info');
         }
 
     } catch (error) {
@@ -2402,6 +2359,27 @@ function openLocalFolderModal() {
         modal.style.display = 'flex';
         document.getElementById('localVideosContainer').style.display = 'none';
         document.getElementById('localFolderPath').value = '';
+
+        // Focus on the input field
+        setTimeout(() => {
+            document.getElementById('localFolderPath').focus();
+        }, 100);
+
+        // Close on Escape key
+        const escapeHandler = (e) => {
+            if (e.key === 'Escape') {
+                closeLocalFolderModal();
+                document.removeEventListener('keydown', escapeHandler);
+            }
+        };
+        document.addEventListener('keydown', escapeHandler);
+
+        // Close on background click
+        modal.onclick = (e) => {
+            if (e.target === modal) {
+                closeLocalFolderModal();
+            }
+        };
     } else {
         console.error('localFolderModal not found!');
     }
@@ -2419,36 +2397,9 @@ async function handleBrowseLocalFolder() {
         return;
     }
 
-    try {
-        showLoading('Browsing folder...');
-
-        const response = await fetch(`${API_BASE}/api/videos/local/browse?directory=${encodeURIComponent(folderPath)}`);
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Failed to browse folder');
-        }
-
-        const data = await response.json();
-
-        if (data.videos.length === 0) {
-            showToast('No Videos', 'No video files found in this folder', 'info');
-            return;
-        }
-
-        // Display found videos
-        renderLocalVideos(data.videos);
-        document.getElementById('localVideosContainer').style.display = 'block';
-        document.getElementById('localVideoCount').textContent = data.videos.length;
-
-        showToast('Success', `Found ${data.videos.length} video(s)`, 'success');
-
-    } catch (error) {
-        console.error('Error browsing folder:', error);
-        showToast('Error', error.message, 'error');
-    } finally {
-        hideLoading();
-    }
+    // Call the existing handleBrowseFolder function and close modal on success
+    await handleBrowseFolder(folderPath);
+    closeLocalFolderModal();
 }
 
 function renderLocalVideos(videos) {
