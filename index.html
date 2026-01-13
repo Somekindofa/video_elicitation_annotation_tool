@@ -259,12 +259,19 @@
                 <div class="modal-body">
                     <div class="form-group">
                         <label for="localFolderPath">Folder Path *</label>
-                        <input type="text" id="localFolderPath" required placeholder="C:\Videos\MyProject">
-                        <small class="form-hint">Enter the absolute path to your video folder (Windows:
-                            C:\path\to\folder, Linux/Mac: /path/to/folder)</small>
+                        <input type="text" id="localFolderPath" required placeholder="C:\Users\dupon\Documents\Videos">
+                        <small class="form-hint">
+                            <strong>How to get the folder path:</strong><br>
+                            1. Open File Explorer and navigate to your video folder<br>
+                            2. Click in the address bar at the top (or press Ctrl+L)<br>
+                            3. Copy the path (Ctrl+C)<br>
+                            4. Paste it here (Ctrl+V)<br>
+                            <br>
+                            Example: C:\Users\YourName\Documents\Videos
+                        </small>
                     </div>
                     <button id="browseLocalFolderBtn" class="btn btn-primary" style="margin-bottom: 1rem;">
-                        <i class="fas fa-search"></i> Browse Folder
+                        <i class="fas fa-folder-open"></i> Load All Videos from Folder
                     </button>
 
                     <div id="localVideosContainer" style="display: none;">
