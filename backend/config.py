@@ -11,9 +11,7 @@ load_dotenv()
 
 # Base directories
 BASE_DIR = Path(__file__).resolve().parent.parent
-CHROMA_DIR = Path(
-    "C:/Users/Theo Akbas/Documents/Mines/aiassistant_backend/chroma_langchain_db"
-)
+CHROMA_DIR = BASE_DIR / "chroma_langchain_db"
 ELICITATION_DIR = CHROMA_DIR / "elicitations_db"
 DATA_DIR = BASE_DIR / "data"
 VIDEOS_DIR = DATA_DIR / "videos"
