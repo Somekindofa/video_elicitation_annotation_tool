@@ -1,6 +1,7 @@
 """
 FastAPI main application for Video Elicitation Annotation Tool
 """
+
 import os
 import base64
 import json
@@ -10,7 +11,19 @@ from pathlib import Path
 from typing import List, Optional
 import uuid
 
-from fastapi import FastAPI, File, UploadFile, Depends, HTTPException, WebSocket, WebSocketDisconnect, Request, Form
+from sqlalchemy.exc import IntegrityError
+
+from fastapi import (
+    FastAPI,
+    File,
+    UploadFile,
+    Depends,
+    HTTPException,
+    WebSocket,
+    WebSocketDisconnect,
+    Request,
+    Form,
+)
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,17 +34,27 @@ from starlette.types import Scope
 # Use absolute imports to allow running main.py directly
 import database as db
 import models
+from models import Task
+from sqlalchemy.future import select
 from transcription import transcribe_audio_simple, preload_model, get_model_info
 from config import (
-    HOST, PORT, CORS_ORIGINS, VIDEOS_DIR, AUDIO_DIR, EXPORTS_DIR,
-    STATIC_DIR, FRONTEND_DIR, SUPPORTED_VIDEO_FORMATS, MAX_UPLOAD_SIZE,
-    GOOGLE_DRIVE_API_KEY, GOOGLE_DRIVE_DEFAULT_FOLDER_ID
+    HOST,
+    PORT,
+    CORS_ORIGINS,
+    VIDEOS_DIR,
+    AUDIO_DIR,
+    EXPORTS_DIR,
+    STATIC_DIR,
+    FRONTEND_DIR,
+    SUPPORTED_VIDEO_FORMATS,
+    MAX_UPLOAD_SIZE,
+    GOOGLE_DRIVE_API_KEY,
+    GOOGLE_DRIVE_DEFAULT_FOLDER_ID,
 )
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -39,7 +62,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="Video Elicitation Annotation Tool",
     description="Tool for annotating expert craftsmen videos with audio elicitations",
-    version="1.0.0"
+    version="1.0.0",
 )
 
 # CORS middleware
@@ -51,6 +74,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # WebSocket connection manager
 class ConnectionManager:
     def __init__(self):
@@ -59,11 +83,15 @@ class ConnectionManager:
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
-        logger.info(f"WebSocket connected. Total connections: {len(self.active_connections)}")
+        logger.info(
+            f"WebSocket connected. Total connections: {len(self.active_connections)}"
+        )
 
     def disconnect(self, websocket: WebSocket):
         self.active_connections.remove(websocket)
-        logger.info(f"WebSocket disconnected. Total connections: {len(self.active_connections)}")
+        logger.info(
+            f"WebSocket disconnected. Total connections: {len(self.active_connections)}"
+        )
 
     async def broadcast(self, message: dict):
         """Broadcast message to all connected clients"""
@@ -73,6 +101,7 @@ class ConnectionManager:
             except Exception as e:
                 logger.error(f"Error broadcasting to websocket: {e}")
 
+
 manager = ConnectionManager()
 
 
@@ -81,18 +110,19 @@ manager = ConnectionManager()
 async def startup_event():
     """Initialize database and preload Whisper model"""
     logger.info("Starting Video Elicitation Annotation Tool...")
-    
+
     # Ensure required directories exist
     VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
     AUDIO_DIR.mkdir(parents=True, exist_ok=True)
     EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
     logger.info("Directories verified")
-    
+
     await db.init_db()
     logger.info("Database initialized")
-    
+
     # Preload Whisper model in background
     import asyncio
+
     asyncio.create_task(preload_model())
     logger.info("Whisper model loading in background...")
 
@@ -118,6 +148,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
 # API Endpoints
 
+
 @app.get("/")
 async def read_root():
     """Serve the main frontend application"""
@@ -133,14 +164,13 @@ async def health_check():
     return {
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
-        "whisper_model": get_model_info()
+        "whisper_model": get_model_info(),
     }
 
 
 @app.post("/api/videos/upload", response_model=models.VideoResponse)
 async def upload_video(
-    file: UploadFile = File(...),
-    session: AsyncSession = Depends(db.get_session)
+    file: UploadFile = File(...), session: AsyncSession = Depends(db.get_session)
 ):
     """Upload a video file"""
     try:
@@ -149,44 +179,47 @@ async def upload_video(
         if file_ext not in SUPPORTED_VIDEO_FORMATS:
             raise HTTPException(
                 status_code=400,
-                detail=f"Unsupported video format. Supported: {', '.join(SUPPORTED_VIDEO_FORMATS)}"
+                detail=f"Unsupported video format. Supported: {', '.join(SUPPORTED_VIDEO_FORMATS)}",
             )
-        
+
         # Generate unique filename
         unique_filename = f"{uuid.uuid4().hex}_{file.filename}"
         file_path = VIDEOS_DIR / unique_filename
-        
+
         # Save file
         logger.info(f"Uploading video: {file.filename}")
-        async with aiofiles.open(file_path, 'wb') as f:
+        async with aiofiles.open(file_path, "wb") as f:
             content = await file.read()
             if len(content) > MAX_UPLOAD_SIZE:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"File too large. Maximum size: {MAX_UPLOAD_SIZE / (1024*1024)}MB"
+                    detail=f"File too large. Maximum size: {MAX_UPLOAD_SIZE / (1024*1024)}MB",
                 )
             await f.write(content)
-        
+
         # Get file size
         file_size = os.path.getsize(file_path)
-        
+
         # Create database record
         video_data = models.VideoCreate(
             filename=file.filename,
             filepath=str(file_path),
             file_size=file_size,
-            mime_type=file.content_type
+            mime_type=file.content_type,
         )
-        
+
         video = await db.create_video(session, video_data)
         logger.info(f"Video uploaded successfully: ID={video.id}")
-        
+
         # Add annotation count
         response_data = models.VideoResponse.model_validate(video)
         response_data.annotation_count = 0
-        
+
         return response_data
-        
+
+    except IntegrityError:
+        logger.warning("Duplicate video upload attempt (same filepath)")
+        raise HTTPException(status_code=409, detail="Video already registered")
     except HTTPException:
         raise
     except Exception as e:
@@ -196,44 +229,39 @@ async def upload_video(
 
 @app.get("/api/videos", response_model=List[models.VideoResponse])
 async def list_videos(
-    skip: int = 0,
-    limit: int = 100,
-    session: AsyncSession = Depends(db.get_session)
+    skip: int = 0, limit: int = 100, session: AsyncSession = Depends(db.get_session)
 ):
     """Get list of all videos"""
     try:
         videos = await db.get_all_videos(session, skip, limit)
-        
+
         # Add annotation count to each video
         response_videos = []
         for video in videos:
             video_response = models.VideoResponse.model_validate(video)
             video_response.annotation_count = len(video.annotations)
             response_videos.append(video_response)
-        
+
         return response_videos
-        
+
     except Exception as e:
         logger.error(f"Error listing videos: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/videos/{video_id}", response_model=models.VideoResponse)
-async def get_video(
-    video_id: int,
-    session: AsyncSession = Depends(db.get_session)
-):
+async def get_video(video_id: int, session: AsyncSession = Depends(db.get_session)):
     """Get video by ID"""
     try:
         video = await db.get_video(session, video_id)
         if not video:
             raise HTTPException(status_code=404, detail="Video not found")
-        
+
         video_response = models.VideoResponse.model_validate(video)
         video_response.annotation_count = len(video.annotations)
-        
+
         return video_response
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -243,37 +271,39 @@ async def get_video(
 
 @app.get("/api/videos/{video_id}/file")
 async def get_video_file(
-    video_id: int,
-    request: Request,
-    session: AsyncSession = Depends(db.get_session)
+    video_id: int, request: Request, session: AsyncSession = Depends(db.get_session)
 ):
     """Serve video file with HTTP Range request support for streaming"""
     try:
         video = await db.get_video(session, video_id)
         if not video:
             raise HTTPException(status_code=404, detail="Video not found")
-        
+
         if not os.path.exists(video.filepath):
             raise HTTPException(status_code=404, detail="Video file not found on disk")
-        
+
         # Get file info
         file_size = os.path.getsize(video.filepath)
-        
+
         # Handle Range requests for streaming
         range_header = request.headers.get("range")
-        
+
         if range_header:
             # Parse range header (e.g., "bytes=0-1023")
             range_match = range_header.replace("bytes=", "").split("-")
             start = int(range_match[0]) if range_match[0] else 0
-            end = int(range_match[1]) if len(range_match) > 1 and range_match[1] else file_size - 1
-            
+            end = (
+                int(range_match[1])
+                if len(range_match) > 1 and range_match[1]
+                else file_size - 1
+            )
+
             # Ensure valid range
             if start >= file_size or end >= file_size:
                 raise HTTPException(status_code=416, detail="Range not satisfiable")
-            
+
             chunk_size = end - start + 1
-            
+
             # Stream the requested chunk
             def iter_file():
                 with open(video.filepath, "rb") as f:
@@ -286,18 +316,16 @@ async def get_video_file(
                             break
                         remaining -= len(data)
                         yield data
-            
+
             headers = {
                 "Content-Range": f"bytes {start}-{end}/{file_size}",
                 "Accept-Ranges": "bytes",
                 "Content-Length": str(chunk_size),
                 "Content-Type": video.mime_type or "video/mp4",
             }
-            
+
             return StreamingResponse(
-                iter_file(),
-                status_code=206,  # Partial Content
-                headers=headers
+                iter_file(), status_code=206, headers=headers  # Partial Content
             )
         else:
             # No range header - stream entire file
@@ -305,19 +333,17 @@ async def get_video_file(
                 with open(video.filepath, "rb") as f:
                     while chunk := f.read(8192):
                         yield chunk
-            
+
             headers = {
                 "Accept-Ranges": "bytes",
                 "Content-Length": str(file_size),
                 "Content-Type": video.mime_type or "video/mp4",
             }
-            
+
             return StreamingResponse(
-                iter_file(),
-                media_type=video.mime_type or "video/mp4",
-                headers=headers
+                iter_file(), media_type=video.mime_type or "video/mp4", headers=headers
             )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -327,31 +353,29 @@ async def get_video_file(
 
 @app.put("/api/videos/{video_id}", response_model=models.VideoResponse)
 async def update_video(
-    video_id: int,
-    video_update: dict,
-    session: AsyncSession = Depends(db.get_session)
+    video_id: int, video_update: dict, session: AsyncSession = Depends(db.get_session)
 ):
     """Update video metadata (e.g., project_id, batch_position)"""
     try:
         video = await db.get_video(session, video_id)
         if not video:
             raise HTTPException(status_code=404, detail="Video not found")
-        
+
         # Update allowed fields
-        if 'project_id' in video_update:
-            video.project_id = video_update['project_id']
-        if 'batch_position' in video_update:
-            video.batch_position = video_update['batch_position']
-        
+        if "project_id" in video_update:
+            video.project_id = video_update["project_id"]
+        if "batch_position" in video_update:
+            video.batch_position = video_update["batch_position"]
+
         await session.commit()
         await session.refresh(video)
-        
+
         video_response = models.VideoResponse.model_validate(video)
         video_response.annotation_count = len(video.annotations)
-        
+
         logger.info(f"Video updated: ID={video_id}")
         return video_response
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -360,31 +384,28 @@ async def update_video(
 
 
 @app.delete("/api/videos/{video_id}")
-async def delete_video(
-    video_id: int,
-    session: AsyncSession = Depends(db.get_session)
-):
+async def delete_video(video_id: int, session: AsyncSession = Depends(db.get_session)):
     """Delete a video and all its annotations"""
     try:
         video = await db.get_video(session, video_id)
         if not video:
             raise HTTPException(status_code=404, detail="Video not found")
-        
+
         # Only delete video file if it was uploaded (not local)
         if video.is_local == 0 and os.path.exists(video.filepath):
             os.remove(video.filepath)
-        
+
         # Delete annotation audio files
         for annotation in video.annotations:
             if os.path.exists(annotation.audio_filepath):
                 os.remove(annotation.audio_filepath)
-        
+
         # Delete from database
         await db.delete_video(session, video_id)
-        
+
         logger.info(f"Video deleted: ID={video_id}")
         return {"status": "success", "message": "Video deleted"}
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -396,56 +417,59 @@ async def delete_video(
 # LOCAL VIDEO ENDPOINTS
 # ============================================================================
 
+
 @app.get("/api/videos/local/browse")
 async def browse_local_directory(directory: str):
     """
     Browse a local directory for video files
-    
+
     Args:
         directory: Absolute path to directory to browse
-        
+
     Returns:
         List of video files with metadata
     """
     try:
         dir_path = Path(directory)
-        
+
         # Security check - ensure directory exists and is accessible
         if not dir_path.exists():
             raise HTTPException(status_code=404, detail="Directory not found")
-        
+
         if not dir_path.is_dir():
             raise HTTPException(status_code=400, detail="Path is not a directory")
-        
+
         # List all video files in directory
         video_files = []
-        
+
         for file_path in dir_path.iterdir():
             if file_path.is_file():
                 file_ext = file_path.suffix.lower()
                 if file_ext in SUPPORTED_VIDEO_FORMATS:
                     try:
                         file_size = file_path.stat().st_size
-                        video_files.append({
-                            "filename": file_path.name,
-                            "filepath": str(file_path.absolute()),
-                            "file_size": file_size,
-                            "file_size_mb": round(file_size / (1024 * 1024), 2)
-                        })
+                        video_files.append(
+                            {
+                                "filename": file_path.name,
+                                "filepath": str(file_path.absolute()),
+                                "file_size": file_size,
+                                "file_size_mb": round(file_size / (1024 * 1024), 2),
+                            }
+                        )
                     except Exception as e:
                         logger.warning(f"Could not read file {file_path}: {e}")
                         continue
-        
+
         # Sort by filename
         video_files.sort(key=lambda x: x["filename"])
-        
+
         logger.info(f"Found {len(video_files)} video files in {directory}")
         return {
             "directory": str(dir_path.absolute()),
             "video_count": len(video_files),
-            "videos": video_files
+            "videos": video_files,
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -456,44 +480,46 @@ async def browse_local_directory(directory: str):
 @app.post("/api/videos/local/register", response_model=models.VideoResponse)
 async def register_local_video(
     request: models.LocalVideoRegisterRequest,
-    session: AsyncSession = Depends(db.get_session)
+    session: AsyncSession = Depends(db.get_session),
 ):
     """
     Register a local video file without copying it
-    
+
     Args:
         request: Request body containing filepath
-        
+
     Returns:
         Video metadata
     """
     try:
         logger.info(f"Attempting to register local video: {request.filepath}")
         file_path = Path(request.filepath)
-        
+
         # Validate file exists
         if not file_path.exists():
-            logger.error(f"File not found: {request.filepath} (resolved to: {file_path.absolute()})")
-            raise HTTPException(
-                status_code=404, 
-                detail=f"Video file not found at path: {request.filepath}"
+            logger.error(
+                f"File not found: {request.filepath} (resolved to: {file_path.absolute()})"
             )
-        
+            raise HTTPException(
+                status_code=404,
+                detail=f"Video file not found at path: {request.filepath}",
+            )
+
         if not file_path.is_file():
             logger.error(f"Path is not a file: {request.filepath}")
             raise HTTPException(status_code=400, detail="Path is not a file")
-        
+
         # Validate file type
         file_ext = file_path.suffix.lower()
         if file_ext not in SUPPORTED_VIDEO_FORMATS:
             raise HTTPException(
                 status_code=400,
-                detail=f"Unsupported video format. Supported: {', '.join(SUPPORTED_VIDEO_FORMATS)}"
+                detail=f"Unsupported video format. Supported: {', '.join(SUPPORTED_VIDEO_FORMATS)}",
             )
-        
+
         # Get file metadata
         file_size = file_path.stat().st_size
-        
+
         # Determine MIME type
         mime_type = "video/mp4"  # Default
         if file_ext == ".webm":
@@ -502,7 +528,7 @@ async def register_local_video(
             mime_type = "video/quicktime"
         elif file_ext == ".avi":
             mime_type = "video/x-msvideo"
-        
+
         # Create database record (no file copying)
         video_data = models.VideoCreate(
             filename=file_path.name,
@@ -510,18 +536,23 @@ async def register_local_video(
             file_size=file_size,
             mime_type=mime_type,
             is_local=1,
-            source_type="local"
+            source_type="local",
         )
-        
+
         video = await db.create_video(session, video_data)
-        logger.info(f"Local video registered: {file_path.name} (ID={video.id}, {round(file_size/(1024*1024*1024), 2)}GB)")
-        
+        logger.info(
+            f"Local video registered: {file_path.name} (ID={video.id}, {round(file_size/(1024*1024*1024), 2)}GB)"
+        )
+
         # Add annotation count
         response_data = models.VideoResponse.model_validate(video)
         response_data.annotation_count = 0
-        
+
         return response_data
-        
+
+    except IntegrityError:
+        logger.warning("Duplicate local video registration (same filepath)")
+        raise HTTPException(status_code=409, detail="Video already registered")
     except HTTPException:
         raise
     except Exception as e:
@@ -533,10 +564,10 @@ async def register_local_video(
 # PROJECT ENDPOINTS
 # ============================================================================
 
+
 @app.post("/api/projects", response_model=models.ProjectResponse)
 async def create_project(
-    project: models.ProjectCreate,
-    session: AsyncSession = Depends(db.get_session)
+    project: models.ProjectCreate, session: AsyncSession = Depends(db.get_session)
 ):
     """Create a new project"""
     try:
@@ -549,9 +580,7 @@ async def create_project(
 
 
 @app.get("/api/projects", response_model=List[models.ProjectResponse])
-async def get_all_projects(
-    session: AsyncSession = Depends(db.get_session)
-):
+async def get_all_projects(session: AsyncSession = Depends(db.get_session)):
     """Get all projects"""
     try:
         projects = await db.get_all_projects(session)
@@ -562,10 +591,7 @@ async def get_all_projects(
 
 
 @app.get("/api/projects/{project_id}", response_model=models.ProjectResponse)
-async def get_project(
-    project_id: int,
-    session: AsyncSession = Depends(db.get_session)
-):
+async def get_project(project_id: int, session: AsyncSession = Depends(db.get_session)):
     """Get a specific project by ID"""
     try:
         project = await db.get_project(session, project_id)
@@ -581,24 +607,23 @@ async def get_project(
 
 @app.get("/api/projects/{project_id}/videos", response_model=List[models.VideoResponse])
 async def get_project_videos(
-    project_id: int,
-    session: AsyncSession = Depends(db.get_session)
+    project_id: int, session: AsyncSession = Depends(db.get_session)
 ):
     """Get all videos in a project, ordered by batch position"""
     try:
         project = await db.get_project(session, project_id)
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
-        
+
         videos = await db.get_videos_by_project(session, project_id)
-        
+
         # Add annotation count to each video
         video_responses = []
         for video in videos:
             video_response = models.VideoResponse.model_validate(video)
             video_response.annotation_count = len(video.annotations)
             video_responses.append(video_response)
-        
+
         return video_responses
     except HTTPException:
         raise
@@ -611,14 +636,14 @@ async def get_project_videos(
 async def update_project(
     project_id: int,
     project_update: models.ProjectUpdate,
-    session: AsyncSession = Depends(db.get_session)
+    session: AsyncSession = Depends(db.get_session),
 ):
     """Update a project"""
     try:
         project = await db.get_project(session, project_id)
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
-        
+
         updated_project = await db.update_project(session, project_id, project_update)
         logger.info(f"Project updated: ID={project_id}")
         return updated_project
@@ -631,15 +656,14 @@ async def update_project(
 
 @app.delete("/api/projects/{project_id}")
 async def delete_project(
-    project_id: int,
-    session: AsyncSession = Depends(db.get_session)
+    project_id: int, session: AsyncSession = Depends(db.get_session)
 ):
     """Delete a project (sets project_id to null for associated videos)"""
     try:
         project = await db.get_project(session, project_id)
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
-        
+
         await db.delete_project(session, project_id)
         logger.info(f"Project deleted: ID={project_id}")
         return {"status": "success", "message": "Project deleted"}
@@ -652,10 +676,9 @@ async def delete_project(
 
 # Tag API Endpoints
 
+
 @app.get("/api/tags", response_model=List[models.TagResponse])
-async def get_all_tags(
-    session: AsyncSession = Depends(db.get_session)
-):
+async def get_all_tags(session: AsyncSession = Depends(db.get_session)):
     """Get all available tags ordered by usage count"""
     try:
         tags = await db.get_all_tags(session)
@@ -666,10 +689,7 @@ async def get_all_tags(
 
 
 @app.get("/api/tags/{tag_name}", response_model=models.TagResponse)
-async def get_tag(
-    tag_name: str,
-    session: AsyncSession = Depends(db.get_session)
-):
+async def get_tag(tag_name: str, session: AsyncSession = Depends(db.get_session)):
     """Get a specific tag by name"""
     try:
         tag = await db.get_tag_by_name(session, tag_name)
@@ -690,7 +710,8 @@ async def create_annotation(
     end_time: float,
     audio_blob: UploadFile = File(...),
     craft: Optional[str] = Form(None),
-    session: AsyncSession = Depends(db.get_session)
+    task: Optional[str] = Form(None),
+    session: AsyncSession = Depends(db.get_session),
 ):
     """Create a new annotation with audio recording"""
     try:
@@ -698,60 +719,138 @@ async def create_annotation(
         video = await db.get_video(session, video_id)
         if not video:
             raise HTTPException(status_code=404, detail="Video not found")
-        
+
         # Validate times
         if start_time >= end_time:
-            raise HTTPException(status_code=400, detail="start_time must be less than end_time")
-        
+            raise HTTPException(
+                status_code=400, detail="start_time must be less than end_time"
+            )
+
         # Read audio data from uploaded file
         try:
             audio_bytes = await audio_blob.read()
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Failed to read audio data: {str(e)}")
-        
+            raise HTTPException(
+                status_code=400, detail=f"Failed to read audio data: {str(e)}"
+            )
+
         # Generate unique audio filename
         audio_filename = f"annotation_{uuid.uuid4().hex}.wav"
         audio_filepath = AUDIO_DIR / audio_filename
-        
+
         # Save audio file
-        async with aiofiles.open(audio_filepath, 'wb') as f:
+        async with aiofiles.open(audio_filepath, "wb") as f:
             await f.write(audio_bytes)
-        
+
         logger.info(f"Audio saved: {audio_filename}")
-        
+
         # Create annotation record
         annotation_data = models.AnnotationCreate(
             video_id=video_id,
             start_time=start_time,
             end_time=end_time,
             audio_filename=audio_filename,
-            audio_filepath=str(audio_filepath)
-            ,craft=craft
+            audio_filepath=str(audio_filepath),
+            craft=craft,
+            task=task,
         )
-        
+
         annotation = await db.create_annotation(session, annotation_data)
         logger.info(f"Annotation created: ID={annotation.id}")
-        
+
         # Broadcast to WebSocket clients
-        await manager.broadcast({
-            "type": "annotation_created",
-            "annotation_id": annotation.id,
-            "video_id": video_id
-        })
-        
+        await manager.broadcast(
+            {
+                "type": "annotation_created",
+                "annotation_id": annotation.id,
+                "video_id": video_id,
+            }
+        )
+
         # Start transcription in background
         import asyncio
+
         asyncio.create_task(process_transcription(annotation.id, str(audio_filepath)))
-        
+
         # Prepare response
         response = models.AnnotationResponse.model_validate(annotation)
-        
+
         return response
-        
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error creating annotation: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Task API Endpoints
+
+
+@app.get("/api/tasks", response_model=List[models.TaskResponse])
+async def list_tasks(
+    craft: Optional[str] = None,
+    published: Optional[int] = None,
+    session: AsyncSession = Depends(db.get_session),
+):
+    """List tasks with optional craft and published filter."""
+    try:
+        published_only = None
+        if published is not None:
+            published_only = True if published == 1 else False
+        tasks = await db.get_tasks(session, craft=craft, published_only=published_only)
+        return [models.TaskResponse.model_validate(t) for t in tasks]
+    except Exception as e:
+        logger.error(f"Error listing tasks: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/tasks", response_model=models.TaskResponse)
+async def create_task(
+    task_data: models.TaskCreate, session: AsyncSession = Depends(db.get_session)
+):
+    """Create a new task (scoped per craft domain)."""
+    try:
+        # Check for duplicates within the same craft
+        result = await session.execute(
+            select(Task).where(
+                (Task.name == task_data.name) & (Task.craft == task_data.craft)
+            )
+        )
+        existing = result.scalar_one_or_none()
+        if existing:
+            raise HTTPException(
+                status_code=400,
+                detail="Task with this name already exists in this craft domain",
+            )
+        task = await db.create_task(session, task_data)
+        return models.TaskResponse.model_validate(task)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating task: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/tasks/{task_name}")
+async def delete_task(
+    task_name: str, craft: str, session: AsyncSession = Depends(db.get_session)
+):
+    """Delete a task by name and craft."""
+    try:
+        deleted = await db.delete_task(session, task_name, craft)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Task not found")
+        return {
+            "status": "success",
+            "message": "Task deleted",
+            "name": task_name,
+            "craft": craft,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting task: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -763,62 +862,68 @@ async def process_transcription(annotation_id: int, audio_path: str):
             await db.update_annotation(
                 session,
                 annotation_id,
-                models.AnnotationUpdate(transcription_status="processing")
+                models.AnnotationUpdate(transcription_status="processing"),
             )
-        
+
         # Broadcast status
-        await manager.broadcast({
-            "type": "transcription_status",
-            "annotation_id": annotation_id,
-            "status": "processing"
-        })
-        
+        await manager.broadcast(
+            {
+                "type": "transcription_status",
+                "annotation_id": annotation_id,
+                "status": "processing",
+            }
+        )
+
         logger.info(f"Starting transcription for annotation {annotation_id}")
-        
+
         # Perform transcription
         transcription = await transcribe_audio_simple(audio_path)
-        
+
         # Update annotation with transcription
         async with db.AsyncSessionLocal() as session:
             await db.update_annotation(
                 session,
                 annotation_id,
                 models.AnnotationUpdate(
-                    transcription=transcription,
-                    transcription_status="completed"
-                )
+                    transcription=transcription, transcription_status="completed"
+                ),
             )
-        
+
         logger.info(f"Transcription completed for annotation {annotation_id}")
-        
+
         # Broadcast completion
-        await manager.broadcast({
-            "type": "transcription_complete",
-            "annotation_id": annotation_id,
-            "transcription": transcription
-        })
-        
+        await manager.broadcast(
+            {
+                "type": "transcription_complete",
+                "annotation_id": annotation_id,
+                "transcription": transcription,
+            }
+        )
+
         # Start extended transcript generation in background
         import asyncio
+
         asyncio.create_task(process_extended_transcript(annotation_id, transcription))
-        
+
     except Exception as e:
         logger.error(f"Transcription error for annotation {annotation_id}: {e}")
-        
+
         # Update status to failed
         try:
             async with db.AsyncSessionLocal() as session:
                 await db.update_annotation(
                     session,
                     annotation_id,
-                    models.AnnotationUpdate(transcription_status="failed")
+                    models.AnnotationUpdate(transcription_status="failed"),
                 )
-            
-            await manager.broadcast({
-                "type": "transcription_error",
-                "annotation_id": annotation_id,
-                "error": str(e)
-            })
+
+            await manager.broadcast(
+                {
+                    "type": "transcription_error",
+                    "annotation_id": annotation_id,
+                    "error": str(e),
+                }
+            )
         except:
             pass
 
@@ -826,35 +931,41 @@ async def process_transcription(annotation_id: int, audio_path: str):
 async def process_extended_transcript(annotation_id: int, transcription: str):
     """Background task to process extended transcript using LLM"""
     from llm_service import generate_extended_transcript
-    
+
     try:
         # Update status to processing
         async with db.AsyncSessionLocal() as session:
             await db.update_annotation(
                 session,
                 annotation_id,
-                models.AnnotationUpdate(extended_transcript_status="processing")
+                models.AnnotationUpdate(extended_transcript_status="processing"),
             )
-        
+
         # Broadcast status
-        await manager.broadcast({
-            "type": "extended_transcript_status",
-            "annotation_id": annotation_id,
-            "status": "processing"
-        })
-        
-        logger.info(f"Starting extended transcript generation for annotation {annotation_id}")
+        await manager.broadcast(
+            {
+                "type": "extended_transcript_status",
+                "annotation_id": annotation_id,
+                "status": "processing",
+            }
+        )
+
+        logger.info(
+            f"Starting extended transcript generation for annotation {annotation_id}"
+        )
 
         # Read annotation from DB to get craft/domain if present
         craft_value = None
         async with db.AsyncSessionLocal() as session:
             ann = await db.get_annotation(session, annotation_id)
-            if ann and hasattr(ann, 'craft'):
+            if ann and hasattr(ann, "craft"):
                 craft_value = ann.craft
 
         # Generate extended transcript using LLM with craft selection
-        extended_transcript = await generate_extended_transcript(transcription, craft=craft_value)
-        
+        extended_transcript = await generate_extended_transcript(
+            transcription, craft=craft_value
+        )
+
         if extended_transcript:
             # Update annotation with extended transcript
             async with db.AsyncSessionLocal() as session:
@@ -863,49 +974,53 @@ async def process_extended_transcript(annotation_id: int, transcription: str):
                     annotation_id,
                     models.AnnotationUpdate(
                         extended_transcript=extended_transcript,
-                        extended_transcript_status="completed"
-                    )
+                        extended_transcript_status="completed",
+                    ),
                 )
-            
+
             logger.info(f"Extended transcript completed for annotation {annotation_id}")
-            
+
             # Broadcast completion
-            await manager.broadcast({
-                "type": "extended_transcript_complete",
-                "annotation_id": annotation_id,
-                "extended_transcript": extended_transcript
-            })
-            
+            await manager.broadcast(
+                {
+                    "type": "extended_transcript_complete",
+                    "annotation_id": annotation_id,
+                    "extended_transcript": extended_transcript,
+                }
+            )
+
             # # Start tagging process in background
             # import asyncio
             # asyncio.create_task(process_tags(annotation_id, transcription, extended_transcript))
         else:
             raise Exception("LLM returned no extended transcript")
-        
+
     except Exception as e:
         logger.error(f"Extended transcript error for annotation {annotation_id}: {e}")
-        
+
         # Update status to failed
         try:
             async with db.AsyncSessionLocal() as session:
                 await db.update_annotation(
                     session,
                     annotation_id,
-                    models.AnnotationUpdate(extended_transcript_status="failed")
+                    models.AnnotationUpdate(extended_transcript_status="failed"),
                 )
-            
-            await manager.broadcast({
-                "type": "extended_transcript_error",
-                "annotation_id": annotation_id,
-                "error": str(e)
-            })
+
+            await manager.broadcast(
+                {
+                    "type": "extended_transcript_error",
+                    "annotation_id": annotation_id,
+                    "error": str(e),
+                }
+            )
         except:
             pass
 
+
 @app.post("/api/annotations/{annotation_id}/regenerate-extended")
 async def regenerate_extended_transcript(
-    annotation_id: int,
-    session: AsyncSession = Depends(db.get_session)
+    annotation_id: int, session: AsyncSession = Depends(db.get_session)
 ):
     """Regenerate extended transcript after transcription edit"""
     try:
@@ -913,90 +1028,100 @@ async def regenerate_extended_transcript(
         annotation = await db.get_annotation(session, annotation_id)
         if not annotation:
             raise HTTPException(status_code=404, detail="Annotation not found")
-        
+
         if not annotation.transcription:
             raise HTTPException(
-                status_code=400, 
-                detail="Cannot regenerate extended transcript: no transcription available"
+                status_code=400,
+                detail="Cannot regenerate extended transcript: no transcription available",
             )
-        
-        logger.info(f"Triggering extended transcript regeneration for annotation {annotation_id}")
-        
+
+        logger.info(
+            f"Triggering extended transcript regeneration for annotation {annotation_id}"
+        )
+
         # Reset extended transcript status to processing
         await db.update_annotation(
             session,
             annotation_id,
             models.AnnotationUpdate(
-                extended_transcript=None,
-                extended_transcript_status="processing"
-            )
+                extended_transcript=None, extended_transcript_status="processing"
+            ),
         )
-        
+
         # Broadcast status update
-        await manager.broadcast({
-            "type": "extended_transcript_status",
-            "annotation_id": annotation_id,
-            "status": "processing"
-        })
-        
+        await manager.broadcast(
+            {
+                "type": "extended_transcript_status",
+                "annotation_id": annotation_id,
+                "status": "processing",
+            }
+        )
+
         # Start extended transcript generation in background
         import asyncio
-        asyncio.create_task(process_extended_transcript(annotation_id, annotation.transcription))
-        
+
+        asyncio.create_task(
+            process_extended_transcript(annotation_id, annotation.transcription)
+        )
+
         return {
             "status": "success",
             "message": "Extended transcript regeneration started",
-            "annotation_id": annotation_id
+            "annotation_id": annotation_id,
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error triggering extended transcript regeneration: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-async def process_tags(annotation_id: int, transcription: str, extended_transcript: str):
+
+async def process_tags(
+    annotation_id: int, transcription: str, extended_transcript: str
+):
     """Background task to generate and apply tags using LLM"""
     from llm_service import tag_transcript
-    
+
     try:
         # Update status to processing
         async with db.AsyncSessionLocal() as session:
             await db.update_annotation(
                 session,
                 annotation_id,
-                models.AnnotationUpdate(tagging_status="processing")
+                models.AnnotationUpdate(tagging_status="processing"),
             )
-        
+
         # Broadcast status
-        await manager.broadcast({
-            "type": "tagging_status",
-            "annotation_id": annotation_id,
-            "status": "processing"
-        })
-        
+        await manager.broadcast(
+            {
+                "type": "tagging_status",
+                "annotation_id": annotation_id,
+                "status": "processing",
+            }
+        )
+
         logger.info(f"Starting tag generation for annotation {annotation_id}")
-        
+
         # Get craft/domain and existing tags from database
         craft_value = None
         existing_tags = []
         async with db.AsyncSessionLocal() as session:
             ann = await db.get_annotation(session, annotation_id)
-            if ann and hasattr(ann, 'craft'):
+            if ann and hasattr(ann, "craft"):
                 craft_value = ann.craft
-            
+
             # Fetch all existing tags from database
             all_tags = await db.get_all_tags(session)
-            existing_tags = [{"name": tag.name, "category": tag.category} for tag in all_tags]
-        
+            existing_tags = [
+                {"name": tag.name, "category": tag.category} for tag in all_tags
+            ]
+
         # Generate tags using LLM
         generated_tags = await tag_transcript(
-            transcription, 
-            extended_transcript, 
-            existing_tags,
-            craft=craft_value
+            transcription, extended_transcript, existing_tags, craft=craft_value
         )
-        
+
         if generated_tags:
             # Store tags in database and update usage counts
             tag_names = []
@@ -1004,62 +1129,64 @@ async def process_tags(annotation_id: int, transcription: str, extended_transcri
                 for tag_info in generated_tags:
                     tag_name = tag_info["name"]
                     tag_category = tag_info["category"]
-                    
+
                     # Get or create tag
                     tag = await db.get_or_create_tag(session, tag_name, tag_category)
-                    
+
                     # Increment usage count
                     await db.increment_tag_usage(session, tag_name)
-                    
+
                     tag_names.append(tag_name)
-                
+
                 # Store tag names as JSON array in annotation
                 tags_json = json.dumps(tag_names)
                 await db.update_annotation(
                     session,
                     annotation_id,
-                    models.AnnotationUpdate(
-                        tags=tags_json,
-                        tagging_status="completed"
-                    )
+                    models.AnnotationUpdate(tags=tags_json, tagging_status="completed"),
                 )
-            
-            logger.info(f"Tagging completed for annotation {annotation_id}: {tag_names}")
-            
+
+            logger.info(
+                f"Tagging completed for annotation {annotation_id}: {tag_names}"
+            )
+
             # Broadcast completion with tag details
-            await manager.broadcast({
-                "type": "tagging_complete",
-                "annotation_id": annotation_id,
-                "tags": generated_tags  # Include category info for frontend
-            })
+            await manager.broadcast(
+                {
+                    "type": "tagging_complete",
+                    "annotation_id": annotation_id,
+                    "tags": generated_tags,  # Include category info for frontend
+                }
+            )
         else:
             raise Exception("LLM returned no tags")
-        
+
     except Exception as e:
         logger.error(f"Tagging error for annotation {annotation_id}: {e}")
-        
+
         # Update status to failed
         try:
             async with db.AsyncSessionLocal() as session:
                 await db.update_annotation(
                     session,
                     annotation_id,
-                    models.AnnotationUpdate(tagging_status="failed")
+                    models.AnnotationUpdate(tagging_status="failed"),
                 )
-            
-            await manager.broadcast({
-                "type": "tagging_error",
-                "annotation_id": annotation_id,
-                "error": str(e)
-            })
+
+            await manager.broadcast(
+                {
+                    "type": "tagging_error",
+                    "annotation_id": annotation_id,
+                    "error": str(e),
+                }
+            )
         except:
             pass
 
 
 @app.get("/api/annotations", response_model=List[models.AnnotationResponse])
 async def list_annotations(
-    video_id: Optional[int] = None,
-    session: AsyncSession = Depends(db.get_session)
+    video_id: Optional[int] = None, session: AsyncSession = Depends(db.get_session)
 ):
     """Get annotations, optionally filtered by video_id"""
     try:
@@ -1068,14 +1195,13 @@ async def list_annotations(
         else:
             # Get all annotations (not typically used)
             annotations = []
-        
+
         response_annotations = [
-            models.AnnotationResponse.model_validate(ann) 
-            for ann in annotations
+            models.AnnotationResponse.model_validate(ann) for ann in annotations
         ]
-        
+
         return response_annotations
-        
+
     except Exception as e:
         logger.error(f"Error listing annotations: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1083,17 +1209,16 @@ async def list_annotations(
 
 @app.get("/api/annotations/{annotation_id}", response_model=models.AnnotationResponse)
 async def get_annotation(
-    annotation_id: int,
-    session: AsyncSession = Depends(db.get_session)
+    annotation_id: int, session: AsyncSession = Depends(db.get_session)
 ):
     """Get annotation by ID"""
     try:
         annotation = await db.get_annotation(session, annotation_id)
         if not annotation:
             raise HTTPException(status_code=404, detail="Annotation not found")
-        
+
         return models.AnnotationResponse.model_validate(annotation)
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -1105,16 +1230,16 @@ async def get_annotation(
 async def update_annotation(
     annotation_id: int,
     update_data: models.AnnotationUpdate,
-    session: AsyncSession = Depends(db.get_session)
+    session: AsyncSession = Depends(db.get_session),
 ):
     """Update annotation (typically transcription)"""
     try:
         annotation = await db.update_annotation(session, annotation_id, update_data)
         if not annotation:
             raise HTTPException(status_code=404, detail="Annotation not found")
-        
+
         return models.AnnotationResponse.model_validate(annotation)
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -1124,32 +1249,30 @@ async def update_annotation(
 
 @app.delete("/api/annotations/{annotation_id}")
 async def delete_annotation(
-    annotation_id: int,
-    session: AsyncSession = Depends(db.get_session)
+    annotation_id: int, session: AsyncSession = Depends(db.get_session)
 ):
     """Delete an annotation"""
     try:
         annotation = await db.get_annotation(session, annotation_id)
         if not annotation:
             raise HTTPException(status_code=404, detail="Annotation not found")
-        
+
         # Delete audio file
         if os.path.exists(annotation.audio_filepath):
             os.remove(annotation.audio_filepath)
-        
+
         # Delete from database
         await db.delete_annotation(session, annotation_id)
-        
+
         logger.info(f"Annotation deleted: ID={annotation_id}")
-        
+
         # Broadcast deletion
-        await manager.broadcast({
-            "type": "annotation_deleted",
-            "annotation_id": annotation_id
-        })
-        
+        await manager.broadcast(
+            {"type": "annotation_deleted", "annotation_id": annotation_id}
+        )
+
         return {"status": "success", "message": "Annotation deleted"}
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -1161,7 +1284,7 @@ async def delete_annotation(
 async def submit_feedback(
     annotation_id: int,
     feedback_data: models.FeedbackRequest,
-    session: AsyncSession = Depends(db.get_session)
+    session: AsyncSession = Depends(db.get_session),
 ):
     """Submit user feedback for extended transcript"""
     try:
@@ -1169,28 +1292,29 @@ async def submit_feedback(
         annotation = await db.get_annotation(session, annotation_id)
         if not annotation:
             raise HTTPException(status_code=404, detail="Annotation not found")
-        
+
         # Convert feedback_choices array to JSON string
         feedback_choices_json = json.dumps(feedback_data.feedback_choices)
-        
+
         # Update annotation with feedback
         await db.update_annotation(
             session,
             annotation_id,
             models.AnnotationUpdate(
-                feedback=feedback_data.feedback,
-                feedback_choices=feedback_choices_json
-            )
+                feedback=feedback_data.feedback, feedback_choices=feedback_choices_json
+            ),
         )
-        
-        logger.info(f"Feedback submitted for annotation {annotation_id}: {'positive' if feedback_data.feedback == 1 else 'negative'}")
-        
+
+        logger.info(
+            f"Feedback submitted for annotation {annotation_id}: {'positive' if feedback_data.feedback == 1 else 'negative'}"
+        )
+
         return {
             "status": "success",
             "message": "Feedback submitted successfully",
-            "annotation_id": annotation_id
+            "annotation_id": annotation_id,
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -1200,17 +1324,16 @@ async def submit_feedback(
 
 @app.get("/api/export/{video_id}")
 async def export_annotations(
-    video_id: int,
-    session: AsyncSession = Depends(db.get_session)
+    video_id: int, session: AsyncSession = Depends(db.get_session)
 ):
     """Export annotations for a video as JSON"""
     try:
         video = await db.get_video(session, video_id)
         if not video:
             raise HTTPException(status_code=404, detail="Video not found")
-        
+
         annotations = await db.get_annotations_by_video(session, video_id)
-        
+
         # Build export data
         export_data = {
             "video_file": video.filename,
@@ -1226,29 +1349,31 @@ async def export_annotations(
                     "transcription": ann.transcription,
                     "extended_transcript": ann.extended_transcript,
                     "feedback": ann.feedback,
-                    "feedback_choices": json.loads(ann.feedback_choices) if ann.feedback_choices else None,
+                    "feedback_choices": (
+                        json.loads(ann.feedback_choices)
+                        if ann.feedback_choices
+                        else None
+                    ),
                     "audio_file": ann.audio_filename,
-                    "created_at": ann.created_at.isoformat()
+                    "created_at": ann.created_at.isoformat(),
                 }
                 for ann in annotations
-            ]
+            ],
         }
-        
+
         # Save export file
         export_filename = f"export_{video.filename}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json"
         export_path = EXPORTS_DIR / export_filename
-        
-        async with aiofiles.open(export_path, 'w', encoding='utf-8') as f:
+
+        async with aiofiles.open(export_path, "w", encoding="utf-8") as f:
             await f.write(json.dumps(export_data, indent=2, ensure_ascii=False))
-        
+
         logger.info(f"Export created: {export_filename}")
-        
+
         return FileResponse(
-            export_path,
-            media_type='application/json',
-            filename=export_filename
+            export_path, media_type="application/json", filename=export_filename
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -1259,16 +1384,15 @@ async def export_annotations(
 # Custom StaticFiles with no-cache headers for development
 class NoCacheStaticFiles(StaticFiles):
     """Static files with no-cache headers to prevent browser caching during development"""
-    
+
     async def get_response(self, path: str, scope: Scope) -> Response:
         response = await super().get_response(path, scope)
         # Add no-cache headers for CSS, JS, and HTML files
-        if path.endswith(('.css', '.js', '.html')):
-            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-            response.headers['Pragma'] = 'no-cache'
-            response.headers['Expires'] = '0'
+        if path.endswith((".css", ".js", ".html")):
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
         return response
-
 
 
 # Mount static files (frontend) with no-cache for development
@@ -1280,23 +1404,17 @@ app.mount("/static", NoCacheStaticFiles(directory=str(FRONTEND_DIR)), name="stat
 async def serve_index():
     """Serve the main index.html file with no-cache headers"""
     response = FileResponse(FRONTEND_DIR / "index.html")
-    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-    response.headers['Pragma'] = 'no-cache'
-    response.headers['Expires'] = '0'
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
     return response
 
 
 # Run the application
 if __name__ == "__main__":
     import uvicorn
-    
+
     logger.info(f"Starting server on {HOST}:{PORT}")
     logger.info(f"Open http://localhost:{PORT} in your browser")
-    
-    uvicorn.run(
-        "main:app",
-        host=HOST,
-        port=PORT,
-        reload=True,
-        log_level="info"
-    )
+
+    uvicorn.run("main:app", host=HOST, port=PORT, reload=True, log_level="info")

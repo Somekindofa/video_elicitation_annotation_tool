@@ -9,7 +9,7 @@ from sqlalchemy.future import select
 from sqlalchemy import func
 from datetime import datetime
 
-from models import Base, Project, Video, Annotation, Tag, ProjectCreate, ProjectUpdate, VideoCreate, AnnotationCreate, AnnotationUpdate, TagCreate
+from models import Base, Project, Video, Annotation, Tag, Task, ProjectCreate, ProjectUpdate, VideoCreate, AnnotationCreate, AnnotationUpdate, TagCreate, TaskCreate
 from config import DATABASE_URL
 
 
@@ -292,3 +292,52 @@ async def get_or_create_tag(session: AsyncSession, name: str, category: str) -> 
         tag_data = TagCreate(name=name, category=category)
         tag = await create_tag(session, tag_data)
     return tag
+
+
+async def delete_task(session: AsyncSession, name: str, craft: str) -> bool:
+    """Delete a task by name and craft"""
+    result = await session.execute(select(Task).where((Task.name == name) & (Task.craft == craft)))
+    task = result.scalar_one_or_none()
+    if task:
+        await session.delete(task)
+        await session.commit()
+        return True
+    return False
+
+
+# Task CRUD Operations
+
+async def create_task(session: AsyncSession, task_data: TaskCreate) -> Task:
+    """Create a new task"""
+    task = Task(**task_data.model_dump())
+    session.add(task)
+    await session.commit()
+    await session.refresh(task)
+    return task
+
+
+async def get_task_by_name(session: AsyncSession, name: str) -> Optional[Task]:
+    """Get a task by name"""
+    result = await session.execute(select(Task).where(Task.name == name))
+    return result.scalar_one_or_none()
+
+
+async def get_tasks(
+    session: AsyncSession,
+    craft: Optional[str] = None,
+    published_only: Optional[bool] = None,
+    skip: int = 0,
+    limit: int = 1000,
+) -> List[Task]:
+    """Get tasks with optional craft and published filters"""
+    stmt = select(Task)
+    if craft:
+        stmt = stmt.where(Task.craft == craft)
+    if published_only is True:
+        stmt = stmt.where(Task.is_published == 1)
+    elif published_only is False:
+        stmt = stmt.where(Task.is_published == 0)
+    result = await session.execute(
+        stmt.offset(skip).limit(limit).order_by(Task.is_published.desc(), Task.updated_at.desc())
+    )
+    return result.scalars().all()

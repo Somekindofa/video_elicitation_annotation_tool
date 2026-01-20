@@ -1,0 +1,142 @@
+{
+  "test_cases": [
+    {
+      "id": 1,
+      "craft": "glassblowing",
+      "transcription": "On utilise le jaconas pour lisser le verre pendant qu'il tourne. Il faut maintenir une pression constante avec les mains.",
+      "expected_elements": {
+        "movement_description": {
+          "keywords": ["tourner", "lisser", "maintenir", "pression", "constante"],
+          "verbs": ["tourner", "lisser", "maintenir", "appliquer"],
+          "adverbs": ["doucement", "régulièrement", "continuellement"],
+          "description": "Should describe the rotation, smoothing action, and pressure application"
+        },
+        "evaluation_cues": {
+          "success_indicators": ["surface lisse", "régularité", "uniformité", "symétrie"],
+          "failure_indicators": ["marques", "irrégularités", "bosses", "déformation"],
+          "quality_criteria": ["pression uniforme", "vitesse constante", "angle correct"]
+        },
+        "improvement_feedback": {
+          "error_corrections": ["ajuster la pression", "corriger l'angle", "stabiliser la rotation"],
+          "practice_tips": ["exercer", "répéter", "observer", "commencer lentement"]
+        }
+      },
+      "reference_answer": "Le jaconas se tient fermement et glisse sur le verre en rotation. Le mouvement doit être fluide et continu, avec une pression constante répartie uniformément. Pour évaluer la qualité, vérifiez que la surface soit lisse sans marques ni irrégularités - le succès se voit par une symétrie parfaite. Si vous observez des marques, ajustez la pression en l'allégeant progressivement. Pour améliorer, pratiquez d'abord sur des formes simples en maintenant une vitesse de rotation constante."
+    },
+    {
+      "id": 2,
+      "craft": "glassblowing",
+      "transcription": "Pour chauffer le verre uniformément, on le fait tourner devant la flamme en maintenant la canne à environ 45 degrés.",
+      "expected_elements": {
+        "movement_description": {
+          "keywords": ["tourner", "chauffer", "maintenir", "angle", "45 degrés"],
+          "verbs": ["tourner", "faire pivoter", "maintenir", "positionner"],
+          "adverbs": ["uniformément", "continuellement", "régulièrement"],
+          "description": "Should describe the rotation, angle maintenance, and positioning"
+        },
+        "evaluation_cues": {
+          "success_indicators": ["chauffage uniforme", "couleur homogène", "pas de points chauds", "symétrie"],
+          "failure_indicators": ["points de surchauffe", "zones froides", "déformation irrégulière"],
+          "quality_criteria": ["rotation continue", "angle stable", "distance constante"]
+        },
+        "improvement_feedback": {
+          "error_corrections": ["accélérer la rotation", "ajuster l'angle", "corriger la distance"],
+          "practice_tips": ["compter les rotations", "utiliser un repère visuel", "développer le rythme"]
+        }
+      },
+      "reference_answer": "La canne pivote continuellement dans un mouvement régulier devant la flamme. L'angle de 45 degrés doit rester stable tout au long du chauffage. Une bonne exécution se reconnaît par une couleur uniforme du verre sans zones plus lumineuses (points chauds) ni plus sombres. Si le verre présente des zones irrégulières, c'est que la rotation est trop lente ou l'angle varie. Pour progresser, comptez vos rotations pour maintenir un rythme constant et utilisez un point de repère visuel pour vérifier l'angle."
+    },
+    {
+      "id": 3,
+      "craft": "jewelry",
+      "transcription": "On utilise des pinces fines pour tenir la pièce pendant la soudure. Il faut garder les mains stables.",
+      "expected_elements": {
+        "movement_description": {
+          "keywords": ["tenir", "maintenir", "stabiliser", "pinces", "position"],
+          "verbs": ["saisir", "tenir", "maintenir", "stabiliser", "positionner"],
+          "adverbs": ["fermement", "délicatement", "stablement", "précisément"],
+          "description": "Should describe the grip, stability, and positioning"
+        },
+        "evaluation_cues": {
+          "success_indicators": ["aucun mouvement", "position stable", "soudure nette", "pas de marques de pinces"],
+          "failure_indicators": ["tremblement", "déplacement", "marques sur le métal", "soudure ratée"],
+          "quality_criteria": ["prise ferme mais délicate", "immobilité totale", "pression adéquate"]
+        },
+        "improvement_feedback": {
+          "error_corrections": ["ajuster la prise", "réduire la pression", "stabiliser les poignets"],
+          "practice_tips": ["appuyer les coudes", "respirer calmement", "utiliser un support"]
+        }
+      },
+      "reference_answer": "Les pinces saisissent la pièce fermement mais sans excès de pression. Les mains restent parfaitement immobiles, souvent en s'appuyant sur la table. Une exécution réussie produit une soudure nette sans que la pièce ne bouge et sans marques de pinces sur le métal. Si la pièce tremble ou se déplace, c'est que les poignets ne sont pas stabilisés. Pour améliorer, appuyez vos coudes sur la table de travail et respirez calmement pendant la soudure - l'immobilité vient de l'ancrage du corps."
+    },
+    {
+      "id": 4,
+      "craft": "jewelry",
+      "transcription": "Pour polir l'argent, on passe la pièce sur la polisseuse avec un mouvement circulaire régulier.",
+      "expected_elements": {
+        "movement_description": {
+          "keywords": ["circulaire", "régulier", "passer", "mouvement"],
+          "verbs": ["faire tourner", "déplacer", "guider", "presser"],
+          "adverbs": ["régulièrement", "doucement", "progressivement", "continuellement"],
+          "description": "Should describe the circular motion and pressure application"
+        },
+        "evaluation_cues": {
+          "success_indicators": ["brillance uniforme", "surface lisse", "pas de rayures", "finition homogène"],
+          "failure_indicators": ["zones mates", "rayures", "creux", "surchauffe"],
+          "quality_criteria": ["mouvement constant", "pression uniforme", "temps adéquat par zone"]
+        },
+        "improvement_feedback": {
+          "error_corrections": ["varier les zones", "alléger la pression", "augmenter la vitesse du mouvement"],
+          "practice_tips": ["travailler par sections", "inspecter fréquemment", "rester mobile"]
+        }
+      },
+      "reference_answer": "La pièce se déplace en cercles réguliers contre la polisseuse. Le mouvement doit rester fluide et la pression constante mais modérée. Le succès se voit par une brillance parfaitement uniforme sans zones mates ni rayures. Si des creux apparaissent, c'est que vous restez trop longtemps au même endroit. Pour améliorer, travaillez par petites sections en gardant la pièce en mouvement constant et inspectez régulièrement la surface sous différents angles de lumière."
+    },
+    {
+      "id": 5,
+      "craft": "glassblowing",
+      "transcription": "Les ciseaux sont utilisés pour couper le verre chaud. On doit agir rapidement pendant que le verre est encore malléable.",
+      "expected_elements": {
+        "movement_description": {
+          "keywords": ["couper", "rapidement", "malléable", "chaud"],
+          "verbs": ["couper", "trancher", "sectionner", "refermer"],
+          "adverbs": ["rapidement", "nettement", "fermement", "précisément"],
+          "description": "Should describe the cutting action, timing, and speed"
+        },
+        "evaluation_cues": {
+          "success_indicators": ["coupe nette", "bord lisse", "pas d'étirement", "séparation complète"],
+          "failure_indicators": ["fils de verre", "bord irrégulier", "verre qui s'étire", "coupe incomplète"],
+          "quality_criteria": ["température correcte", "coupe rapide", "mouvement décisif"]
+        },
+        "improvement_feedback": {
+          "error_corrections": ["chauffer davantage", "accélérer le mouvement", "refermer complètement"],
+          "practice_tips": ["anticiper la température", "ne pas hésiter", "tester d'abord"]
+        }
+      },
+      "reference_answer": "Les ciseaux se referment d'un mouvement rapide et décisif sur le verre chaud. L'action doit être instantanée sans hésitation. Une coupe réussie produit un bord net et lisse sans fils de verre qui s'étirent. Si le verre s'étire en fils, c'est qu'il a refroidi ou que le mouvement était trop lent. Pour progresser, apprenez à reconnaître la bonne température du verre (lueur orange vif) et entraînez-vous à couper sans hésitation - la décision et la vitesse sont essentielles."
+    },
+    {
+      "id": 6,
+      "craft": "jewelry",
+      "transcription": "On utilise la lime pour ajuster les bords de la pièce. Le mouvement doit être long et régulier.",
+      "expected_elements": {
+        "movement_description": {
+          "keywords": ["limer", "long", "régulier", "ajuster"],
+          "verbs": ["pousser", "tirer", "guider", "affiner"],
+          "adverbs": ["longuement", "régulièrement", "uniformément", "progressivement"],
+          "description": "Should describe the long strokes and consistent rhythm"
+        },
+        "evaluation_cues": {
+          "success_indicators": ["bord droit", "surface lisse", "pas de marques", "angle constant"],
+          "failure_indicators": ["rainures", "irrégularités", "bord ondulé", "marques profondes"],
+          "quality_criteria": ["longueur de mouvement", "pression constante", "angle stable"]
+        },
+        "improvement_feedback": {
+          "error_corrections": ["allonger le mouvement", "uniformiser la pression", "maintenir l'angle"],
+          "practice_tips": ["utiliser tout le bras", "compter les passes", "vérifier fréquemment"]
+        }
+      },
+      "reference_answer": "La lime avance sur toute sa longueur en un mouvement ample qui engage tout le bras. Chaque passage doit couvrir toute la zone avec une pression uniforme. Un travail de qualité produit un bord parfaitement droit et lisse sans rainures visibles. Si des marques en escalier apparaissent, c'est que le mouvement est trop court ou saccadé. Pour améliorer, utilisez l'épaule plutôt que le poignet pour un mouvement plus ample et comptez vos passages pour garder un rythme régulier."
+    }
+  ]
+}

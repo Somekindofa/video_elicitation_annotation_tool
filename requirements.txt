@@ -34,3 +34,9 @@ tqdm
 
 # Optional: Better logging
 colorlog
+
+# RAG Evaluation
+ragas
+langchain
+langchain-community
+langchain-openai
