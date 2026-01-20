@@ -36,7 +36,7 @@ CORS_ORIGINS = [
     "http://127.0.0.1:8005",
 ]
 
-# Fireworks.ai API settings
+# Fireworks.ai API settings for Whisper
 FIREWORKS_API_KEY = os.getenv("FIREWORKS_API_KEY", "")  # Set this in environment variable or replace with your key
 FIREWORKS_API_URL = "https://audio-turbo.us-virginia-1.direct.fireworks.ai/v1/audio/transcriptions"
 FIREWORKS_MODEL = "whisper-v3-turbo"
