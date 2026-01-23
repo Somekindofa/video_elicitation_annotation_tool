@@ -341,6 +341,7 @@ Générez les tags au format JSON :
                 # Extract the generated text
                 if "choices" in result and len(result["choices"]) > 0:
                     generated_text = result["choices"][0].get("text", "").strip()
+                    logger.info(f"LLM raw response for tagging: {generated_text[:500]}")
 
                     if not generated_text:
                         logger.warning("LLM returned empty text for tagging")
@@ -401,6 +402,13 @@ Générez les tags au format JSON :
                                         valid_tags.append(
                                             {"name": tag_name, "category": tag_category}
                                         )
+                                    else:
+                                        logger.warning(
+                                            f"Filtered out invalid tag: name='{tag_name}', category='{tag_category}' "
+                                            f"(valid categories: {valid_categories})"
+                                        )
+                                else:
+                                    logger.warning(f"Skipping malformed tag: {tag}")
 
                             if valid_tags:
                                 logger.info(

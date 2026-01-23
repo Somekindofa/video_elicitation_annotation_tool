@@ -993,9 +993,9 @@ async def process_extended_transcript(annotation_id: int, transcription: str):
                 }
             )
 
-            # # Start tagging process in background
-            # import asyncio
-            # asyncio.create_task(process_tags(annotation_id, transcription, extended_transcript))
+            # Start tagging process in background
+            import asyncio
+            asyncio.create_task(process_tags(annotation_id, transcription, extended_transcript))
         else:
             raise Exception("LLM returned no extended transcript")
 
@@ -1135,7 +1135,7 @@ async def process_tags(
                     tag_category = tag_info["category"]
 
                     # Get or create tag
-                    tag = await db.get_or_create_tag(session, tag_name, tag_category)
+                    await db.get_or_create_tag(session, tag_name, tag_category)
 
                     # Increment usage count
                     await db.increment_tag_usage(session, tag_name)
