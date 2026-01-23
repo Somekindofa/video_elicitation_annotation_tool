@@ -174,6 +174,10 @@ async def upload_video(
 ):
     """Upload a video file"""
     try:
+        # Validate filename exists
+        if not file.filename:
+            raise HTTPException(status_code=400, detail="No filename provided")
+
         # Validate file type
         file_ext = Path(file.filename).suffix.lower()
         if file_ext not in SUPPORTED_VIDEO_FORMATS:
