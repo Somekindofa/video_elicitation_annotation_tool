@@ -3,8 +3,9 @@ Database models and Pydantic schemas for Video Elicitation Annotation Tool
 """
 
 from datetime import datetime, timezone
-from typing import Optional, List
-from pydantic import BaseModel, Field
+from typing import Optional, List, Dict, Any
+import json
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
@@ -237,7 +238,7 @@ class AnnotationResponse(BaseModel):
     transcription_status: str
     extended_transcript: Optional[str] = None
     extended_transcript_status: str
-    tags: Optional[str] = None
+    tags: Optional[List[Dict[str, Optional[str]]]] = None
     tagging_status: str
     feedback: Optional[int] = None
     feedback_choices: Optional[str] = None
@@ -248,6 +249,28 @@ class AnnotationResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+    @field_validator('tags', mode='before')
+    @classmethod
+    def parse_tags(cls, v):
+        """Parse tags from JSON string to list, handling both old and new formats"""
+        if v is None:
+            return None
+
+        # Parse JSON string if needed
+        if isinstance(v, str):
+            try:
+                v = json.loads(v)
+            except (json.JSONDecodeError, ValueError):
+                return None
+
+        # Handle old format: list of strings -> convert to list of objects
+        if isinstance(v, list) and len(v) > 0 and isinstance(v[0], str):
+            # Convert old format ["tag1", "tag2"] to new format [{"name": "tag1", "category": None}, ...]
+            return [{"name": tag, "category": None} for tag in v]
+
+        # New format is already correct
+        return v
 
     @property
     def duration(self) -> float:

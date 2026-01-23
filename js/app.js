@@ -529,21 +529,21 @@ function handleWebSocketMessage(message) {
             updateExtendedTranscriptStatus(message.annotation_id, 'failed');
             break;
 
-        // case 'tagging_status':
-        //     updateTaggingStatus(message.annotation_id, message.status);
-        //     break;
+        case 'tagging_status':
+            updateTaggingStatus(message.annotation_id, message.status);
+            break;
 
-        // case 'tagging_complete':
-        //     updateTags(message.annotation_id, message.tags);
-        //     if (state.currentVideoId) {
-        //         loadAnnotations(state.currentVideoId);
-        //     }
-        //     break;
+        case 'tagging_complete':
+            updateTags(message.annotation_id, message.tags);
+            if (state.currentVideoId) {
+                loadAnnotations(state.currentVideoId);
+            }
+            break;
 
-        // case 'tagging_error':
-        //     showToast('Tagging Error', message.error, 'error');
-        //     updateTaggingStatus(message.annotation_id, 'failed');
-        //     break;
+        case 'tagging_error':
+            showToast('Tagging Error', message.error, 'error');
+            updateTaggingStatus(message.annotation_id, 'failed');
+            break;
 
         case 'annotation_deleted':
             if (state.currentVideoId) {
@@ -1247,35 +1247,35 @@ function renderTimeline() {
             tooltip.appendChild(transcriptDiv);
         }
 
-        // // Tags section
-        // if (annotation.tags && annotation.tags.length > 0) {
-        //     const tagsContainer = document.createElement('div');
-        //     tagsContainer.className = 'timeline-tooltip-tags';
+        // Tags section
+        if (annotation.tags && annotation.tags.length > 0) {
+            const tagsContainer = document.createElement('div');
+            tagsContainer.className = 'timeline-tooltip-tags';
 
-        //     annotation.tags.forEach(tag => {
-        //         const tagSpan = document.createElement('span');
-        //         tagSpan.className = 'timeline-tooltip-tag';
-        //         if (tag.category) {
-        //             tagSpan.classList.add(`category-${tag.category}`);
-        //         }
-        //         tagSpan.textContent = tag.name;
-        //         tagsContainer.appendChild(tagSpan);
-        //     });
+            annotation.tags.forEach(tag => {
+                const tagSpan = document.createElement('span');
+                tagSpan.className = 'timeline-tooltip-tag';
+                if (tag.category) {
+                    tagSpan.classList.add(`category-${tag.category}`);
+                }
+                tagSpan.textContent = tag.name;
+                tagsContainer.appendChild(tagSpan);
+            });
 
-        //     tooltip.appendChild(tagsContainer);
-        // } else if (annotation.tagging_status === 'completed') {
-        //     // No tags but tagging was completed
-        //     const noTags = document.createElement('div');
-        //     noTags.className = 'timeline-tooltip-no-tags';
-        //     noTags.textContent = 'No tags generated';
-        //     tooltip.appendChild(noTags);
-        // } else if (annotation.tagging_status === 'processing') {
-        //     // Still processing tags
-        //     const processingTags = document.createElement('div');
-        //     processingTags.className = 'timeline-tooltip-no-tags';
-        //     processingTags.textContent = 'Generating tags...';
-        //     tooltip.appendChild(processingTags);
-        // }
+            tooltip.appendChild(tagsContainer);
+        } else if (annotation.tagging_status === 'completed') {
+            // No tags but tagging was completed
+            const noTags = document.createElement('div');
+            noTags.className = 'timeline-tooltip-no-tags';
+            noTags.textContent = 'No tags generated';
+            tooltip.appendChild(noTags);
+        } else if (annotation.tagging_status === 'processing') {
+            // Still processing tags
+            const processingTags = document.createElement('div');
+            processingTags.className = 'timeline-tooltip-no-tags';
+            processingTags.textContent = 'Generating tags...';
+            tooltip.appendChild(processingTags);
+        }
 
         bar.appendChild(tooltip);
 
@@ -1677,22 +1677,22 @@ function updateExtendedTranscript(annotationId, extendedTranscript) {
     }
 }
 
-// function updateTaggingStatus(annotationId, status) {
-//     const annotation = state.annotations.find(a => a.id === annotationId);
-//     if (annotation) {
-//         annotation.tagging_status = status;
-//         renderAnnotations();
-//     }
-// }
+function updateTaggingStatus(annotationId, status) {
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (annotation) {
+        annotation.tagging_status = status;
+        renderAnnotations();
+    }
+}
 
-// function updateTags(annotationId, tags) {
-//     const annotation = state.annotations.find(a => a.id === annotationId);
-//     if (annotation) {
-//         annotation.tags = tags;
-//         annotation.tagging_status = 'completed';
-//         renderAnnotations();
-//     }
-// }
+function updateTags(annotationId, tags) {
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (annotation) {
+        annotation.tags = tags;
+        annotation.tagging_status = 'completed';
+        renderAnnotations();
+    }
+}
 
 function handleFeedback(annotationId, feedbackValue, event) {
     event.stopPropagation();
