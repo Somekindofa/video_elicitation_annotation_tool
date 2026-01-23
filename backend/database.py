@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlalchemy.orm import selectinload
 from sqlalchemy.future import select
 from sqlalchemy import func
-from datetime import datetime
+from datetime import datetime, timezone
 
 from models import Base, Project, Video, Annotation, Tag, Task, ProjectCreate, ProjectUpdate, VideoCreate, AnnotationCreate, AnnotationUpdate, TagCreate, TaskCreate
 from config import DATABASE_URL
@@ -133,7 +133,7 @@ async def update_annotation(
         update_data = annotation_update.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(annotation, field, value)
-        annotation.updated_at = datetime.utcnow()
+        annotation.updated_at = datetime.now(timezone.utc)
         await session.commit()
         await session.refresh(annotation)
     return annotation
@@ -210,7 +210,7 @@ async def update_project(
         update_data = project_update.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(project, field, value)
-        project.updated_at = datetime.utcnow()
+        project.updated_at = datetime.now(timezone.utc)
         await session.commit()
         await session.refresh(project)
     return project
@@ -279,7 +279,7 @@ async def increment_tag_usage(session: AsyncSession, tag_name: str) -> Optional[
     tag = await get_tag_by_name(session, tag_name)
     if tag:
         tag.usage_count += 1
-        tag.updated_at = datetime.utcnow()
+        tag.updated_at = datetime.now(timezone.utc)
         await session.commit()
         await session.refresh(tag)
     return tag
