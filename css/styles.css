@@ -160,7 +160,10 @@ body {
 
 #videoPlayer {
     width: 100%;
+    height: auto;
+    min-height: 400px;
     max-height: 600px;
+    aspect-ratio: 16/9;
     border-radius: 0 0 var(--radius-md) var(--radius-md);  /* Only round bottom corners */
     background: #000;
     display: block;

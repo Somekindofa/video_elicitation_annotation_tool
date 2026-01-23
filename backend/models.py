@@ -2,7 +2,7 @@
 Database models and Pydantic schemas for Video Elicitation Annotation Tool
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List
 from pydantic import BaseModel, Field
 from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey
@@ -22,8 +22,8 @@ class Project(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
     description = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
 
     # Relationship to videos
     videos = relationship(
@@ -50,7 +50,7 @@ class Video(Base):
         Integer, default=0
     )  # 0 for uploaded (copied), 1 for local (streaming)
     source_type = Column(String, default="uploaded")  # "uploaded", "local", "gdrive"
-    uploaded_at = Column(DateTime, default=datetime.utcnow)
+    uploaded_at = Column(DateTime, default=datetime.now(timezone.utc))
 
     # Relationships
     project = relationship("Project", back_populates="videos")
@@ -70,8 +70,8 @@ class Tag(Base):
     )  # Single word tag (e.g., "scissors", "cutting")
     category = Column(String, nullable=False)  # tool, material, technique, handling
     usage_count = Column(Integer, default=0)  # Track how often this tag is used
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
 
 
 class Task(Base):
@@ -86,8 +86,8 @@ class Task(Base):
     )  # e.g., 'glassblowing', 'scientific_glassblowing', 'jewelry'
     description = Column(Text, nullable=True)
     is_published = Column(Integer, default=0)  # 1 published, 0 draft
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
 
 
 class Annotation(Base):
@@ -125,8 +125,8 @@ class Annotation(Base):
     feedback_choices = Column(
         String, nullable=True
     )  # JSON string storing array of 1s and 0s
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
 
     # Relationship to video
     video = relationship("Video", back_populates="annotations")
