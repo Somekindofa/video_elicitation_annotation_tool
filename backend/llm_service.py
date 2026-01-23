@@ -350,23 +350,35 @@ Générez les tags au format JSON :
                     # Parse JSON response robustly
                     try:
                         text = generated_text.strip()
-                        # Remove common code fences if present
-                        if text.startswith("```"):
-                            # strip opening fence
-                            first_newline = text.find("\n")
-                            if first_newline != -1:
-                                text = text[first_newline + 1 :]
-                            # strip trailing fence
-                            if text.endswith("```"):
-                                text = text[:-3]
-                        # Extract first JSON object heuristically
+
+                        # Remove all markdown code fences
+                        # Replace ```json\n...``` blocks
+                        import re
+                        text = re.sub(r'```json\s*', '', text)
+                        text = re.sub(r'```\s*', '', text)
+                        text = text.strip()
+
+                        # Extract first complete JSON object
                         json_start = text.find("{")
-                        json_end = text.rfind("}") + 1
-                        json_candidate = (
-                            text[json_start:json_end]
-                            if json_start >= 0 and json_end > json_start
-                            else text
-                        )
+                        if json_start == -1:
+                            raise ValueError("No JSON object found in response")
+
+                        # Find the matching closing brace for the first opening brace
+                        brace_count = 0
+                        json_end = json_start
+                        for i in range(json_start, len(text)):
+                            if text[i] == '{':
+                                brace_count += 1
+                            elif text[i] == '}':
+                                brace_count -= 1
+                                if brace_count == 0:
+                                    json_end = i + 1
+                                    break
+
+                        if brace_count != 0:
+                            raise ValueError("Unmatched braces in JSON")
+
+                        json_candidate = text[json_start:json_end]
                         parsed = json.loads(json_candidate)
                         logger.info(f"Parsed JSON structure: {parsed}")
 
