@@ -8,7 +8,7 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, cast
 import uuid
 
 from sqlalchemy.exc import IntegrityError
@@ -282,12 +282,12 @@ async def get_video_file(
         video = await db.get_video(session, video_id)
         if not video:
             raise HTTPException(status_code=404, detail="Video not found")
-
-        if not os.path.exists(video.filepath):
+        
+        if not os.path.exists(str(video.filepath)):
             raise HTTPException(status_code=404, detail="Video file not found on disk")
 
         # Get file info
-        file_size = os.path.getsize(video.filepath)
+        file_size = os.path.getsize(str(video.filepath))
 
         # Handle Range requests for streaming
         range_header = request.headers.get("range")
@@ -309,8 +309,8 @@ async def get_video_file(
             chunk_size = end - start + 1
 
             # Stream the requested chunk
-            def iter_file():
-                with open(video.filepath, "rb") as f:
+            def iter_range():
+                with open(str(video.filepath), "rb") as f:
                     f.seek(start)
                     remaining = chunk_size
                     while remaining > 0:
@@ -329,12 +329,12 @@ async def get_video_file(
             }
 
             return StreamingResponse(
-                iter_file(), status_code=206, headers=headers  # Partial Content
+                iter_range(), status_code=206, headers=headers  # Partial Content
             )
         else:
             # No range header - stream entire file
-            def iter_file():
-                with open(video.filepath, "rb") as f:
+            def iter_full():
+                with open(str(video.filepath), "rb") as f:
                     while chunk := f.read(8192):
                         yield chunk
 
@@ -345,7 +345,7 @@ async def get_video_file(
             }
 
             return StreamingResponse(
-                iter_file(), media_type=video.mime_type or "video/mp4", headers=headers
+                iter_full(), media_type=str(video.mime_type) or "video/mp4", headers=headers
             )
 
     except HTTPException:
@@ -396,13 +396,13 @@ async def delete_video(video_id: int, session: AsyncSession = Depends(db.get_ses
             raise HTTPException(status_code=404, detail="Video not found")
 
         # Only delete video file if it was uploaded (not local)
-        if video.is_local == 0 and os.path.exists(video.filepath):
-            os.remove(video.filepath)
+        if not bool(video.is_local) and os.path.exists(str(video.filepath)):
+            os.remove(str(video.filepath))
 
         # Delete annotation audio files
         for annotation in video.annotations:
-            if os.path.exists(annotation.audio_filepath):
-                os.remove(annotation.audio_filepath)
+            if os.path.exists(str(annotation.audio_filepath)):
+                os.remove(str(annotation.audio_filepath))
 
         # Delete from database
         await db.delete_video(session, video_id)
@@ -774,7 +774,7 @@ async def create_annotation(
         # Start transcription in background
         import asyncio
 
-        asyncio.create_task(process_transcription(annotation.id, str(audio_filepath)))
+        asyncio.create_task(process_transcription(cast(int, annotation.id), str(audio_filepath)))
 
         # Prepare response
         response = models.AnnotationResponse.model_validate(annotation)
@@ -967,7 +967,7 @@ async def process_extended_transcript(annotation_id: int, transcription: str):
 
         # Generate extended transcript using LLM with craft selection
         extended_transcript = await generate_extended_transcript(
-            transcription, craft=craft_value
+            transcription, craft=str(craft_value)
         )
 
         if extended_transcript:
@@ -1033,7 +1033,7 @@ async def regenerate_extended_transcript(
         if not annotation:
             raise HTTPException(status_code=404, detail="Annotation not found")
 
-        if not annotation.transcription:
+        if not bool(annotation.transcription):
             raise HTTPException(
                 status_code=400,
                 detail="Cannot regenerate extended transcript: no transcription available",
@@ -1065,7 +1065,7 @@ async def regenerate_extended_transcript(
         import asyncio
 
         asyncio.create_task(
-            process_extended_transcript(annotation_id, annotation.transcription)
+            process_extended_transcript(annotation_id, str(annotation.transcription))
         )
 
         return {
@@ -1262,8 +1262,8 @@ async def delete_annotation(
             raise HTTPException(status_code=404, detail="Annotation not found")
 
         # Delete audio file
-        if os.path.exists(annotation.audio_filepath):
-            os.remove(annotation.audio_filepath)
+        if os.path.exists(str(annotation.audio_filepath)):
+            os.remove(str(annotation.audio_filepath))
 
         # Delete from database
         await db.delete_annotation(session, annotation_id)
@@ -1354,8 +1354,8 @@ async def export_annotations(
                     "extended_transcript": ann.extended_transcript,
                     "feedback": ann.feedback,
                     "feedback_choices": (
-                        json.loads(ann.feedback_choices)
-                        if ann.feedback_choices
+                        json.loads(str(ann.feedback_choices))
+                        if bool(ann.feedback_choices)
                         else None
                     ),
                     "audio_file": ann.audio_filename,
