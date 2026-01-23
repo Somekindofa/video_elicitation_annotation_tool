@@ -1128,7 +1128,7 @@ async def process_tags(
 
         if generated_tags:
             # Store tags in database and update usage counts
-            tag_names = []
+            tag_objects = []
             async with db.AsyncSessionLocal() as session:
                 for tag_info in generated_tags:
                     tag_name = tag_info["name"]
@@ -1140,10 +1140,11 @@ async def process_tags(
                     # Increment usage count
                     await db.increment_tag_usage(session, tag_name)
 
-                    tag_names.append(tag_name)
+                    # Store full tag object with name and category
+                    tag_objects.append({"name": tag_name, "category": tag_category})
 
-                # Store tag names as JSON array in annotation
-                tags_json = json.dumps(tag_names)
+                # Store tag objects as JSON array in annotation
+                tags_json = json.dumps(tag_objects)
                 await db.update_annotation(
                     session,
                     annotation_id,
@@ -1151,7 +1152,7 @@ async def process_tags(
                 )
 
             logger.info(
-                f"Tagging completed for annotation {annotation_id}: {tag_names}"
+                f"Tagging completed for annotation {annotation_id}: {tag_objects}"
             )
 
             # Broadcast completion with tag details
