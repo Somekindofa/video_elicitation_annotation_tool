@@ -6,7 +6,7 @@ import os
 import base64
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, cast
 import uuid
@@ -163,7 +163,7 @@ async def health_check():
     """Health check endpoint"""
     return {
         "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "whisper_model": get_model_info(),
     }
 
@@ -1343,7 +1343,7 @@ async def export_annotations(
             "video_file": video.filename,
             "video_duration": video.duration,
             "annotation_count": len(annotations),
-            "export_timestamp": datetime.utcnow().isoformat(),
+            "export_timestamp": datetime.now(timezone.utc).isoformat(),
             "annotations": [
                 {
                     "id": ann.id,
@@ -1366,7 +1366,7 @@ async def export_annotations(
         }
 
         # Save export file
-        export_filename = f"export_{video.filename}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json"
+        export_filename = f"export_{video.filename}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.json"
         export_path = EXPORTS_DIR / export_filename
 
         async with aiofiles.open(export_path, "w", encoding="utf-8") as f:
