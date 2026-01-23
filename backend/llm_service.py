@@ -368,6 +368,7 @@ Générez les tags au format JSON :
                             else text
                         )
                         parsed = json.loads(json_candidate)
+                        logger.info(f"Parsed JSON structure: {parsed}")
 
                         # Validate structure
                         if "tags" in parsed and isinstance(parsed["tags"], list):
