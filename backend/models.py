@@ -24,7 +24,11 @@ class Project(Base):
     name = Column(String, nullable=False)
     description = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=datetime.now(timezone.utc),
+        onupdate=datetime.now(timezone.utc),
+    )
 
     # Relationship to videos
     videos = relationship(
@@ -72,7 +76,11 @@ class Tag(Base):
     category = Column(String, nullable=False)  # tool, material, technique, handling
     usage_count = Column(Integer, default=0)  # Track how often this tag is used
     created_at = Column(DateTime, default=datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=datetime.now(timezone.utc),
+        onupdate=datetime.now(timezone.utc),
+    )
 
 
 class Task(Base):
@@ -88,7 +96,11 @@ class Task(Base):
     description = Column(Text, nullable=True)
     is_published = Column(Integer, default=0)  # 1 published, 0 draft
     created_at = Column(DateTime, default=datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=datetime.now(timezone.utc),
+        onupdate=datetime.now(timezone.utc),
+    )
 
 
 class Annotation(Base):
@@ -106,10 +118,15 @@ class Annotation(Base):
     transcription_status = Column(
         String, default="pending"
     )  # pending, processing, completed, failed
-    extended_transcript = Column(Text, nullable=True)  # LLM-enhanced transcript
-    extended_transcript_status = Column(
+    # AI Review fields for elicitation quality assessment
+    review_status = Column(
         String, default="pending"
-    )  # pending, processing, completed, failed
+    )  # pending, processing, completed, failed, skipped
+    review_results = Column(
+        Text, nullable=True
+    )  # JSON string storing review dimensions and prompts
+    review_timestamp = Column(DateTime, nullable=True)  # When review was completed
+    review_attempts = Column(Integer, default=0)  # Track number of review cycles
     tags = Column(
         Text, nullable=True
     )  # JSON string storing array of tag names ["scissors", "cutting"]
@@ -127,7 +144,11 @@ class Annotation(Base):
         String, nullable=True
     )  # JSON string storing array of 1s and 0s
     created_at = Column(DateTime, default=datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=datetime.now(timezone.utc),
+        onupdate=datetime.now(timezone.utc),
+    )
 
     # Relationship to video
     video = relationship("Video", back_populates="annotations")
@@ -215,8 +236,10 @@ class AnnotationUpdate(BaseModel):
 
     transcription: Optional[str] = None
     transcription_status: Optional[str] = None
-    extended_transcript: Optional[str] = None
-    extended_transcript_status: Optional[str] = None
+    review_status: Optional[str] = None
+    review_results: Optional[str] = None
+    review_timestamp: Optional[datetime] = None
+    review_attempts: Optional[int] = None
     tags: Optional[str] = None
     tagging_status: Optional[str] = None
     feedback: Optional[int] = None
@@ -236,8 +259,10 @@ class AnnotationResponse(BaseModel):
     audio_filepath: str
     transcription: Optional[str] = None
     transcription_status: str
-    extended_transcript: Optional[str] = None
-    extended_transcript_status: str
+    review_status: str = "pending"
+    review_results: Optional[str] = None
+    review_timestamp: Optional[datetime] = None
+    review_attempts: int = 0
     tags: Optional[List[Dict[str, Optional[str]]]] = None
     tagging_status: str
     feedback: Optional[int] = None
@@ -250,7 +275,7 @@ class AnnotationResponse(BaseModel):
     class Config:
         from_attributes = True
 
-    @field_validator('tags', mode='before')
+    @field_validator("tags", mode="before")
     @classmethod
     def parse_tags(cls, v):
         """Parse tags from JSON string to list, handling both old and new formats"""
