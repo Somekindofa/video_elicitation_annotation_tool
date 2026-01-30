@@ -513,20 +513,20 @@ function handleWebSocketMessage(message) {
             updateAnnotationStatus(message.annotation_id, 'failed');
             break;
 
-        case 'extended_transcript_status':
-            updateExtendedTranscriptStatus(message.annotation_id, message.status);
+        case 'review_status':
+            updateReviewStatus(message.annotation_id, message.status);
             break;
 
-        case 'extended_transcript_complete':
-            updateExtendedTranscript(message.annotation_id, message.extended_transcript);
+        case 'review_complete':
+            updateReviewResults(message.annotation_id, message.review_results);
             if (state.currentVideoId) {
                 loadAnnotations(state.currentVideoId);
             }
             break;
 
-        case 'extended_transcript_error':
-            showToast('Extended Transcript Error', message.error, 'error');
-            updateExtendedTranscriptStatus(message.annotation_id, 'failed');
+        case 'review_error':
+            showToast('AI Review Error', message.error, 'error');
+            updateReviewStatus(message.annotation_id, 'failed');
             break;
 
         case 'tagging_status':
@@ -1090,13 +1090,14 @@ function renderAnnotations() {
         const statusText = getStatusText(annotation.transcription_status);
         const statusClass = annotation.transcription_status;
 
-        // Extended transcript UI logic
-        let extendedTranscriptHTML = '';
+        // AI Review Panel UI logic
+        let reviewPanelHTML = '';
         if (annotation.transcription && annotation.transcription_status === 'completed') {
-            if (annotation.extended_transcript_status === 'processing') {
-                extendedTranscriptHTML = `
-                    <div class="extended-transcript-progress">
-                        <i class="fa-solid fa-hammer"></i>
+            if (annotation.review_status === 'processing') {
+                reviewPanelHTML = `
+                    <div class="review-progress">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <span>AI analyzing elicitation</span>
                         <span class="ellipsis">
                             <span></span>
                             <span></span>
@@ -1104,31 +1105,22 @@ function renderAnnotations() {
                         </span>
                     </div>
                 `;
-            } else if (annotation.extended_transcript_status === 'completed' && annotation.extended_transcript) {
-                const feedbackClass = annotation.feedback !== null ?
-                    (annotation.feedback === 1 ? 'thumbs-up' : 'thumbs-down') : '';
-                const extendedHtml = mdToHtml(annotation.extended_transcript);
-                extendedTranscriptHTML = `
-                    <div class="extended-transcript-container">
-                        <div class="extended-transcript-toggle" onclick="toggleExtendedTranscript(${annotation.id})">
-                            <i class="fa-solid fa-caret-down"></i>
-                            <span>See Extended Transcript</span>
-                        </div>
-                        <div class="extended-transcript-content" id="extended-${annotation.id}">
-                            <div class="md">${extendedHtml}</div>
-                            <div class="feedback-buttons">
-                                <button class="feedback-btn thumbs-up ${annotation.feedback === 1 ? 'active' : ''}" 
-                                    onclick="handleFeedback(${annotation.id}, 1, event)">
-                                    <i class="fa-solid fa-thumbs-up"></i>
-                                    <span>Utile</span>
-                                </button>
-                                <button class="feedback-btn thumbs-down ${annotation.feedback === 0 ? 'active' : ''}" 
-                                    onclick="handleFeedback(${annotation.id}, 0, event)">
-                                    <i class="fa-solid fa-thumbs-down"></i>
-                                    <span>Pas utile</span>
-                                </button>
-                            </div>
-                        </div>
+            } else if (annotation.review_status === 'completed' && annotation.review_results) {
+                try {
+                    const review = typeof annotation.review_results === 'string' 
+                        ? JSON.parse(annotation.review_results) 
+                        : annotation.review_results;
+                    reviewPanelHTML = renderReviewPanel(annotation.id, review);
+                } catch (e) {
+                    console.error('Failed to parse review results:', e);
+                }
+            } else if (annotation.review_status === 'pending' || annotation.review_status === 'failed') {
+                reviewPanelHTML = `
+                    <div class="review-trigger">
+                        <button class="btn btn-review" onclick="triggerReview(${annotation.id})">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            ${annotation.review_status === 'failed' ? 'Retry AI Review' : 'Trigger AI Review'}
+                        </button>
                     </div>
                 `;
             }
@@ -1136,7 +1128,7 @@ function renderAnnotations() {
 
         // Tags UI logic
         let tagsHTML = '';
-        if (annotation.extended_transcript_status === 'completed') {
+        if (annotation.review_status === 'completed') {
             if (annotation.tagging_status === 'processing') {
                 tagsHTML = `
                     <div class="tagging-progress">
@@ -1185,11 +1177,11 @@ function renderAnnotations() {
                 ${statusText}
             </div>
             ${tagsHTML}
-            ${extendedTranscriptHTML}
+            ${reviewPanelHTML}
         `;
 
         item.addEventListener('click', (e) => {
-            if (!e.target.closest('button') && !e.target.closest('.extended-transcript-toggle') && !e.target.closest('.feedback-btn')) {
+            if (!e.target.closest('button') && !e.target.closest('.dimension-card') && !e.target.closest('.feedback-btn')) {
                 seekToAnnotation(annotation.start_time);
             }
         });
@@ -1490,31 +1482,258 @@ async function saveTranscriptionEdit(annotationId, newText, itemElement) {
     }
 }
 
-async function regenerateExtendedTranscript(annotationId) {
+// AI Review Functions
+
+function renderReviewPanel(annotationId, review) {
+    const coveredCount = Object.values(review.dimensions).filter(d => d.covered).length;
+    const completenessPercent = review.completeness_score || 0;
+    
+    let dimensionsHTML = '';
+    ['HOW', 'EVALUATION', 'FEEDBACK'].forEach(dimName => {
+        const dim = review.dimensions[dimName];
+        if (!dim) return;
+        
+        const covered = dim.covered;
+        const statusIcon = covered ? '✓' : '✗';
+        const statusClass = covered ? 'complete' : 'incomplete';
+        const promptsHTML = !covered && dim.prompts && dim.prompts.length > 0 
+            ? `<div class="prompts-list">
+                ${dim.prompts.map(prompt => `
+                    <div class="prompt-item">
+                        <span>${prompt}</span>
+                    </div>
+                `).join('')}
+            </div>`
+            : '';
+        
+        dimensionsHTML += `
+            <div class="dimension-card ${statusClass}" onclick="toggleDimension(${annotationId}, '${dimName}')">
+                <div class="dimension-header">
+                    <strong>${statusIcon} ${dimName}</strong>
+                    <span>${covered ? 'Complet' : 'Incomplet'}</span>
+                </div>
+                <div class="dimension-content" id="dim-${annotationId}-${dimName}" style="display: none;">
+                    ${!covered && dim.missing_elements ? `
+                        <p class="missing-elements"><em>Manque: ${dim.missing_elements.join(', ')}</em></p>
+                    ` : ''}
+                    ${promptsHTML}
+                </div>
+            </div>
+        `;
+    });
+    
+    const readyToComplete = review.ready_to_proceed;
+    
+    return `
+        <div class="review-panel">
+            <div class="review-header">
+                <strong>AI Review</strong>
+                <div class="progress-indicator">
+                    <span>${coveredCount}/3 dimensions couvertes</span>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: ${completenessPercent}%"></div>
+                    </div>
+                    <span class="completeness-score">${completenessPercent}/100</span>
+                </div>
+            </div>
+            ${dimensionsHTML}
+            <div class="review-actions">
+                <button class="btn edit-elicitation-btn" onclick="editElicitation(${annotationId})">
+                    <i class="fa-solid fa-pencil"></i>
+                    Modifier l'élicitation
+                </button>
+                <button class="btn mark-complete-btn ${readyToComplete ? '' : 'disabled'}" 
+                    onclick="markElicitationComplete(${annotationId})"
+                    ${readyToComplete ? '' : 'disabled'}>
+                    <i class="fa-solid fa-check"></i>
+                    Marquer comme complet
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+function toggleDimension(annotationId, dimName) {
+    const content = document.getElementById(`dim-${annotationId}-${dimName}`);
+    if (content) {
+        const isVisible = content.style.display !== 'none';
+        content.style.display = isVisible ? 'none' : 'block';
+    }
+}
+
+async function triggerReview(annotationId) {
     try {
-        // Call the new endpoint to trigger regeneration
-        const response = await fetch(`/api/annotations/${annotationId}/regenerate-extended`, {
+        showLoading('Triggering AI review...');
+        
+        const response = await fetch(`/api/annotations/${annotationId}/review`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
         });
 
         if (!response.ok) {
-            throw new Error('Failed to trigger extended transcript regeneration');
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to trigger review');
         }
 
-        // Update UI to show processing status
-        const item = document.querySelector(`.annotation-item[data-id="${annotationId}"]`);
-        if (item) {
-            const extendedDiv = item.querySelector('.annotation-extended');
-            if (extendedDiv) {
-                extendedDiv.innerHTML = '<em>Regenerating extended transcript...</em>';
-            }
-        }
-        showToast('Extended Transcript', 'Regeneration triggered', 'info');
-
+        showToast('AI Review', 'Review started', 'info');
+        
     } catch (error) {
-        console.error('Error regenerating extended transcript:', error);
-        showToast("Error", 'Failed to regenerate extended transcript', 'error');
+        console.error('Error triggering review:', error);
+        showToast('Error', error.message, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function editElicitation(annotationId) {
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (!annotation) return;
+    
+    // Create modal
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.id = 'editElicitationModal';
+    
+    const review = annotation.review_results 
+        ? (typeof annotation.review_results === 'string' ? JSON.parse(annotation.review_results) : annotation.review_results)
+        : null;
+    
+    const priorityPromptsHTML = review && review.priority_prompts 
+        ? `<div class="priority-prompts">
+            <strong>Points à adresser en priorité:</strong>
+            <ul>
+                ${review.priority_prompts.map(p => `<li>${p}</li>`).join('')}
+            </ul>
+        </div>`
+        : '';
+    
+    modal.innerHTML = `
+        <div class="modal-content">
+            <span class="close" onclick="closeEditElicitationModal()">&times;</span>
+            <h2>Modifier l'élicitation</h2>
+            ${priorityPromptsHTML}
+            <textarea id="elicitationTextEdit" rows="10">${annotation.transcription || ''}</textarea>
+            <div class="modal-actions">
+                <button class="btn btn-primary" onclick="saveElicitationEdit(${annotationId})">
+                    <i class="fa-solid fa-save"></i>
+                    Enregistrer et re-analyser
+                </button>
+                <button class="btn cancel-btn" onclick="closeEditElicitationModal()">Annuler</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    modal.style.display = 'block';
+    
+    // Focus on textarea
+    document.getElementById('elicitationTextEdit').focus();
+}
+
+function closeEditElicitationModal() {
+    const modal = document.getElementById('editElicitationModal');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+async function saveElicitationEdit(annotationId) {
+    const textarea = document.getElementById('elicitationTextEdit');
+    const newTranscription = textarea.value.trim();
+    
+    if (!newTranscription) {
+        showToast('Error', 'Transcription cannot be empty', 'error');
+        return;
+    }
+    
+    try {
+        showLoading('Saving and re-analyzing...');
+        
+        // Update transcription
+        const updateResponse = await fetch(`/api/annotations/${annotationId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ transcription: newTranscription })
+        });
+        
+        if (!updateResponse.ok) {
+            throw new Error('Failed to update transcription');
+        }
+        
+        // Trigger re-review
+        const reviewResponse = await fetch(`/api/annotations/${annotationId}/review`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        if (!reviewResponse.ok) {
+            throw new Error('Failed to trigger re-review');
+        }
+        
+        closeEditElicitationModal();
+        showToast('Success', 'Élicitation mise à jour, re-analyse en cours', 'success');
+        
+        // Reload annotations to show updated content
+        if (state.currentVideoId) {
+            await loadAnnotations(state.currentVideoId);
+        }
+        
+    } catch (error) {
+        console.error('Error saving elicitation:', error);
+        showToast('Error', error.message, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function markElicitationComplete(annotationId) {
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (!annotation) return;
+    
+    // Update review status to 'skipped' to indicate manual completion
+    try {
+        const response = await fetch(`/api/annotations/${annotationId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ review_status: 'skipped' })
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to mark as complete');
+        }
+        
+        showToast('Success', 'Élicitation marquée comme complète', 'success');
+        
+        if (state.currentVideoId) {
+            await loadAnnotations(state.currentVideoId);
+        }
+        
+    } catch (error) {
+        console.error('Error marking complete:', error);
+        showToast('Error', error.message, 'error');
+    }
+}
+
+function updateReviewStatus(annotationId, status) {
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (annotation) {
+        annotation.review_status = status;
+        if (state.currentVideoId) {
+            renderAnnotations();
+            renderTimeline();
+        }
+    }
+}
+
+function updateReviewResults(annotationId, reviewResults) {
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (annotation) {
+        annotation.review_status = 'completed';
+        annotation.review_results = reviewResults;
+        if (state.currentVideoId) {
+            renderAnnotations();
+            renderTimeline();
+        }
     }
 }
 
@@ -1638,43 +1857,6 @@ function getStatusText(status) {
     };
 
     return statusMap[status] || status;
-}
-
-// Extended Transcript Functions
-function toggleExtendedTranscript(annotationId) {
-    const content = document.getElementById(`extended-${annotationId}`);
-    const toggle = content.previousElementSibling;
-    const icon = toggle.querySelector('i');
-
-    if (content.classList.contains('expanded')) {
-        content.classList.remove('expanded');
-        icon.classList.remove('fa-caret-up');
-        icon.classList.add('fa-caret-down');
-        toggle.querySelector('span').textContent = 'See Extended Transcript';
-    } else {
-        content.classList.add('expanded');
-        icon.classList.remove('fa-caret-down');
-        icon.classList.add('fa-caret-up');
-        toggle.querySelector('span').textContent = 'Hide Extended Transcript';
-    }
-}
-
-function updateExtendedTranscriptStatus(annotationId, status) {
-    const annotation = state.annotations.find(a => a.id === annotationId);
-    if (annotation) {
-        annotation.extended_transcript_status = status;
-        renderAnnotations();
-        renderTimeline();
-    }
-}
-
-function updateExtendedTranscript(annotationId, extendedTranscript) {
-    const annotation = state.annotations.find(a => a.id === annotationId);
-    if (annotation) {
-        annotation.extended_transcript = extendedTranscript;
-        annotation.extended_transcript_status = 'completed';
-        renderAnnotations();
-    }
 }
 
 function updateTaggingStatus(annotationId, status) {
@@ -2469,7 +2651,12 @@ async function registerLocalVideo(filepath, filename) {
 // Make functions globally available
 window.seekToAnnotation = seekToAnnotation;
 window.deleteAnnotation = deleteAnnotation;
-window.toggleExtendedTranscript = toggleExtendedTranscript;
+window.toggleDimension = toggleDimension;
+window.triggerReview = triggerReview;
+window.editElicitation = editElicitation;
+window.closeEditElicitationModal = closeEditElicitationModal;
+window.saveElicitationEdit = saveElicitationEdit;
+window.markElicitationComplete = markElicitationComplete;
 window.registerLocalVideo = registerLocalVideo;
 window.handleFeedback = handleFeedback;
 window.openProject = openProject;
