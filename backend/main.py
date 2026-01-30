@@ -282,7 +282,7 @@ async def get_video_file(
         video = await db.get_video(session, video_id)
         if not video:
             raise HTTPException(status_code=404, detail="Video not found")
-        
+
         if not os.path.exists(str(video.filepath)):
             raise HTTPException(status_code=404, detail="Video file not found on disk")
 
@@ -345,7 +345,9 @@ async def get_video_file(
             }
 
             return StreamingResponse(
-                iter_full(), media_type=str(video.mime_type) or "video/mp4", headers=headers
+                iter_full(),
+                media_type=str(video.mime_type) or "video/mp4",
+                headers=headers,
             )
 
     except HTTPException:
@@ -774,7 +776,9 @@ async def create_annotation(
         # Start transcription in background
         import asyncio
 
-        asyncio.create_task(process_transcription(cast(int, annotation.id), str(audio_filepath)))
+        asyncio.create_task(
+            process_transcription(cast(int, annotation.id), str(audio_filepath))
+        )
 
         # Prepare response
         response = models.AnnotationResponse.model_validate(annotation)
@@ -904,10 +908,10 @@ async def process_transcription(annotation_id: int, audio_path: str):
             }
         )
 
-        # Start extended transcript generation in background
+        # Start AI review in background
         import asyncio
 
-        asyncio.create_task(process_extended_transcript(annotation_id, transcription))
+        asyncio.create_task(process_review(annotation_id, transcription, None))
 
     except Exception as e:
         logger.error(f"Transcription error for annotation {annotation_id}: {e}")
@@ -932,158 +936,143 @@ async def process_transcription(annotation_id: int, audio_path: str):
             pass
 
 
-async def process_extended_transcript(annotation_id: int, transcription: str):
-    """Background task to process extended transcript using LLM"""
-    from llm_service import generate_extended_transcript
-
-    try:
-        # Update status to processing
-        async with db.AsyncSessionLocal() as session:
-            await db.update_annotation(
-                session,
-                annotation_id,
-                models.AnnotationUpdate(extended_transcript_status="processing"),
-            )
-
-        # Broadcast status
-        await manager.broadcast(
-            {
-                "type": "extended_transcript_status",
-                "annotation_id": annotation_id,
-                "status": "processing",
-            }
-        )
-
-        logger.info(
-            f"Starting extended transcript generation for annotation {annotation_id}"
-        )
-
-        # Read annotation from DB to get craft/domain if present
-        craft_value = None
-        async with db.AsyncSessionLocal() as session:
-            ann = await db.get_annotation(session, annotation_id)
-            if ann and hasattr(ann, "craft"):
-                craft_value = ann.craft
-
-        # Generate extended transcript using LLM with craft selection
-        extended_transcript = await generate_extended_transcript(
-            transcription, craft=str(craft_value)
-        )
-
-        if extended_transcript:
-            # Update annotation with extended transcript
-            async with db.AsyncSessionLocal() as session:
-                await db.update_annotation(
-                    session,
-                    annotation_id,
-                    models.AnnotationUpdate(
-                        extended_transcript=extended_transcript,
-                        extended_transcript_status="completed",
-                    ),
-                )
-
-            logger.info(f"Extended transcript completed for annotation {annotation_id}")
-
-            # Broadcast completion
-            await manager.broadcast(
-                {
-                    "type": "extended_transcript_complete",
-                    "annotation_id": annotation_id,
-                    "extended_transcript": extended_transcript,
-                }
-            )
-
-            # Start tagging process in background
-            import asyncio
-            asyncio.create_task(process_tags(annotation_id, transcription, extended_transcript))
-        else:
-            raise Exception("LLM returned no extended transcript")
-
-    except Exception as e:
-        logger.error(f"Extended transcript error for annotation {annotation_id}: {e}")
-
-        # Update status to failed
-        try:
-            async with db.AsyncSessionLocal() as session:
-                await db.update_annotation(
-                    session,
-                    annotation_id,
-                    models.AnnotationUpdate(extended_transcript_status="failed"),
-                )
-
-            await manager.broadcast(
-                {
-                    "type": "extended_transcript_error",
-                    "annotation_id": annotation_id,
-                    "error": str(e),
-                }
-            )
-        except:
-            pass
-
-
-@app.post("/api/annotations/{annotation_id}/regenerate-extended")
-async def regenerate_extended_transcript(
+@app.post("/api/annotations/{annotation_id}/review")
+async def review_annotation(
     annotation_id: int, session: AsyncSession = Depends(db.get_session)
 ):
-    """Regenerate extended transcript after transcription edit"""
+    """
+    Trigger AI review of an elicitation to identify gaps in HOW/EVALUATION/FEEDBACK dimensions.
+    Returns review results with prompts for missing information.
+    """
     try:
         # Verify annotation exists and has transcription
         annotation = await db.get_annotation(session, annotation_id)
         if not annotation:
             raise HTTPException(status_code=404, detail="Annotation not found")
 
-        if not bool(annotation.transcription):
+        transcription_text = (
+            str(annotation.transcription)
+            if annotation.transcription is not None
+            else None
+        )
+        if not transcription_text:
             raise HTTPException(
                 status_code=400,
-                detail="Cannot regenerate extended transcript: no transcription available",
+                detail="Cannot review annotation: no transcription available",
             )
 
-        logger.info(
-            f"Triggering extended transcript regeneration for annotation {annotation_id}"
-        )
+        logger.info(f"Triggering AI review for annotation {annotation_id}")
 
-        # Reset extended transcript status to processing
-        await db.update_annotation(
-            session,
-            annotation_id,
-            models.AnnotationUpdate(
-                extended_transcript=None, extended_transcript_status="processing"
+        # Prepare update data - increment review attempts
+        attempts_val = (
+            annotation.review_attempts if annotation.review_attempts is not None else 0
+        )
+        update_data = models.AnnotationUpdate(
+            review_status="processing",
+            review_attempts=(
+                int(attempts_val) + 1 if isinstance(attempts_val, int) else 1
             ),
         )
+
+        # Update review status to processing
+        await db.update_annotation(session, annotation_id, update_data)
 
         # Broadcast status update
         await manager.broadcast(
             {
-                "type": "extended_transcript_status",
+                "type": "review_status",
                 "annotation_id": annotation_id,
                 "status": "processing",
             }
         )
 
-        # Start extended transcript generation in background
+        # Start review in background
         import asyncio
 
+        craft_str = str(annotation.craft) if annotation.craft is not None else None
         asyncio.create_task(
-            process_extended_transcript(annotation_id, str(annotation.transcription))
+            process_review(annotation_id, transcription_text, craft_str)
         )
 
         return {
             "status": "success",
-            "message": "Extended transcript regeneration started",
+            "message": "AI review started",
             "annotation_id": annotation_id,
         }
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error triggering extended transcript regeneration: {e}")
+        logger.error(f"Error triggering AI review: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-async def process_tags(
-    annotation_id: int, transcription: str, extended_transcript: str
+async def process_review(
+    annotation_id: int, transcription: str, craft: Optional[str] = None
 ):
+    """Background task to process AI review using review_service"""
+    from review_service import review_elicitation
+    from datetime import datetime, timezone
+
+    try:
+        logger.info(f"Starting AI review for annotation {annotation_id}")
+
+        # Build video context
+        video_context = None
+        if craft:
+            video_context = f"Domaine artisanal: {craft}"
+
+        # Generate review using LLM
+        review_result = await review_elicitation(transcription, video_context)
+
+        # Store review results
+        async with db.AsyncSessionLocal() as session:
+            await db.update_annotation(
+                session,
+                annotation_id,
+                models.AnnotationUpdate(
+                    review_status="completed",
+                    review_results=json.dumps(review_result, ensure_ascii=False),
+                    review_timestamp=datetime.now(timezone.utc),
+                ),
+            )
+
+        logger.info(
+            f"AI review completed for annotation {annotation_id}: "
+            f"score={review_result['completeness_score']}, ready={review_result['ready_to_proceed']}"
+        )
+
+        # Broadcast completion
+        await manager.broadcast(
+            {
+                "type": "review_complete",
+                "annotation_id": annotation_id,
+                "review_results": review_result,
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"AI review error for annotation {annotation_id}: {e}")
+
+        # Update status to failed
+        async with db.AsyncSessionLocal() as session:
+            await db.update_annotation(
+                session,
+                annotation_id,
+                models.AnnotationUpdate(review_status="failed"),
+            )
+
+        # Broadcast error
+        await manager.broadcast(
+            {
+                "type": "review_error",
+                "annotation_id": annotation_id,
+                "error": str(e),
+            }
+        )
+
+
+async def process_tags(annotation_id: int, transcription: str):
     """Background task to generate and apply tags using LLM"""
     from llm_service import tag_transcript
 
@@ -1121,9 +1110,9 @@ async def process_tags(
                 {"name": tag.name, "category": tag.category} for tag in all_tags
             ]
 
-        # Generate tags using LLM
+        # Generate tags using LLM (using only transcription, no extended transcript needed)
         generated_tags = await tag_transcript(
-            transcription, extended_transcript, existing_tags, craft=craft_value
+            transcription, transcription, existing_tags, craft=craft_value
         )
 
         if generated_tags:
@@ -1291,7 +1280,7 @@ async def submit_feedback(
     feedback_data: models.FeedbackRequest,
     session: AsyncSession = Depends(db.get_session),
 ):
-    """Submit user feedback for extended transcript"""
+    """Submit user feedback for annotation quality"""
     try:
         # Verify annotation exists
         annotation = await db.get_annotation(session, annotation_id)
@@ -1352,7 +1341,15 @@ async def export_annotations(
                     "end_time": ann.end_time,
                     "duration": ann.end_time - ann.start_time,
                     "transcription": ann.transcription,
-                    "extended_transcript": ann.extended_transcript,
+                    "review_status": (
+                        ann.review_status if hasattr(ann, "review_status") else None
+                    ),
+                    "review_results": (
+                        json.loads(str(ann.review_results))
+                        if hasattr(ann, "review_results")
+                        and ann.review_results is not None
+                        else None
+                    ),
                     "feedback": ann.feedback,
                     "feedback_choices": (
                         json.loads(str(ann.feedback_choices))
