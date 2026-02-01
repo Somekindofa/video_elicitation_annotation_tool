@@ -225,6 +225,19 @@ body {
     z-index: 15;
 }
 
+.timeline-segment-label {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    margin-top: 2px;
+    font-weight: 500;
+    pointer-events: none;
+}
+
 .timeline-segment.processing {
     background: linear-gradient(180deg, rgba(245, 158, 11, 0.8), rgba(251, 191, 36, 0.9));
     animation: pulse 1.5s ease-in-out infinite;
