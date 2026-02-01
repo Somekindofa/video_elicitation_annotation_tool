@@ -1334,6 +1334,12 @@ function renderTimeline() {
         const startPercent = (annotation.start_time / duration) * 100;
         bar.style.left = `${startPercent}%`;
 
+        // Add persistent timestamp label
+        const timeLabel = document.createElement('div');
+        timeLabel.className = 'timeline-segment-label';
+        timeLabel.textContent = formatTime(annotation.start_time);
+        bar.appendChild(timeLabel);
+
         // Build tooltip content
         const tooltip = document.createElement('div');
         tooltip.className = 'timeline-tooltip';
