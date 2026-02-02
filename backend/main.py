@@ -8,7 +8,7 @@ import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional, cast
+from typing import Dict, List, Optional, cast
 import uuid
 
 from sqlalchemy.exc import IntegrityError
@@ -908,10 +908,10 @@ async def process_transcription(annotation_id: int, audio_path: str):
             }
         )
 
-        # Start AI review in background
+        # Start Judge to determine if review is needed
         import asyncio
 
-        asyncio.create_task(process_review(annotation_id, transcription, None))
+        asyncio.create_task(process_judge(annotation_id, transcription, None))
 
     except Exception as e:
         logger.error(f"Transcription error for annotation {annotation_id}: {e}")
@@ -990,8 +990,15 @@ async def review_annotation(
         import asyncio
 
         craft_str = str(annotation.craft) if annotation.craft is not None else None
+        tags_payload = None
+        tags_str = cast(Optional[str], annotation.tags)
+        if tags_str:
+            try:
+                tags_payload = json.loads(tags_str)
+            except Exception:
+                tags_payload = None
         asyncio.create_task(
-            process_review(annotation_id, transcription_text, craft_str)
+            process_review(annotation_id, transcription_text, craft_str, tags_payload)
         )
 
         return {
@@ -1007,11 +1014,414 @@ async def review_annotation(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-async def process_review(
+@app.post("/api/annotations/{annotation_id}/tags")
+async def tag_annotation(
+    annotation_id: int, session: AsyncSession = Depends(db.get_session)
+):
+    """
+    Trigger AI tagging to extract metadata from an elicitation transcription.
+    Returns extracted tags and status updates via WebSocket.
+    Increments tagging_trigger_number to track how many times tagging has been triggered.
+    """
+    try:
+        logger.error(f"[TAGGING] Tag relaunch requested for annotation {annotation_id}")
+        print(f"[TAGGING] Tag relaunch requested for annotation {annotation_id}")
+        # Verify annotation exists and has transcription
+        annotation = await db.get_annotation(session, annotation_id)
+        if not annotation:
+            raise HTTPException(status_code=404, detail="Annotation not found")
+
+        transcription_text = (
+            str(annotation.transcription)
+            if annotation.transcription is not None
+            else None
+        )
+        if not transcription_text:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot tag annotation: no transcription available",
+            )
+
+        logger.error(
+            f"[TAGGING] Transcription present for annotation {annotation_id} (length={len(transcription_text)} chars)"
+        )
+        print(
+            f"[TAGGING] Transcription present for annotation {annotation_id} (length={len(transcription_text)} chars)"
+        )
+
+        logger.error(
+            f"[TAGGING] Triggering tag extraction for annotation {annotation_id}"
+        )
+        print(f"[TAGGING] Triggering tag extraction for annotation {annotation_id}")
+
+        # Increment tagging trigger count
+        current_count = (
+            annotation.tagging_trigger_number
+            if annotation.tagging_trigger_number is not None
+            else 0
+        )
+        new_count = current_count + 1
+
+        # Update tagging status and trigger count
+        logger.error(
+            f"[TAGGING] Updating status=processing and trigger_count={new_count} for annotation {annotation_id}"
+        )
+        print(
+            f"[TAGGING] Updating status=processing and trigger_count={new_count} for annotation {annotation_id}"
+        )
+        await db.update_annotation(
+            session,
+            annotation_id,
+            models.AnnotationUpdate(
+                tagging_status="processing", tagging_trigger_number=new_count
+            ),
+        )
+
+        # Broadcast status update
+        logger.error(
+            f"[TAGGING] Broadcasting tagging_status=processing for annotation {annotation_id}"
+        )
+        print(
+            f"[TAGGING] Broadcasting tagging_status=processing for annotation {annotation_id}"
+        )
+        await manager.broadcast(
+            {
+                "type": "tagging_status",
+                "annotation_id": annotation_id,
+                "status": "processing",
+                "trigger_count": new_count,
+            }
+        )
+        await manager.broadcast(
+            {
+                "type": "tagging_debug",
+                "annotation_id": annotation_id,
+                "message": "Tagging task scheduled",
+            }
+        )
+
+        # Start tagging in background
+        import asyncio
+
+        craft_str = str(annotation.craft) if annotation.craft is not None else None
+        logger.error(
+            f"[TAGGING] Starting background task for annotation {annotation_id} (craft={craft_str})"
+        )
+        print(
+            f"[TAGGING] Starting background task for annotation {annotation_id} (craft={craft_str})"
+        )
+        asyncio.create_task(
+            process_tagging(annotation_id, transcription_text, craft_str)
+        )
+
+        return {
+            "status": "success",
+            "message": "Tag extraction started",
+            "annotation_id": annotation_id,
+            "trigger_count": new_count,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error triggering tags for annotation {annotation_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/diagnostics/tagging-fireworks")
+async def tagging_fireworks_diagnostics():
+    """Return last Fireworks tagging request diagnostics."""
+    import tagging_service
+
+    return {
+        "last_request_at": tagging_service.LAST_FIREWORKS_TAG_REQUEST_AT,
+        "last_status": tagging_service.LAST_FIREWORKS_TAG_STATUS,
+        "last_error": tagging_service.LAST_FIREWORKS_TAG_ERROR,
+    }
+
+
+async def process_judge(
     annotation_id: int, transcription: str, craft: Optional[str] = None
 ):
+    """Background task to judge if AI review is needed using judge_service"""
+    from judge_service import judge_elicitation
+
+    try:
+        logger.info(f"Starting judge evaluation for annotation {annotation_id}")
+
+        # Update status to processing
+        async with db.AsyncSessionLocal() as session:
+            await db.update_annotation(
+                session,
+                annotation_id,
+                models.AnnotationUpdate(judge_status="processing"),
+            )
+
+        # Broadcast status
+        await manager.broadcast(
+            {
+                "type": "judge_status",
+                "annotation_id": annotation_id,
+                "status": "processing",
+            }
+        )
+
+        # Judge whether review is needed
+        judge_result = await judge_elicitation(transcription, craft)
+
+        # Store judge decision
+        async with db.AsyncSessionLocal() as session:
+            await db.update_annotation(
+                session,
+                annotation_id,
+                models.AnnotationUpdate(
+                    judge_status="completed",
+                    judge_decision=json.dumps(judge_result, ensure_ascii=False),
+                ),
+            )
+
+        logger.info(
+            f"Judge completed for annotation {annotation_id}: needs_review={judge_result.get('needs_review')}"
+        )
+
+        # Broadcast judge decision
+        await manager.broadcast(
+            {
+                "type": "judge_complete",
+                "annotation_id": annotation_id,
+                "judge_decision": judge_result,
+            }
+        )
+
+        # If judge says review is needed, auto-trigger tagging/review flow
+        if judge_result.get("needs_review", True):
+            logger.info(
+                f"Judge recommends review for annotation {annotation_id} - auto-triggering"
+            )
+            import asyncio
+
+            asyncio.create_task(process_tagging(annotation_id, transcription, craft))
+        else:
+            logger.info(
+                f"Judge says annotation {annotation_id} is complete - no review needed (manual trigger available)"
+            )
+
+    except Exception as e:
+        logger.error(f"Judge error for annotation {annotation_id}: {e}")
+
+        # Update status to failed
+        async with db.AsyncSessionLocal() as session:
+            await db.update_annotation(
+                session,
+                annotation_id,
+                models.AnnotationUpdate(judge_status="failed"),
+            )
+
+        # Broadcast error (but fall through to auto-trigger tagging to be safe)
+        await manager.broadcast(
+            {
+                "type": "judge_error",
+                "annotation_id": annotation_id,
+                "error": str(e),
+            }
+        )
+
+        # On judge error, still trigger tagging to be safe
+        import asyncio
+
+        asyncio.create_task(process_tagging(annotation_id, transcription, craft))
+
+
+async def process_task_detection(
+    annotation_id: int,
+    transcription: str,
+    craft: Optional[str] = None,
+):
+    """Background task to detect the main task from elicitation transcription"""
+    from task_detector_service import detect_task
+    import asyncio
+
+    try:
+        logger.error(
+            f"[TASK_DETECTION] Starting task detection for annotation {annotation_id}"
+        )
+        print(
+            f"[TASK_DETECTION] Starting task detection for annotation {annotation_id}"
+        )
+
+        # Update status to processing
+        async with db.AsyncSessionLocal() as session:
+            await db.update_annotation(
+                session,
+                annotation_id,
+                models.AnnotationUpdate(detected_task_status="processing"),
+            )
+
+        # Broadcast processing status
+        await manager.broadcast(
+            {
+                "type": "task_detection_status",
+                "annotation_id": annotation_id,
+                "status": "processing",
+            }
+        )
+
+        # Detect task using LLM with timeout
+        logger.error(
+            f"[TASK_DETECTION] Calling detect_task for annotation {annotation_id}"
+        )
+        print(f"[TASK_DETECTION] Calling detect_task for annotation {annotation_id}")
+        try:
+            task_result = await asyncio.wait_for(
+                detect_task(transcription, craft or "jewelry"), timeout=60
+            )
+        except asyncio.TimeoutError:
+            raise Exception("Task detection timed out after 60 seconds")
+
+        detected_task = task_result.get("detected_task")
+        confidence = task_result.get("confidence", 0.0)
+        reasoning = task_result.get("reasoning", "")
+
+        logger.error(
+            f"[TASK_DETECTION] Task detection result: task={detected_task}, confidence={confidence}"
+        )
+        print(
+            f"[TASK_DETECTION] Task detection result: task={detected_task}, confidence={confidence}"
+        )
+
+        # Only store if detected_task is not null and confidence >= 0.5
+        if detected_task and confidence >= 0.5:
+            logger.error(
+                f"[TASK_DETECTION] Storing detected task '{detected_task}' for annotation {annotation_id}"
+            )
+            print(
+                f"[TASK_DETECTION] Storing detected task '{detected_task}' for annotation {annotation_id}"
+            )
+            async with db.AsyncSessionLocal() as session:
+                await db.update_annotation(
+                    session,
+                    annotation_id,
+                    models.AnnotationUpdate(
+                        detected_task=detected_task,
+                        detected_task_confidence=confidence,
+                        detected_task_status="completed",
+                    ),
+                )
+        else:
+            logger.error(
+                f"[TASK_DETECTION] Task detection skipped (task=null or low confidence) for annotation {annotation_id}"
+            )
+            print(
+                f"[TASK_DETECTION] Task detection skipped (task=null or low confidence) for annotation {annotation_id}"
+            )
+            async with db.AsyncSessionLocal() as session:
+                await db.update_annotation(
+                    session,
+                    annotation_id,
+                    models.AnnotationUpdate(detected_task_status="completed"),
+                )
+
+        # Broadcast completion
+        logger.error(
+            f"[TASK_DETECTION] Broadcasting task_detection_complete for annotation {annotation_id}"
+        )
+        print(
+            f"[TASK_DETECTION] Broadcasting task_detection_complete for annotation {annotation_id}"
+        )
+        await manager.broadcast(
+            {
+                "type": "task_detection_complete",
+                "annotation_id": annotation_id,
+                "detected_task": detected_task,
+                "confidence": confidence,
+                "reasoning": reasoning,
+            }
+        )
+
+        # Trigger review after task detection
+        logger.error(
+            f"[TASK_DETECTION] Triggering review for annotation {annotation_id}"
+        )
+        print(f"[TASK_DETECTION] Triggering review for annotation {annotation_id}")
+
+        # Get the current annotation to pass tags to review
+        async with db.AsyncSessionLocal() as session:
+            annotation = await db.get_annotation(session, annotation_id)
+            tags_list = []
+            if annotation is not None and annotation.tags is not None:
+                try:
+                    tags_list = json.loads(annotation.tags)
+                except (json.JSONDecodeError, TypeError):
+                    tags_list = []
+
+        await process_review(
+            annotation_id,
+            transcription,
+            craft,
+            tags_list,
+            trigger_tagging=False,
+        )
+
+    except Exception as e:
+        logger.error(
+            f"[TASK_DETECTION ERROR] Task detection error for annotation {annotation_id}: {e}",
+            exc_info=True,
+        )
+
+        # Update status to failed
+        async with db.AsyncSessionLocal() as session:
+            await db.update_annotation(
+                session,
+                annotation_id,
+                models.AnnotationUpdate(detected_task_status="failed"),
+            )
+
+        # Broadcast error
+        await manager.broadcast(
+            {
+                "type": "task_detection_error",
+                "annotation_id": annotation_id,
+                "error": str(e),
+            }
+        )
+
+        # Still trigger review to continue the pipeline
+        logger.error(
+            f"[TASK_DETECTION] Triggering review after error for annotation {annotation_id}"
+        )
+        try:
+            async with db.AsyncSessionLocal() as session:
+                annotation = await db.get_annotation(session, annotation_id)
+                tags_list = []
+                if annotation is not None and annotation.tags is not None:
+                    try:
+                        tags_list = json.loads(annotation.tags)
+                    except (json.JSONDecodeError, TypeError):
+                        tags_list = []
+
+            await process_review(
+                annotation_id,
+                transcription,
+                craft,
+                tags_list,
+                trigger_tagging=False,
+            )
+        except Exception as review_error:
+            logger.error(
+                f"[TASK_DETECTION] Failed to trigger review after task detection error: {review_error}",
+                exc_info=True,
+            )
+
+
+async def process_review(
+    annotation_id: int,
+    transcription: str,
+    craft: Optional[str] = None,
+    tags: Optional[List[Dict[str, str]]] = None,
+    trigger_tagging: bool = True,
+):
     """Background task to process AI review using review_service"""
-    from review_service import review_elicitation
+    from review_service import review_elicitation, assess_salience
     from datetime import datetime, timezone
 
     try:
@@ -1023,7 +1433,13 @@ async def process_review(
             video_context = f"Domaine artisanal: {craft}"
 
         # Generate review using LLM
-        review_result = await review_elicitation(transcription, video_context)
+        review_result = await review_elicitation(transcription, video_context, tags)
+
+        # Decide if this moment is salient for apprentice learning
+        salience_result = await assess_salience(
+            transcription, review_result, tags, craft
+        )
+        is_salient = bool(salience_result.get("is_salient", False))
 
         # Store review results
         async with db.AsyncSessionLocal() as session:
@@ -1034,6 +1450,7 @@ async def process_review(
                     review_status="completed",
                     review_results=json.dumps(review_result, ensure_ascii=False),
                     review_timestamp=datetime.now(timezone.utc),
+                    is_salient=is_salient,
                 ),
             )
 
@@ -1048,8 +1465,15 @@ async def process_review(
                 "type": "review_complete",
                 "annotation_id": annotation_id,
                 "review_results": review_result,
+                "is_salient": is_salient,
             }
         )
+
+        # Auto-trigger tagging after review completes (only if not already tagged)
+        if trigger_tagging and not tags:
+            import asyncio
+
+            asyncio.create_task(process_tagging(annotation_id, transcription, craft))
 
     except Exception as e:
         logger.error(f"AI review error for annotation {annotation_id}: {e}")
@@ -1072,8 +1496,261 @@ async def process_review(
         )
 
 
+async def process_tagging(
+    annotation_id: int, transcription: str, craft: Optional[str] = None
+):
+    """Background task to extract and apply tags using tagging_service"""
+    from tagging_service import extract_tags
+    import asyncio
+
+    try:
+        logger.error(
+            f"[TAGGING] Starting tag extraction for annotation {annotation_id}"
+        )
+        print(f"[TAGGING] Starting tag extraction for annotation {annotation_id}")
+        await manager.broadcast(
+            {
+                "type": "tagging_debug",
+                "annotation_id": annotation_id,
+                "message": "Tagging task started",
+            }
+        )
+        logger.debug(
+            f"[TAGGING] Transcription length: {len(transcription)} chars, Craft: {craft}"
+        )
+
+        # Update status to processing
+        async with db.AsyncSessionLocal() as session:
+            logger.error(
+                f"[TAGGING] Set tagging_status=processing for annotation {annotation_id}"
+            )
+            print(
+                f"[TAGGING] Set tagging_status=processing for annotation {annotation_id}"
+            )
+            await db.update_annotation(
+                session,
+                annotation_id,
+                models.AnnotationUpdate(tagging_status="processing"),
+            )
+
+        # Broadcast status
+        logger.error(
+            f"[TAGGING] Broadcast tagging_status=processing for annotation {annotation_id}"
+        )
+        print(
+            f"[TAGGING] Broadcast tagging_status=processing for annotation {annotation_id}"
+        )
+        await manager.broadcast(
+            {
+                "type": "tagging_status",
+                "annotation_id": annotation_id,
+                "status": "processing",
+            }
+        )
+        await manager.broadcast(
+            {
+                "type": "tagging_debug",
+                "annotation_id": annotation_id,
+                "message": "tagging_status=processing broadcasted",
+            }
+        )
+
+        # Extract tags using LLM with timeout
+        logger.error(f"[TAGGING] Calling extract_tags for annotation {annotation_id}")
+        print(f"[TAGGING] Calling extract_tags for annotation {annotation_id}")
+        await manager.broadcast(
+            {
+                "type": "tagging_debug",
+                "annotation_id": annotation_id,
+                "message": "Calling extract_tags (LLM)",
+            }
+        )
+        try:
+            tags_result = await asyncio.wait_for(
+                extract_tags(transcription, craft), timeout=90
+            )
+        except asyncio.TimeoutError:
+            raise Exception("Tag extraction timed out after 90 seconds")
+        logger.error(f"[TAGGING] extract_tags returned for annotation {annotation_id}")
+        print(f"[TAGGING] extract_tags returned for annotation {annotation_id}")
+        await manager.broadcast(
+            {
+                "type": "tagging_debug",
+                "annotation_id": annotation_id,
+                "message": "extract_tags completed",
+            }
+        )
+
+        # Store tags in annotation and update tag registry
+        tags_list = tags_result.get("tags", [])
+        logger.error(
+            f"[TAGGING] Storing {len(tags_list)} tags for annotation {annotation_id}"
+        )
+        print(f"[TAGGING] Storing {len(tags_list)} tags for annotation {annotation_id}")
+        await manager.broadcast(
+            {
+                "type": "tagging_debug",
+                "annotation_id": annotation_id,
+                "message": f"Storing {len(tags_list)} tags",
+            }
+        )
+        async with db.AsyncSessionLocal() as session:
+            for tag_info in tags_list:
+                tag_name = tag_info.get("name")
+                tag_category = tag_info.get("category")
+                if tag_name and tag_category:
+                    await db.get_or_create_tag(session, tag_name, tag_category)
+                    await db.increment_tag_usage(session, tag_name)
+
+            await db.update_annotation(
+                session,
+                annotation_id,
+                models.AnnotationUpdate(
+                    tags=json.dumps(tags_list, ensure_ascii=False),
+                    tagging_status="completed",
+                ),
+            )
+
+        logger.error(
+            f"[TAGGING] Tag extraction completed for annotation {annotation_id}: {len(tags_list)} tags"
+        )
+        print(
+            f"[TAGGING] Tag extraction completed for annotation {annotation_id}: {len(tags_list)} tags"
+        )
+        await manager.broadcast(
+            {
+                "type": "tagging_debug",
+                "annotation_id": annotation_id,
+                "message": f"Tagging completed with {len(tags_list)} tags",
+            }
+        )
+
+        # Broadcast completion
+        logger.error(
+            f"[TAGGING] Broadcasting tagging_complete for annotation {annotation_id}"
+        )
+        print(f"[TAGGING] Broadcasting tagging_complete for annotation {annotation_id}")
+        await manager.broadcast(
+            {
+                "type": "tagging_complete",
+                "annotation_id": annotation_id,
+                "tags": tags_list,
+            }
+        )
+
+        # Update review status to processing (tag-aware review)
+        logger.error(
+            f"[TAGGING] Updating review_status=processing for annotation {annotation_id}"
+        )
+        print(
+            f"[TAGGING] Updating review_status=processing for annotation {annotation_id}"
+        )
+        async with db.AsyncSessionLocal() as session:
+            annotation = await db.get_annotation(session, annotation_id)
+            attempts_val = (
+                annotation.review_attempts
+                if annotation and annotation.review_attempts is not None
+                else 0
+            )
+            await db.update_annotation(
+                session,
+                annotation_id,
+                models.AnnotationUpdate(
+                    review_status="processing",
+                    review_attempts=(
+                        int(attempts_val) + 1 if isinstance(attempts_val, int) else 1
+                    ),
+                ),
+            )
+
+        await manager.broadcast(
+            {
+                "type": "review_status",
+                "annotation_id": annotation_id,
+                "status": "processing",
+            }
+        )
+
+        # Trigger task detection (which will trigger review after)
+        logger.error(
+            f"[TAGGING] Triggering task detection for annotation {annotation_id}"
+        )
+        print(f"[TAGGING] Triggering task detection for annotation {annotation_id}")
+        await process_task_detection(
+            annotation_id,
+            transcription,
+            craft,
+        )
+
+    except Exception as e:
+        logger.error(
+            f"[TAGGING ERROR] Tag extraction error for annotation {annotation_id}: {e}",
+            exc_info=True,
+        )
+        await manager.broadcast(
+            {
+                "type": "tagging_debug",
+                "annotation_id": annotation_id,
+                "message": f"Tagging error: {e}",
+            }
+        )
+
+        # Update status to failed
+        async with db.AsyncSessionLocal() as session:
+            await db.update_annotation(
+                session,
+                annotation_id,
+                models.AnnotationUpdate(tagging_status="failed"),
+            )
+
+        # Broadcast error
+        await manager.broadcast(
+            {
+                "type": "tagging_error",
+                "annotation_id": annotation_id,
+                "error": str(e),
+            }
+        )
+
+        # Update review status to processing (fallback review)
+        async with db.AsyncSessionLocal() as session:
+            annotation = await db.get_annotation(session, annotation_id)
+            attempts_val = (
+                annotation.review_attempts
+                if annotation and annotation.review_attempts is not None
+                else 0
+            )
+            await db.update_annotation(
+                session,
+                annotation_id,
+                models.AnnotationUpdate(
+                    review_status="processing",
+                    review_attempts=(
+                        int(attempts_val) + 1 if isinstance(attempts_val, int) else 1
+                    ),
+                ),
+            )
+
+        await manager.broadcast(
+            {
+                "type": "review_status",
+                "annotation_id": annotation_id,
+                "status": "processing",
+            }
+        )
+
+        # Fallback: trigger review without tags (skip auto-tagging to avoid loops)
+        await process_review(
+            annotation_id,
+            transcription,
+            craft,
+            None,
+            trigger_tagging=False,
+        )
+
+
 async def process_tags(annotation_id: int, transcription: str):
-    """Background task to generate and apply tags using LLM"""
+    """Background task to generate and apply tags using LLM - DEPRECATED, use process_tagging"""
     from llm_service import tag_transcript
 
     try:
@@ -1316,6 +1993,161 @@ async def submit_feedback(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/api/maintenance/auto-trigger-tagging")
+async def auto_trigger_tagging_maintenance(
+    session: AsyncSession = Depends(db.get_session),
+):
+    """
+    Maintenance endpoint that auto-triggers tagging for all annotations
+    where tagging_trigger_number is 0 (i.e., never been tagged yet).
+    Returns count of annotations triggered.
+    """
+    try:
+        logger.info(
+            "Starting maintenance: auto-triggering tagging for annotations with trigger_count=0"
+        )
+
+        # Get all annotations with transcription and trigger_count = 0
+        from sqlalchemy import select
+        from sqlalchemy.sql import func
+
+        query = select(models.Annotation).where(
+            (models.Annotation.tagging_trigger_number == 0)
+            | (models.Annotation.tagging_trigger_number.is_(None))
+        )
+        result = await session.execute(query)
+        annotations_to_tag = result.scalars().all()
+
+        triggered_count = 0
+        for annotation in annotations_to_tag:
+            if not annotation.transcription:
+                logger.debug(f"Skipping annotation {annotation.id}: no transcription")
+                continue
+
+            logger.info(f"Auto-triggering tagging for annotation {annotation.id}")
+            craft_str = str(annotation.craft) if annotation.craft else None
+
+            # Use the same tagging trigger as the API endpoint
+            current_count = (
+                annotation.tagging_trigger_number
+                if annotation.tagging_trigger_number is not None
+                else 0
+            )
+            new_count = current_count + 1
+
+            await db.update_annotation(
+                session,
+                annotation.id,
+                models.AnnotationUpdate(
+                    tagging_status="processing", tagging_trigger_number=new_count
+                ),
+            )
+
+            # Broadcast status
+            await manager.broadcast(
+                {
+                    "type": "tagging_status",
+                    "annotation_id": annotation.id,
+                    "status": "processing",
+                    "trigger_count": new_count,
+                }
+            )
+
+            # Trigger background tagging task
+            import asyncio
+
+            asyncio.create_task(
+                process_tagging(annotation.id, annotation.transcription, craft_str)
+            )
+            triggered_count += 1
+
+        logger.info(
+            f"Maintenance completed: triggered tagging for {triggered_count} annotations"
+        )
+
+        return {
+            "status": "success",
+            "message": f"Auto-triggered tagging for {triggered_count} annotations",
+            "triggered_count": triggered_count,
+        }
+
+    except Exception as e:
+        logger.error(f"Error in auto-trigger-tagging maintenance: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/maintenance/deduplicate-tags")
+async def deduplicate_tags_maintenance(
+    session: AsyncSession = Depends(db.get_session),
+):
+    """
+    Maintenance endpoint that deduplicates tags across all annotations.
+    Removes duplicate (name, category) pairs while preserving one instance.
+    Returns count of annotations that had duplicates removed.
+    """
+    try:
+        logger.info("Starting maintenance: deduplicating tags across all annotations")
+
+        from tagging_service import deduplicate_tags
+
+        # Get all annotations with tags
+        query = select(models.Annotation).where(models.Annotation.tags.isnot(None))
+        result = await session.execute(query)
+        annotations_with_tags = result.scalars().all()
+
+        updated_count = 0
+        total_removed = 0
+
+        for annotation in annotations_with_tags:
+            if not annotation.tags:
+                continue
+
+            try:
+                tags_list = json.loads(annotation.tags)
+            except (json.JSONDecodeError, ValueError):
+                logger.warning(f"Invalid JSON in annotation {annotation.id} tags")
+                continue
+
+            if not isinstance(tags_list, list):
+                continue
+
+            # Deduplicate
+            deduped = deduplicate_tags(tags_list)
+
+            # Check if anything was actually removed
+            if len(deduped) < len(tags_list):
+                removed_count = len(tags_list) - len(deduped)
+                logger.info(
+                    f"Annotation {annotation.id}: removed {removed_count} duplicate tags"
+                )
+                total_removed += removed_count
+
+                # Update annotation with deduped tags
+                await db.update_annotation(
+                    session,
+                    annotation.id,
+                    models.AnnotationUpdate(
+                        tags=json.dumps(deduped, ensure_ascii=False)
+                    ),
+                )
+                updated_count += 1
+
+        logger.info(
+            f"Maintenance completed: updated {updated_count} annotations, removed {total_removed} duplicate tags total"
+        )
+
+        return {
+            "status": "success",
+            "message": f"Deduplicated tags in {updated_count} annotations ({total_removed} duplicates removed)",
+            "updated_count": updated_count,
+            "total_removed": total_removed,
+        }
+
+    except Exception as e:
+        logger.error(f"Error in deduplicate-tags maintenance: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/export/{video_id}")
 async def export_annotations(
     video_id: int, session: AsyncSession = Depends(db.get_session)
@@ -1350,6 +2182,7 @@ async def export_annotations(
                         and ann.review_results is not None
                         else None
                     ),
+                    "is_salient": bool(getattr(ann, "is_salient", 0)),
                     "feedback": ann.feedback,
                     "feedback_choices": (
                         json.loads(str(ann.feedback_choices))

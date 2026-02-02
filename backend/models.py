@@ -118,6 +118,13 @@ class Annotation(Base):
     transcription_status = Column(
         String, default="pending"
     )  # pending, processing, completed, failed
+    # Judge fields: determines if AI review is needed
+    judge_status = Column(
+        String, default="pending"
+    )  # pending, processing, completed, failed
+    judge_decision = Column(
+        String, nullable=True
+    )  # JSON string with needs_review, confidence, reasoning, etc.
     # AI Review fields for elicitation quality assessment
     review_status = Column(
         String, default="pending"
@@ -127,16 +134,30 @@ class Annotation(Base):
     )  # JSON string storing review dimensions and prompts
     review_timestamp = Column(DateTime, nullable=True)  # When review was completed
     review_attempts = Column(Integer, default=0)  # Track number of review cycles
+    is_salient = Column(Integer, default=0)  # 1 if salient moment, else 0
     tags = Column(
         Text, nullable=True
     )  # JSON string storing array of tag names ["scissors", "cutting"]
     tagging_status = Column(
         String, default="pending"
     )  # pending, processing, completed, failed
+    tagging_trigger_number = Column(
+        Integer, default=0
+    )  # Track how many times tagging has been triggered for this annotation
     # Craft/domain for prompt selection (e.g., 'glassblowing', 'jewelry')
     craft = Column(String, nullable=True)
     # Task described in the video segment (free text or chosen from tasks)
     task = Column(String, nullable=True)
+    # Automatic task detection via LLM
+    detected_task_status = Column(
+        String, default="pending"
+    )  # pending, processing, completed, failed
+    detected_task = Column(
+        String, nullable=True
+    )  # Auto-detected main task from transcription
+    detected_task_confidence = Column(
+        Float, default=0.0
+    )  # Confidence score (0-1) for detected task
     feedback = Column(
         Integer, nullable=True
     )  # 1 for thumbs up, 0 for thumbs down, null for no feedback
@@ -236,12 +257,19 @@ class AnnotationUpdate(BaseModel):
 
     transcription: Optional[str] = None
     transcription_status: Optional[str] = None
+    judge_status: Optional[str] = None
+    judge_decision: Optional[str] = None
     review_status: Optional[str] = None
     review_results: Optional[str] = None
     review_timestamp: Optional[datetime] = None
     review_attempts: Optional[int] = None
+    is_salient: Optional[bool] = None
     tags: Optional[str] = None
     tagging_status: Optional[str] = None
+    tagging_trigger_number: Optional[int] = None
+    detected_task_status: Optional[str] = None
+    detected_task: Optional[str] = None
+    detected_task_confidence: Optional[float] = None
     feedback: Optional[int] = None
     feedback_choices: Optional[str] = None
     craft: Optional[str] = None
@@ -263,8 +291,15 @@ class AnnotationResponse(BaseModel):
     review_results: Optional[str] = None
     review_timestamp: Optional[datetime] = None
     review_attempts: int = 0
+    is_salient: bool = False
+    judge_status: str = "pending"
+    judge_decision: Optional[str] = None
     tags: Optional[List[Dict[str, Optional[str]]]] = None
     tagging_status: str
+    tagging_trigger_number: int = 0
+    detected_task_status: str = "pending"
+    detected_task: Optional[str] = None
+    detected_task_confidence: float = 0.0
     feedback: Optional[int] = None
     feedback_choices: Optional[str] = None
     craft: Optional[str] = None

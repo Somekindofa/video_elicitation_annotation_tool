@@ -22,11 +22,14 @@ const state = {
     craft: 'glassblowing',
     tasks: [],
     task: '',
-    sortBy: 'newest'
+    sortBy: 'newest',
+    showReviewPanels: {}  // Track which annotation review panels are visible (defaults to hidden)
 };
 
 // API Base URL
-const API_BASE = window.location.origin;
+const API_BASE = window.location.origin === 'null'
+    ? 'http://localhost:8005'
+    : window.location.origin;
 
 // Initialize Application
 document.addEventListener('DOMContentLoaded', () => {
@@ -128,25 +131,8 @@ async function initializeApp() {
 
     // Load craft selection from localStorage (default to glassblowing)
     state.craft = localStorage.getItem('craft') || 'glassblowing';
-    // Load task selection from localStorage (optional)
-    state.task = localStorage.getItem('task') || '';
     // Create selectors UI
     createCraftSelectorUI();
-    await initializeTaskSelector();
-
-    // Reload tasks when craft changes
-    const craftSelect = document.getElementById('craftSelector');
-    if (craftSelect) {
-        craftSelect.addEventListener('change', async () => {
-            state.craft = craftSelect.value;
-            try { localStorage.setItem('craft', state.craft); } catch (_) { }
-            // Reload tasks for the new craft domain
-            const taskSelect = document.getElementById('taskSelect');
-            if (taskSelect) {
-                await loadTasks(taskSelect, state.craft);
-            }
-        });
-    }
 
     // Load existing videos
     await loadVideos();
@@ -223,149 +209,6 @@ function createCraftSelectorUI() {
     }
 }
 
-// Task selector with select + add-new input
-async function initializeTaskSelector() {
-    const controls = document.getElementById('recordingControls');
-    if (!controls) return;
-
-    const wrapper = document.createElement('div');
-    wrapper.className = 'task-selector';
-    wrapper.style.margin = '10px 0';
-
-    const label = document.createElement('div');
-    label.textContent = 'Task (choose or add)';
-    label.style.fontSize = '0.9rem';
-    label.style.marginBottom = '6px';
-
-    const select = document.createElement('select');
-    select.id = 'taskSelect';
-    select.style.padding = '6px 8px';
-    select.style.borderRadius = '4px';
-    select.style.border = '1px solid #ccc';
-    select.style.minWidth = '240px';
-
-    const addInput = document.createElement('input');
-    addInput.id = 'taskAddInput';
-    addInput.placeholder = 'Type task name';
-    addInput.style.padding = '6px 8px';
-    addInput.style.borderRadius = '4px';
-    addInput.style.border = '1px solid #ccc';
-    addInput.style.marginLeft = '8px';
-    addInput.style.minWidth = '200px';
-
-    const addBtn = document.createElement('button');
-    addBtn.textContent = 'Add Task';
-    addBtn.style.marginLeft = '8px';
-    addBtn.style.padding = '6px 12px';
-    addBtn.style.borderRadius = '4px';
-    addBtn.style.border = '1px solid #ccc';
-    addBtn.style.background = '#f0f0f0';
-    addBtn.style.cursor = 'pointer';
-
-    select.addEventListener('change', (e) => {
-        state.task = e.target.value || '';
-        try { localStorage.setItem('task', state.task); } catch (_) { }
-    });
-
-    addBtn.addEventListener('click', async () => {
-        const value = addInput.value.trim();
-        if (!value) return;
-        try {
-            await createOrSelectTask(value);
-            addInput.value = '';
-        } catch (err) {
-            console.error('Failed to add task', err);
-        }
-    });
-
-    const row = document.createElement('div');
-    row.style.display = 'flex';
-    row.style.alignItems = 'center';
-    row.appendChild(select);
-    row.appendChild(addInput);
-    row.appendChild(addBtn);
-
-    wrapper.appendChild(label);
-    wrapper.appendChild(row);
-
-    const existingCraft = controls.querySelector('.craft-selector');
-    if (existingCraft && existingCraft.nextSibling) {
-        controls.insertBefore(wrapper, existingCraft.nextSibling);
-    } else {
-        controls.insertBefore(wrapper, controls.firstChild);
-    }
-
-    await loadTasks(select, state.craft);
-    renderTaskOptions(select);
-}
-
-async function loadTasks(selectEl, craft) {
-    try {
-        const craftQuery = craft ? `&craft=${encodeURIComponent(craft)}` : '';
-        const resp = await fetch(`${API_BASE}/api/tasks?published=1${craftQuery}`);
-        if (!resp.ok) throw new Error('Failed to fetch tasks');
-        const tasks = await resp.json();
-        state.tasks = tasks || [];
-    } catch (err) {
-        console.warn('Failed to fetch tasks', err);
-        state.tasks = [];
-    }
-    if (selectEl) {
-        renderTaskOptions(selectEl);
-    }
-}
-
-function renderTaskOptions(selectEl) {
-    if (!selectEl) return;
-    selectEl.innerHTML = '';
-    const placeholder = document.createElement('option');
-    placeholder.value = '';
-    placeholder.textContent = '-- Select a task --';
-    selectEl.appendChild(placeholder);
-    state.tasks.forEach(t => {
-        const opt = document.createElement('option');
-        opt.value = t.name;
-        opt.textContent = t.name;
-        selectEl.appendChild(opt);
-    });
-    // Reselect previous task if present
-    if (state.task) {
-        selectEl.value = state.task;
-    }
-}
-
-async function createOrSelectTask(taskName) {
-    // If task already in list for this craft, just select it
-    const existing = state.tasks.find(t => t.name === taskName && t.craft === state.craft);
-    if (existing) {
-        state.task = existing.name;
-        try { localStorage.setItem('task', state.task); } catch (_) { }
-        const selectEl = document.getElementById('taskSelect');
-        if (selectEl) {
-            selectEl.value = state.task;
-        }
-        return;
-    }
-
-    // Otherwise create and publish for this craft
-    const resp = await fetch(`${API_BASE}/api/tasks`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: taskName, craft: state.craft, description: null, is_published: 1 })
-    });
-    if (!resp.ok) {
-        throw new Error(`Failed to create task: ${resp.status}`);
-    }
-    const created = await resp.json();
-    state.tasks.push(created);
-    state.task = created.name;
-    try { localStorage.setItem('task', state.task); } catch (_) { }
-    const selectEl = document.getElementById('taskSelect');
-    if (selectEl) {
-        renderTaskOptions(selectEl);
-        selectEl.value = created.name;
-    }
-}
 
 // Event Listeners Setup
 function setupEventListeners() {
@@ -423,6 +266,8 @@ function setupEventListeners() {
     document.querySelectorAll('.sort-option').forEach(option => {
         option.addEventListener('click', handleSortChange);
     });
+    // Reload all analyses
+    document.getElementById('reloadAllBtn').addEventListener('click', reloadAllAnalyses);
     // Close sort dropdown when clicking outside
     document.addEventListener('click', (e) => {
         const dropdown = document.getElementById('sortDropdownMenu');
@@ -518,7 +363,7 @@ function handleWebSocketMessage(message) {
             break;
 
         case 'review_complete':
-            updateReviewResults(message.annotation_id, message.review_results);
+            updateReviewResults(message.annotation_id, message.review_results, message.is_salient);
             if (state.currentVideoId) {
                 loadAnnotations(state.currentVideoId);
             }
@@ -527,6 +372,22 @@ function handleWebSocketMessage(message) {
         case 'review_error':
             showToast('AI Review Error', message.error, 'error');
             updateReviewStatus(message.annotation_id, 'failed');
+            break;
+
+        case 'judge_status':
+            updateJudgeStatus(message.annotation_id, message.status);
+            break;
+
+        case 'judge_complete':
+            updateJudgeDecision(message.annotation_id, message.judge_decision);
+            if (state.currentVideoId) {
+                loadAnnotations(state.currentVideoId);
+            }
+            break;
+
+        case 'judge_error':
+            showToast('Judge Error', message.error, 'error');
+            updateJudgeStatus(message.annotation_id, 'failed');
             break;
 
         case 'tagging_status':
@@ -543,6 +404,31 @@ function handleWebSocketMessage(message) {
         case 'tagging_error':
             showToast('Tagging Error', message.error, 'error');
             updateTaggingStatus(message.annotation_id, 'failed');
+            break;
+
+        case 'tagging_debug':
+            console.error('[TAGGING DEBUG]', message);
+            break;
+
+        case 'task_detection_status':
+            // Handle task detection status updates
+            console.log('[TASK_DETECTION]', message.status);
+            break;
+
+        case 'task_detection_complete':
+            // Update annotation with detected task
+            const annotation = state.annotations.find(a => a.id === message.annotation_id);
+            if (annotation) {
+                annotation.detected_task = message.detected_task;
+                annotation.detected_task_confidence = message.confidence;
+            }
+            if (state.currentVideoId) {
+                loadAnnotations(state.currentVideoId);
+            }
+            break;
+
+        case 'task_detection_error':
+            showToast('Task Detection Error', message.error, 'error');
             break;
 
         case 'annotation_deleted':
@@ -968,14 +854,7 @@ async function handleRecordingStop() {
         } catch (e) {
             console.warn('Could not append craft to FormData', e);
         }
-        // Attach task if provided
-        try {
-            if (state.task && state.task.trim().length > 0) {
-                formData.append('task', state.task.trim());
-            }
-        } catch (e) {
-            console.warn('Could not append task to FormData', e);
-        }
+
 
         const response = await fetch(`${API_BASE}/api/annotations?video_id=${state.currentVideoId}&start_time=${startTime}&end_time=${endTime}`, {
             method: 'POST',
@@ -1093,36 +972,106 @@ function renderAnnotations() {
         // AI Review Panel UI logic
         let reviewPanelHTML = '';
         if (annotation.transcription && annotation.transcription_status === 'completed') {
-            if (annotation.review_status === 'processing') {
-                reviewPanelHTML = `
-                    <div class="review-progress">
-                        <i class="fa-solid fa-magnifying-glass"></i>
-                        <span>AI analyzing elicitation</span>
-                        <span class="ellipsis">
-                            <span></span>
-                            <span></span>
-                            <span></span>
-                        </span>
-                    </div>
-                `;
-            } else if (annotation.review_status === 'completed' && annotation.review_results) {
+            // First check if judge has run and decided review is NOT needed
+            if (annotation.judge_status === 'completed' && annotation.judge_decision) {
                 try {
-                    const review = typeof annotation.review_results === 'string' 
-                        ? JSON.parse(annotation.review_results) 
-                        : annotation.review_results;
-                    reviewPanelHTML = renderReviewPanel(annotation.id, review);
+                    const judge = typeof annotation.judge_decision === 'string' 
+                        ? JSON.parse(annotation.judge_decision) 
+                        : annotation.judge_decision;
+                    
+                    if (judge.needs_review === false && judge.confidence > 0.75) {
+                        // Judge says review not needed - show manual button with hint
+                        const manualTriggerHtml = `
+                            <div class="judge-decision">
+                                <div class="judge-message">
+                                    <i class="fa-solid fa-check-circle"></i>
+                                    <span>AI found this elicitation complete</span>
+                                </div>
+                                <button class="btn btn-secondary btn-small" onclick="triggerManualReview(${annotation.id}, event)">
+                                    <i class="fa-solid fa-magnifying-glass"></i>
+                                    Force Review
+                                </button>
+                                <div class="judge-reasoning" style="display: none;">
+                                    <strong>Assessment:</strong> ${judge.reasoning}<br/>
+                                    <strong>Confidence:</strong> ${(judge.confidence * 100).toFixed(0)}%
+                                </div>
+                            </div>
+                        `;
+                        reviewPanelHTML = renderReviewContainer(annotation.id, manualTriggerHtml, 'Complet');
+                    } else if (judge.needs_review === true) {
+                        // Judge says review IS needed - will auto-trigger, so show processing or results
+                        if (annotation.review_status === 'processing') {
+                            const progressHtml = `
+                                <div class="review-progress">
+                                    <i class="fa-solid fa-magnifying-glass"></i>
+                                    <span>AI analyzing elicitation</span>
+                                    <span class="ellipsis">
+                                        <span></span>
+                                        <span></span>
+                                        <span></span>
+                                    </span>
+                                </div>
+                            `;
+                            reviewPanelHTML = renderReviewContainer(annotation.id, progressHtml, 'En cours');
+                        } else if (annotation.review_status === 'completed' && annotation.review_results) {
+                            try {
+                                const review = typeof annotation.review_results === 'string' 
+                                    ? JSON.parse(annotation.review_results) 
+                                    : annotation.review_results;
+                                reviewPanelHTML = renderReviewPanel(annotation.id, review);
+                            } catch (e) {
+                                console.error('Failed to parse review results:', e);
+                            }
+                        }
+                    }
                 } catch (e) {
-                    console.error('Failed to parse review results:', e);
+                    console.error('Failed to parse judge decision:', e);
                 }
-            } else if (annotation.review_status === 'pending' || annotation.review_status === 'failed') {
-                reviewPanelHTML = `
-                    <div class="review-trigger">
-                        <button class="btn btn-review" onclick="triggerReview(${annotation.id})">
-                            <i class="fa-solid fa-magnifying-glass"></i>
-                            ${annotation.review_status === 'failed' ? 'Retry AI Review' : 'Trigger AI Review'}
-                        </button>
+            } else if (annotation.judge_status === 'processing') {
+                // Judge is running
+                const judgeProgressHtml = `
+                    <div class="judge-progress">
+                        <i class="fa-solid fa-gavel"></i>
+                        <span>AI evaluating elicitation</span>
                     </div>
                 `;
+                reviewPanelHTML = renderReviewContainer(annotation.id, judgeProgressHtml, 'Évaluation');
+            } else if (annotation.judge_status === 'pending' || annotation.judge_status === 'failed' || !annotation.judge_status) {
+                // Judge failed or hasn't run - fall back to direct review trigger
+                if (annotation.review_status === 'processing') {
+                    const progressHtml = `
+                        <div class="review-progress">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            <span>AI analyzing elicitation</span>
+                            <span class="ellipsis">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                            </span>
+                        </div>
+                    `;
+                    reviewPanelHTML = renderReviewContainer(annotation.id, progressHtml, 'En cours');
+                } else if (annotation.review_status === 'completed' && annotation.review_results) {
+                    try {
+                        const review = typeof annotation.review_results === 'string' 
+                            ? JSON.parse(annotation.review_results) 
+                            : annotation.review_results;
+                        reviewPanelHTML = renderReviewPanel(annotation.id, review);
+                    } catch (e) {
+                        console.error('Failed to parse review results:', e);
+                    }
+                } else if (annotation.review_status === 'pending' || annotation.review_status === 'failed') {
+                    const triggerHtml = `
+                        <div class="review-trigger">
+                            <button class="btn btn-review" onclick="triggerReview(${annotation.id})">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                                ${annotation.review_status === 'failed' ? 'Retry AI Review' : 'Trigger AI Review'}
+                            </button>
+                        </div>
+                    `;
+                    const statusLabel = annotation.review_status === 'failed' ? 'Échec' : 'En attente';
+                    reviewPanelHTML = renderReviewContainer(annotation.id, triggerHtml, statusLabel);
+                }
             }
         }
 
@@ -1133,16 +1082,16 @@ function renderAnnotations() {
                 tagsHTML = `
                     <div class="tagging-progress">
                         <i class="fa-solid fa-tag"></i>
-                        <span>Generating tags...</span>
+                        <span>Tagging in progress...</span>
                     </div>
                 `;
             } else if (annotation.tagging_status === 'completed' && annotation.tags && annotation.tags.length > 0) {
                 tagsHTML = `<div class="annotation-tags">`;
 
-                annotation.tags.forEach(tag => {
+                annotation.tags.forEach((tag, index) => {
                     const categoryClass = tag.category ? `category-${tag.category}` : '';
                     tagsHTML += `
-                        <span class="annotation-tag ${categoryClass}" title="${tag.category || 'tag'}">
+                        <span class="annotation-tag ${categoryClass}" title="${tag.category || 'tag'} - Click to delete" onclick="deleteTag(event, ${annotation.id}, ${index})">
                             ${tag.name}
                         </span>
                     `;
@@ -1154,12 +1103,19 @@ function renderAnnotations() {
 
         item.innerHTML = `
             <div class="annotation-header">
-                <span class="annotation-time">
-                    ${formatTime(annotation.start_time)} - ${formatTime(annotation.end_time)}
-                    (${duration.toFixed(1)}s)
-                </span>
+                <div class="annotation-time-wrapper">
+                    <span class="annotation-time">
+                        ${formatTime(annotation.start_time)} - ${formatTime(annotation.end_time)}
+                        (${duration.toFixed(1)}s)
+                    </span>
+                    ${annotation.detected_task && annotation.detected_task_confidence >= 0.5 ? `
+                        <span class="detected-task-badge" title="Detected task (confidence: ${(annotation.detected_task_confidence * 100).toFixed(0)}%)">
+                            <strong>${annotation.detected_task}</strong>
+                        </span>
+                    ` : ''}
+                </div>
                 <div class="annotation-actions">
-                    <button class="btn btn-icon btn-small" onclick="seekToAnnotation(${annotation.start_time})" title="Jump to time">
+                    <button class="btn btn-icon btn-small play-btn" onclick="seekToAnnotation(${annotation.start_time})" title="Jump to time">
                         <i class="fas fa-play"></i>
                     </button>
                     <button class="btn btn-icon btn-small" onclick="startEditTranscription(${annotation.id})" title="Edit transcription">
@@ -1173,21 +1129,39 @@ function renderAnnotations() {
             <div class="annotation-transcription">
                 ${annotation.transcription || '<em>Transcription pending...</em>'}
             </div>
-            <div class="annotation-status ${statusClass}">
-                ${statusText}
+            <div class="annotation-status-row">
+                <div class="annotation-status ${statusClass}">
+                    ${statusText}
+                </div>
+                ${annotation.transcription_status === 'completed' ? `
+                    <button class="btn btn-icon btn-tiny" onclick="event.stopPropagation(); triggerTagging(${annotation.id});" title="Relaunch tagging">
+                        <i class="fa-solid fa-tags"></i>
+                    </button>
+                ` : ''}
             </div>
             ${tagsHTML}
             ${reviewPanelHTML}
         `;
 
-        item.addEventListener('click', (e) => {
-            if (!e.target.closest('button') && !e.target.closest('.dimension-card') && !e.target.closest('.feedback-btn')) {
-                seekToAnnotation(annotation.start_time);
-            }
-        });
-
         container.appendChild(item);
     });
+}
+
+function getFirstTagByCategory(tags, categories) {
+    if (!Array.isArray(tags)) return null;
+    return tags.find(tag => tag && categories.includes(tag.category)) || null;
+}
+
+function getSalientMetadata(tags) {
+    const gestureTag = getFirstTagByCategory(tags, ['technique', 'handling']);
+    const toolTag = getFirstTagByCategory(tags, ['tool']);
+    const materialTag = getFirstTagByCategory(tags, ['material']);
+
+    return {
+        gesture: gestureTag ? gestureTag.name : null,
+        tool: toolTag ? toolTag.name : null,
+        material: materialTag ? materialTag.name : null
+    };
 }
 
 function renderTimeline() {
@@ -1213,10 +1187,19 @@ function renderTimeline() {
         if (annotation.transcription_status === 'processing') {
             bar.classList.add('processing');
         }
+        if (annotation.is_salient) {
+            bar.classList.add('salient');
+        }
 
         // Position bar at start_time (vertical bar, not segment)
         const startPercent = (annotation.start_time / duration) * 100;
         bar.style.left = `${startPercent}%`;
+
+        // Add persistent timestamp label
+        const timeLabel = document.createElement('div');
+        timeLabel.className = 'timeline-segment-label';
+        timeLabel.textContent = formatTime(annotation.start_time);
+        bar.appendChild(timeLabel);
 
         // Build tooltip content
         const tooltip = document.createElement('div');
@@ -1237,6 +1220,40 @@ function renderTimeline() {
                 : annotation.transcription;
             transcriptDiv.textContent = preview;
             tooltip.appendChild(transcriptDiv);
+        }
+
+        if (annotation.is_salient) {
+            const salientMeta = getSalientMetadata(annotation.tags);
+            const salientBlock = document.createElement('div');
+            salientBlock.className = 'timeline-tooltip-salient';
+
+            const salientTitle = document.createElement('div');
+            salientTitle.className = 'timeline-tooltip-salient-title';
+            salientTitle.textContent = 'Salient moment';
+            salientBlock.appendChild(salientTitle);
+
+            const addMetaRow = (label, value) => {
+                const row = document.createElement('div');
+                row.className = 'timeline-tooltip-salient-row';
+
+                const labelSpan = document.createElement('span');
+                labelSpan.className = 'timeline-tooltip-salient-label';
+                labelSpan.textContent = label;
+
+                const valueSpan = document.createElement('span');
+                valueSpan.className = 'timeline-tooltip-salient-value';
+                valueSpan.textContent = value || '—';
+
+                row.appendChild(labelSpan);
+                row.appendChild(valueSpan);
+                salientBlock.appendChild(row);
+            };
+
+            addMetaRow('Gesture', salientMeta.gesture);
+            addMetaRow('Tool', salientMeta.tool);
+            addMetaRow('Material', salientMeta.material);
+
+            tooltip.appendChild(salientBlock);
         }
 
         // Tags section
@@ -1374,6 +1391,45 @@ async function deleteAnnotation(annotationId) {
     }
 }
 
+async function deleteTag(event, annotationId, tagIndex) {
+    event.stopPropagation();
+    
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (!annotation || !annotation.tags) return;
+
+    const tag = annotation.tags[tagIndex];
+    if (!tag) return;
+
+    try {
+        // Remove tag from array
+        annotation.tags.splice(tagIndex, 1);
+
+        // Update annotation with new tags array
+        const response = await fetch(`${API_BASE}/api/annotations/${annotationId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                tags: JSON.stringify(annotation.tags, null, 2)
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to delete tag');
+        }
+
+        // Reload annotations to reflect changes
+        await loadAnnotations(state.currentVideoId);
+        showToast('Tag Deleted', `Removed tag: ${tag.name}`, 'success');
+    } catch (error) {
+        console.error('Error deleting tag:', error);
+        showToast('Error', 'Failed to delete tag', 'error');
+        // Reload to restore original state
+        await loadAnnotations(state.currentVideoId);
+    }
+}
+
 function updateAnnotationStatus(annotationId, status) {
     const annotation = state.annotations.find(a => a.id === annotationId);
     if (annotation) {
@@ -1471,8 +1527,6 @@ async function saveTranscriptionEdit(annotationId, newText, itemElement) {
         renderAnnotations();
         renderTimeline();
         showToast('Saved', 'Transcription updated', 'success');
-        // Trigger extended transcript regeneration
-        await regenerateExtendedTranscript(annotationId);
 
     } catch (error) {
         console.error('Error saving transcription edit:', error);
@@ -1483,6 +1537,31 @@ async function saveTranscriptionEdit(annotationId, newText, itemElement) {
 }
 
 // AI Review Functions
+
+function renderReviewContainer(annotationId, innerHtml, statusLabel = null) {
+    const isVisible = state.showReviewPanels[annotationId] || false;
+    const statusBadge = statusLabel
+        ? `<span class="review-status-badge">${statusLabel}</span>`
+        : '';
+
+    return `
+        <div class="review-panel-container">
+            <div class="review-toggle-header" onclick="toggleReviewPanel(${annotationId})">
+                <span class="review-toggle-label">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    AI Review
+                    ${statusBadge}
+                </span>
+                <span class="review-toggle-indicator">
+                    <i class="fa-solid fa-chevron-${isVisible ? 'up' : 'down'}"></i>
+                </span>
+            </div>
+            <div class="review-panel ${isVisible ? 'visible' : 'hidden'}" id="review-panel-${annotationId}">
+                ${innerHtml}
+            </div>
+        </div>
+    `;
+}
 
 function renderReviewPanel(annotationId, review) {
     const coveredCount = Object.values(review.dimensions).filter(d => d.covered).length;
@@ -1496,6 +1575,17 @@ function renderReviewPanel(annotationId, review) {
         const covered = dim.covered;
         const statusIcon = covered ? '✓' : '✗';
         const statusClass = covered ? 'complete' : 'incomplete';
+        
+        // Show what's good (explainability)
+        const whatIsGoodHTML = dim.what_is_good && dim.what_is_good.length > 0
+            ? `<div class="what-is-good">
+                <strong>✓ Ce qui est bien :</strong>
+                <ul>
+                    ${dim.what_is_good.map(item => `<li>${item}</li>`).join('')}
+                </ul>
+            </div>`
+            : '';
+        
         const promptsHTML = !covered && dim.prompts && dim.prompts.length > 0 
             ? `<div class="prompts-list">
                 ${dim.prompts.map(prompt => `
@@ -1513,6 +1603,7 @@ function renderReviewPanel(annotationId, review) {
                     <span>${covered ? 'Complet' : 'Incomplet'}</span>
                 </div>
                 <div class="dimension-content" id="dim-${annotationId}-${dimName}" style="display: none;">
+                    ${whatIsGoodHTML}
                     ${!covered && dim.missing_elements ? `
                         <p class="missing-elements"><em>Manque: ${dim.missing_elements.join(', ')}</em></p>
                     ` : ''}
@@ -1523,31 +1614,64 @@ function renderReviewPanel(annotationId, review) {
     });
     
     const readyToComplete = review.ready_to_proceed;
+    const isVisible = state.showReviewPanels[annotationId] || false;
+    const tier = review.completeness_tier || 'MINIMAL';
+    const tierLabels = {
+        'MINIMAL': 'Minimal',
+        'PARTIAL': 'Partiel',
+        'SUBSTANTIAL': 'Substantiel',
+        'COMPLETE': 'Complet'
+    };
+    const tierColors = {
+        'MINIMAL': '#dc3545',
+        'PARTIAL': '#ffc107',
+        'SUBSTANTIAL': '#17a2b8',
+        'COMPLETE': '#28a745'
+    };
     
     return `
-        <div class="review-panel">
-            <div class="review-header">
-                <strong>AI Review</strong>
-                <div class="progress-indicator">
-                    <span>${coveredCount}/3 dimensions couvertes</span>
-                    <div class="progress-bar">
-                        <div class="progress-fill" style="width: ${completenessPercent}%"></div>
-                    </div>
-                    <span class="completeness-score">${completenessPercent}/100</span>
-                </div>
+        <div class="review-panel-container">
+            <div class="review-toggle-header" onclick="toggleReviewPanel(${annotationId})">
+                <span class="review-toggle-label">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    AI Review
+                    <span class="tier-badge" style="background-color: ${tierColors[tier]}">
+                        ${tierLabels[tier]}
+                    </span>
+                </span>
+                <span class="review-toggle-indicator">
+                    <i class="fa-solid fa-chevron-${isVisible ? 'up' : 'down'}"></i>
+                </span>
             </div>
-            ${dimensionsHTML}
-            <div class="review-actions">
-                <button class="btn edit-elicitation-btn" onclick="editElicitation(${annotationId})">
-                    <i class="fa-solid fa-pencil"></i>
-                    Modifier l'élicitation
-                </button>
-                <button class="btn mark-complete-btn ${readyToComplete ? '' : 'disabled'}" 
-                    onclick="markElicitationComplete(${annotationId})"
-                    ${readyToComplete ? '' : 'disabled'}>
-                    <i class="fa-solid fa-check"></i>
-                    Marquer comme complet
-                </button>
+            <div class="review-panel ${isVisible ? 'visible' : 'hidden'}" id="review-panel-${annotationId}">
+                <div class="review-header-row">
+                    <div class="review-header">
+                        ${review.sensations_analysis ? `
+                        <div class="sensations-badges">
+                            ${review.sensations_analysis.visual_mentioned ? '<span class="sensation-badge visual"><i class="fa-solid fa-eye"></i> Visuel</span>' : ''}
+                            ${review.sensations_analysis.tactile_mentioned ? '<span class="sensation-badge tactile"><i class="fa-solid fa-hand"></i> Tactile</span>' : ''}
+                            ${review.sensations_analysis.auditory_mentioned ? '<span class="sensation-badge auditory"><i class="fa-solid fa-ear"></i> Auditif</span>' : ''}
+                            ${review.sensations_analysis.proprioceptive_mentioned ? '<span class="sensation-badge proprioceptive"><i class="fa-solid fa-person"></i> Proprioceptif</span>' : ''}
+                        </div>
+                    ` : ''}
+                    </div>
+                    <button class="btn btn-icon btn-tiny" onclick="triggerReview(${annotationId})" title="Relaunch AI Review">
+                        <i class="fa-solid fa-arrow-rotate-right"></i>
+                    </button>
+                </div>
+                ${dimensionsHTML}
+                <div class="review-actions">
+                    <button class="btn edit-elicitation-btn" onclick="editElicitation(${annotationId})">
+                        <i class="fa-solid fa-pencil"></i>
+                        Modifier l'élicitation
+                    </button>
+                    <button class="btn mark-complete-btn ${readyToComplete ? '' : 'disabled'}" 
+                        onclick="markElicitationComplete(${annotationId})"
+                        ${readyToComplete ? '' : 'disabled'}>
+                        <i class="fa-solid fa-check"></i>
+                        Marquer comme complet
+                    </button>
+                </div>
             </div>
         </div>
     `;
@@ -1558,6 +1682,116 @@ function toggleDimension(annotationId, dimName) {
     if (content) {
         const isVisible = content.style.display !== 'none';
         content.style.display = isVisible ? 'none' : 'block';
+    }
+}
+
+function toggleReviewPanel(annotationId) {
+    // Toggle state
+    state.showReviewPanels[annotationId] = !state.showReviewPanels[annotationId];
+    
+    // Re-render to update UI
+    renderAnnotations();
+}
+
+async function reloadAllAnalyses() {
+    if (!state.currentVideoId) {
+        showToast('Error', 'No video loaded', 'error');
+        return;
+    }
+
+    const annotations = Array.isArray(state.annotations) ? state.annotations : [];
+    if (annotations.length === 0) {
+        showToast('Info', 'No annotations to reload', 'info');
+        return;
+    }
+
+    const eligible = annotations.filter(a => a && a.transcription && a.transcription.trim());
+    const skipped = annotations.length - eligible.length;
+
+    if (eligible.length === 0) {
+        showToast('Info', 'No transcriptions available for reload', 'info');
+        return;
+    }
+
+    eligible.forEach(annotation => {
+        annotation.tagging_status = 'processing';
+        annotation.review_status = 'processing';
+    });
+    renderAnnotations();
+    renderTimeline();
+
+    try {
+        showLoading('Reloading tagging and AI reviews...');
+
+        const requests = eligible.map(async annotation => {
+            const [tagResponse, reviewResponse] = await Promise.all([
+                fetch(`/api/annotations/${annotation.id}/tags`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                }),
+                fetch(`/api/annotations/${annotation.id}/review`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                })
+            ]);
+
+            return {
+                annotationId: annotation.id,
+                tagOk: tagResponse.ok,
+                reviewOk: reviewResponse.ok
+            };
+        });
+
+        const results = await Promise.allSettled(requests);
+        let failures = 0;
+
+        results.forEach(result => {
+            if (result.status === 'fulfilled') {
+                if (!result.value.tagOk) failures += 1;
+                if (!result.value.reviewOk) failures += 1;
+            } else {
+                failures += 2;
+            }
+        });
+
+        const summary = failures > 0
+            ? `Triggered ${eligible.length} reloads with ${failures} failures${skipped ? ` (${skipped} skipped)` : ''}`
+            : `Reloaded ${eligible.length} annotations${skipped ? ` (${skipped} skipped)` : ''}`;
+
+        showToast('Reload all', summary, failures > 0 ? 'warning' : 'success');
+    } catch (error) {
+        console.error('Error reloading all analyses:', error);
+        showToast('Error', 'Failed to reload all analyses', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function triggerTagging(annotationId) {
+    try {
+        console.error('[TAGGING UI] Relancer Tags clicked', annotationId);
+        showLoading('Relaunching tagging process...');
+        
+        console.error('[TAGGING UI] Sending request to /api/annotations/' + annotationId + '/tags');
+        const response = await fetch(`/api/annotations/${annotationId}/tags`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to trigger tagging');
+        }
+
+        console.error('[TAGGING UI] Tagging request accepted', annotationId);
+
+        showToast('Tagging', 'Tagging process restarted', 'info');
+        
+    } catch (error) {
+        console.error('Error triggering tagging:', error);
+        showToast('Error', error.message, 'error');
+    } finally {
+        hideLoading();
     }
 }
 
@@ -1725,11 +1959,14 @@ function updateReviewStatus(annotationId, status) {
     }
 }
 
-function updateReviewResults(annotationId, reviewResults) {
+function updateReviewResults(annotationId, reviewResults, isSalient = null) {
     const annotation = state.annotations.find(a => a.id === annotationId);
     if (annotation) {
         annotation.review_status = 'completed';
         annotation.review_results = reviewResults;
+        if (isSalient !== null && typeof isSalient !== 'undefined') {
+            annotation.is_salient = isSalient;
+        }
         if (state.currentVideoId) {
             renderAnnotations();
             renderTimeline();
@@ -1872,6 +2109,53 @@ function updateTags(annotationId, tags) {
     if (annotation) {
         annotation.tags = tags;
         annotation.tagging_status = 'completed';
+        renderAnnotations();
+    }
+}
+
+function updateJudgeStatus(annotationId, status) {
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (annotation) {
+        annotation.judge_status = status;
+        renderAnnotations();
+    }
+}
+
+function updateJudgeDecision(annotationId, judge_decision) {
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (annotation) {
+        annotation.judge_decision = judge_decision;
+        annotation.judge_status = 'completed';
+        
+        // If judge says review NOT needed and confidence is high, show manual trigger button with hint
+        // Otherwise, the auto-review will have been triggered by process_judge in backend
+        renderAnnotations();
+    }
+}
+
+async function triggerManualReview(annotationId, event) {
+    event.stopPropagation();
+    
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (!annotation) return;
+    
+    try {
+        annotation.review_status = 'processing';
+        renderAnnotations();
+        
+        const response = await fetch(`/api/annotations/${annotationId}/review`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        if (!response.ok) {
+            throw new Error(await response.text());
+        }
+        
+        showToast('AI Review', 'Analysis in progress...', 'info');
+    } catch (error) {
+        showToast('Error', `Failed to trigger review: ${error.message}`, 'error');
+        annotation.review_status = 'failed';
         renderAnnotations();
     }
 }
@@ -2072,10 +2356,10 @@ function showToast(title, message, type = 'info') {
         removeToast(toast);
     });
 
-    // Auto remove after 5 seconds
+    // Auto remove after 4.25 seconds (15% reduction from 5000ms)
     const autoRemoveTimeout = setTimeout(() => {
         removeToast(toast);
-    }, 5000);
+    }, 4250);
 
     // Store timeout ID so we can cancel it if user closes manually
     toast.dataset.timeoutId = autoRemoveTimeout;
