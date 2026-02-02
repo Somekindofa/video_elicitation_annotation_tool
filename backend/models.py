@@ -148,6 +148,16 @@ class Annotation(Base):
     craft = Column(String, nullable=True)
     # Task described in the video segment (free text or chosen from tasks)
     task = Column(String, nullable=True)
+    # Automatic task detection via LLM
+    detected_task_status = Column(
+        String, default="pending"
+    )  # pending, processing, completed, failed
+    detected_task = Column(
+        String, nullable=True
+    )  # Auto-detected main task from transcription
+    detected_task_confidence = Column(
+        Float, default=0.0
+    )  # Confidence score (0-1) for detected task
     feedback = Column(
         Integer, nullable=True
     )  # 1 for thumbs up, 0 for thumbs down, null for no feedback
@@ -257,6 +267,9 @@ class AnnotationUpdate(BaseModel):
     tags: Optional[str] = None
     tagging_status: Optional[str] = None
     tagging_trigger_number: Optional[int] = None
+    detected_task_status: Optional[str] = None
+    detected_task: Optional[str] = None
+    detected_task_confidence: Optional[float] = None
     feedback: Optional[int] = None
     feedback_choices: Optional[str] = None
     craft: Optional[str] = None
@@ -284,6 +297,9 @@ class AnnotationResponse(BaseModel):
     tags: Optional[List[Dict[str, Optional[str]]]] = None
     tagging_status: str
     tagging_trigger_number: int = 0
+    detected_task_status: str = "pending"
+    detected_task: Optional[str] = None
+    detected_task_confidence: float = 0.0
     feedback: Optional[int] = None
     feedback_choices: Optional[str] = None
     craft: Optional[str] = None
