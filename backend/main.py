@@ -1232,6 +1232,187 @@ async def process_judge(
         asyncio.create_task(process_tagging(annotation_id, transcription, craft))
 
 
+async def process_task_detection(
+    annotation_id: int,
+    transcription: str,
+    craft: Optional[str] = None,
+):
+    """Background task to detect the main task from elicitation transcription"""
+    from task_detector_service import detect_task
+    import asyncio
+
+    try:
+        logger.error(
+            f"[TASK_DETECTION] Starting task detection for annotation {annotation_id}"
+        )
+        print(
+            f"[TASK_DETECTION] Starting task detection for annotation {annotation_id}"
+        )
+
+        # Update status to processing
+        async with db.AsyncSessionLocal() as session:
+            await db.update_annotation(
+                session,
+                annotation_id,
+                models.AnnotationUpdate(detected_task_status="processing"),
+            )
+
+        # Broadcast processing status
+        await manager.broadcast(
+            {
+                "type": "task_detection_status",
+                "annotation_id": annotation_id,
+                "status": "processing",
+            }
+        )
+
+        # Detect task using LLM with timeout
+        logger.error(
+            f"[TASK_DETECTION] Calling detect_task for annotation {annotation_id}"
+        )
+        print(f"[TASK_DETECTION] Calling detect_task for annotation {annotation_id}")
+        try:
+            task_result = await asyncio.wait_for(
+                detect_task(transcription, craft or "jewelry"), timeout=60
+            )
+        except asyncio.TimeoutError:
+            raise Exception("Task detection timed out after 60 seconds")
+
+        detected_task = task_result.get("detected_task")
+        confidence = task_result.get("confidence", 0.0)
+        reasoning = task_result.get("reasoning", "")
+
+        logger.error(
+            f"[TASK_DETECTION] Task detection result: task={detected_task}, confidence={confidence}"
+        )
+        print(
+            f"[TASK_DETECTION] Task detection result: task={detected_task}, confidence={confidence}"
+        )
+
+        # Only store if detected_task is not null and confidence >= 0.5
+        if detected_task and confidence >= 0.5:
+            logger.error(
+                f"[TASK_DETECTION] Storing detected task '{detected_task}' for annotation {annotation_id}"
+            )
+            print(
+                f"[TASK_DETECTION] Storing detected task '{detected_task}' for annotation {annotation_id}"
+            )
+            async with db.AsyncSessionLocal() as session:
+                await db.update_annotation(
+                    session,
+                    annotation_id,
+                    models.AnnotationUpdate(
+                        detected_task=detected_task,
+                        detected_task_confidence=confidence,
+                        detected_task_status="completed",
+                    ),
+                )
+        else:
+            logger.error(
+                f"[TASK_DETECTION] Task detection skipped (task=null or low confidence) for annotation {annotation_id}"
+            )
+            print(
+                f"[TASK_DETECTION] Task detection skipped (task=null or low confidence) for annotation {annotation_id}"
+            )
+            async with db.AsyncSessionLocal() as session:
+                await db.update_annotation(
+                    session,
+                    annotation_id,
+                    models.AnnotationUpdate(detected_task_status="completed"),
+                )
+
+        # Broadcast completion
+        logger.error(
+            f"[TASK_DETECTION] Broadcasting task_detection_complete for annotation {annotation_id}"
+        )
+        print(
+            f"[TASK_DETECTION] Broadcasting task_detection_complete for annotation {annotation_id}"
+        )
+        await manager.broadcast(
+            {
+                "type": "task_detection_complete",
+                "annotation_id": annotation_id,
+                "detected_task": detected_task,
+                "confidence": confidence,
+                "reasoning": reasoning,
+            }
+        )
+
+        # Trigger review after task detection
+        logger.error(
+            f"[TASK_DETECTION] Triggering review for annotation {annotation_id}"
+        )
+        print(f"[TASK_DETECTION] Triggering review for annotation {annotation_id}")
+
+        # Get the current annotation to pass tags to review
+        async with db.AsyncSessionLocal() as session:
+            annotation = await db.get_annotation(session, annotation_id)
+            tags_list = []
+            if annotation is not None and annotation.tags is not None:
+                try:
+                    tags_list = json.loads(annotation.tags)
+                except (json.JSONDecodeError, TypeError):
+                    tags_list = []
+
+        await process_review(
+            annotation_id,
+            transcription,
+            craft,
+            tags_list,
+            trigger_tagging=False,
+        )
+
+    except Exception as e:
+        logger.error(
+            f"[TASK_DETECTION ERROR] Task detection error for annotation {annotation_id}: {e}",
+            exc_info=True,
+        )
+
+        # Update status to failed
+        async with db.AsyncSessionLocal() as session:
+            await db.update_annotation(
+                session,
+                annotation_id,
+                models.AnnotationUpdate(detected_task_status="failed"),
+            )
+
+        # Broadcast error
+        await manager.broadcast(
+            {
+                "type": "task_detection_error",
+                "annotation_id": annotation_id,
+                "error": str(e),
+            }
+        )
+
+        # Still trigger review to continue the pipeline
+        logger.error(
+            f"[TASK_DETECTION] Triggering review after error for annotation {annotation_id}"
+        )
+        try:
+            async with db.AsyncSessionLocal() as session:
+                annotation = await db.get_annotation(session, annotation_id)
+                tags_list = []
+                if annotation is not None and annotation.tags is not None:
+                    try:
+                        tags_list = json.loads(annotation.tags)
+                    except (json.JSONDecodeError, TypeError):
+                        tags_list = []
+
+            await process_review(
+                annotation_id,
+                transcription,
+                craft,
+                tags_list,
+                trigger_tagging=False,
+            )
+        except Exception as review_error:
+            logger.error(
+                f"[TASK_DETECTION] Failed to trigger review after task detection error: {review_error}",
+                exc_info=True,
+            )
+
+
 async def process_review(
     annotation_id: int,
     transcription: str,
@@ -1490,17 +1671,15 @@ async def process_tagging(
             }
         )
 
-        # Trigger tag-aware review (skip auto-tagging to avoid loops)
+        # Trigger task detection (which will trigger review after)
         logger.error(
-            f"[TAGGING] Triggering tag-aware review for annotation {annotation_id}"
+            f"[TAGGING] Triggering task detection for annotation {annotation_id}"
         )
-        print(f"[TAGGING] Triggering tag-aware review for annotation {annotation_id}")
-        await process_review(
+        print(f"[TAGGING] Triggering task detection for annotation {annotation_id}")
+        await process_task_detection(
             annotation_id,
             transcription,
             craft,
-            tags_list,
-            trigger_tagging=False,
         )
 
     except Exception as e:
