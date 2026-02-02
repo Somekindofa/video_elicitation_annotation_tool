@@ -668,6 +668,31 @@ body {
     color: var(--primary-color);
 }
 
+.annotation-time-wrapper {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    flex-wrap: wrap;
+}
+
+.detected-task-badge {
+    display: inline-block;
+    background-color: var(--accent-color);
+    color: white;
+    padding: 0.35rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+    box-shadow: var(--shadow-sm);
+    transition: var(--transition);
+}
+
+.detected-task-badge:hover {
+    box-shadow: var(--shadow-md);
+    background-color: #059669;
+}
+
 .annotation-actions {
     display: flex;
     gap: var(--spacing-xs);

@@ -131,25 +131,8 @@ async function initializeApp() {
 
     // Load craft selection from localStorage (default to glassblowing)
     state.craft = localStorage.getItem('craft') || 'glassblowing';
-    // Load task selection from localStorage (optional)
-    state.task = localStorage.getItem('task') || '';
     // Create selectors UI
     createCraftSelectorUI();
-    await initializeTaskSelector();
-
-    // Reload tasks when craft changes
-    const craftSelect = document.getElementById('craftSelector');
-    if (craftSelect) {
-        craftSelect.addEventListener('change', async () => {
-            state.craft = craftSelect.value;
-            try { localStorage.setItem('craft', state.craft); } catch (_) { }
-            // Reload tasks for the new craft domain
-            const taskSelect = document.getElementById('taskSelect');
-            if (taskSelect) {
-                await loadTasks(taskSelect, state.craft);
-            }
-        });
-    }
 
     // Load existing videos
     await loadVideos();
@@ -226,149 +209,6 @@ function createCraftSelectorUI() {
     }
 }
 
-// Task selector with select + add-new input
-async function initializeTaskSelector() {
-    const controls = document.getElementById('recordingControls');
-    if (!controls) return;
-
-    const wrapper = document.createElement('div');
-    wrapper.className = 'task-selector';
-    wrapper.style.margin = '10px 0';
-
-    const label = document.createElement('div');
-    label.textContent = 'Task (choose or add)';
-    label.style.fontSize = '0.9rem';
-    label.style.marginBottom = '6px';
-
-    const select = document.createElement('select');
-    select.id = 'taskSelect';
-    select.style.padding = '6px 8px';
-    select.style.borderRadius = '4px';
-    select.style.border = '1px solid #ccc';
-    select.style.minWidth = '240px';
-
-    const addInput = document.createElement('input');
-    addInput.id = 'taskAddInput';
-    addInput.placeholder = 'Type task name';
-    addInput.style.padding = '6px 8px';
-    addInput.style.borderRadius = '4px';
-    addInput.style.border = '1px solid #ccc';
-    addInput.style.marginLeft = '8px';
-    addInput.style.minWidth = '200px';
-
-    const addBtn = document.createElement('button');
-    addBtn.textContent = 'Add Task';
-    addBtn.style.marginLeft = '8px';
-    addBtn.style.padding = '6px 12px';
-    addBtn.style.borderRadius = '4px';
-    addBtn.style.border = '1px solid #ccc';
-    addBtn.style.background = '#f0f0f0';
-    addBtn.style.cursor = 'pointer';
-
-    select.addEventListener('change', (e) => {
-        state.task = e.target.value || '';
-        try { localStorage.setItem('task', state.task); } catch (_) { }
-    });
-
-    addBtn.addEventListener('click', async () => {
-        const value = addInput.value.trim();
-        if (!value) return;
-        try {
-            await createOrSelectTask(value);
-            addInput.value = '';
-        } catch (err) {
-            console.error('Failed to add task', err);
-        }
-    });
-
-    const row = document.createElement('div');
-    row.style.display = 'flex';
-    row.style.alignItems = 'center';
-    row.appendChild(select);
-    row.appendChild(addInput);
-    row.appendChild(addBtn);
-
-    wrapper.appendChild(label);
-    wrapper.appendChild(row);
-
-    const existingCraft = controls.querySelector('.craft-selector');
-    if (existingCraft && existingCraft.nextSibling) {
-        controls.insertBefore(wrapper, existingCraft.nextSibling);
-    } else {
-        controls.insertBefore(wrapper, controls.firstChild);
-    }
-
-    await loadTasks(select, state.craft);
-    renderTaskOptions(select);
-}
-
-async function loadTasks(selectEl, craft) {
-    try {
-        const craftQuery = craft ? `&craft=${encodeURIComponent(craft)}` : '';
-        const resp = await fetch(`${API_BASE}/api/tasks?published=1${craftQuery}`);
-        if (!resp.ok) throw new Error('Failed to fetch tasks');
-        const tasks = await resp.json();
-        state.tasks = tasks || [];
-    } catch (err) {
-        console.warn('Failed to fetch tasks', err);
-        state.tasks = [];
-    }
-    if (selectEl) {
-        renderTaskOptions(selectEl);
-    }
-}
-
-function renderTaskOptions(selectEl) {
-    if (!selectEl) return;
-    selectEl.innerHTML = '';
-    const placeholder = document.createElement('option');
-    placeholder.value = '';
-    placeholder.textContent = '-- Select a task --';
-    selectEl.appendChild(placeholder);
-    state.tasks.forEach(t => {
-        const opt = document.createElement('option');
-        opt.value = t.name;
-        opt.textContent = t.name;
-        selectEl.appendChild(opt);
-    });
-    // Reselect previous task if present
-    if (state.task) {
-        selectEl.value = state.task;
-    }
-}
-
-async function createOrSelectTask(taskName) {
-    // If task already in list for this craft, just select it
-    const existing = state.tasks.find(t => t.name === taskName && t.craft === state.craft);
-    if (existing) {
-        state.task = existing.name;
-        try { localStorage.setItem('task', state.task); } catch (_) { }
-        const selectEl = document.getElementById('taskSelect');
-        if (selectEl) {
-            selectEl.value = state.task;
-        }
-        return;
-    }
-
-    // Otherwise create and publish for this craft
-    const resp = await fetch(`${API_BASE}/api/tasks`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: taskName, craft: state.craft, description: null, is_published: 1 })
-    });
-    if (!resp.ok) {
-        throw new Error(`Failed to create task: ${resp.status}`);
-    }
-    const created = await resp.json();
-    state.tasks.push(created);
-    state.task = created.name;
-    try { localStorage.setItem('task', state.task); } catch (_) { }
-    const selectEl = document.getElementById('taskSelect');
-    if (selectEl) {
-        renderTaskOptions(selectEl);
-        selectEl.value = created.name;
-    }
-}
 
 // Event Listeners Setup
 function setupEventListeners() {
@@ -568,6 +408,27 @@ function handleWebSocketMessage(message) {
 
         case 'tagging_debug':
             console.error('[TAGGING DEBUG]', message);
+            break;
+
+        case 'task_detection_status':
+            // Handle task detection status updates
+            console.log('[TASK_DETECTION]', message.status);
+            break;
+
+        case 'task_detection_complete':
+            // Update annotation with detected task
+            const annotation = state.annotations.find(a => a.id === message.annotation_id);
+            if (annotation) {
+                annotation.detected_task = message.detected_task;
+                annotation.detected_task_confidence = message.confidence;
+            }
+            if (state.currentVideoId) {
+                loadAnnotations(state.currentVideoId);
+            }
+            break;
+
+        case 'task_detection_error':
+            showToast('Task Detection Error', message.error, 'error');
             break;
 
         case 'annotation_deleted':
@@ -993,14 +854,7 @@ async function handleRecordingStop() {
         } catch (e) {
             console.warn('Could not append craft to FormData', e);
         }
-        // Attach task if provided
-        try {
-            if (state.task && state.task.trim().length > 0) {
-                formData.append('task', state.task.trim());
-            }
-        } catch (e) {
-            console.warn('Could not append task to FormData', e);
-        }
+
 
         const response = await fetch(`${API_BASE}/api/annotations?video_id=${state.currentVideoId}&start_time=${startTime}&end_time=${endTime}`, {
             method: 'POST',
@@ -1249,10 +1103,17 @@ function renderAnnotations() {
 
         item.innerHTML = `
             <div class="annotation-header">
-                <span class="annotation-time">
-                    ${formatTime(annotation.start_time)} - ${formatTime(annotation.end_time)}
-                    (${duration.toFixed(1)}s)
-                </span>
+                <div class="annotation-time-wrapper">
+                    <span class="annotation-time">
+                        ${formatTime(annotation.start_time)} - ${formatTime(annotation.end_time)}
+                        (${duration.toFixed(1)}s)
+                    </span>
+                    ${annotation.detected_task && annotation.detected_task_confidence >= 0.5 ? `
+                        <span class="detected-task-badge" title="Detected task (confidence: ${(annotation.detected_task_confidence * 100).toFixed(0)}%)">
+                            <strong>${annotation.detected_task}</strong>
+                        </span>
+                    ` : ''}
+                </div>
                 <div class="annotation-actions">
                     <button class="btn btn-icon btn-small play-btn" onclick="seekToAnnotation(${annotation.start_time})" title="Jump to time">
                         <i class="fas fa-play"></i>
@@ -1795,7 +1656,6 @@ function renderReviewPanel(annotationId, review) {
                     ` : ''}
                     </div>
                     <button class="btn btn-icon btn-tiny" onclick="triggerReview(${annotationId})" title="Relaunch AI Review">
-                        <i class="fa-solid fa-magnifying-glass"></i>
                         <i class="fa-solid fa-arrow-rotate-right"></i>
                     </button>
                 </div>
