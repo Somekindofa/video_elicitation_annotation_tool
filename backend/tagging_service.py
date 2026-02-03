@@ -106,6 +106,12 @@ def _extract_first_json_object(text: str) -> Optional[Dict[str, Any]]:
 
 
 def _normalize_tags(tags: Any) -> List[Dict[str, str]]:
+    """
+    Normalize and validate tags.
+    - Converts to lowercase with underscores
+    - Validates category is in allowed list
+    - ENFORCES MAX 4 WORDS per tag name (rejects longer tags)
+    """
     valid_categories = {"tool", "material", "technique", "handling", "sensation"}
     normalized: List[Dict[str, str]] = []
 
@@ -121,6 +127,15 @@ def _normalize_tags(tags: Any) -> List[Dict[str, str]]:
             continue
         name = str(name).strip().lower().replace(" ", "_")
         category = str(category).strip().lower()
+
+        # REJECT tags that are too long (> 4 words)
+        word_count = len(name.split("_"))
+        if word_count > 4:
+            logger.debug(
+                f"[TAGGING] REJECTED tag (too long - {word_count} words): {name}"
+            )
+            continue
+
         if not name or category not in valid_categories:
             continue
         normalized.append({"name": name, "category": category})
@@ -211,104 +226,112 @@ def _parse_keyed_tags(text: str, transcription: str = "") -> List[Dict[str, str]
 TAGGING_SYSTEM_PROMPT = """Vous êtes un Système d'Extraction de Tags analysant des transcriptions d'élicitations d'artisans experts.
 Votre rôle est d'identifier UNIQUEMENT les métadonnées HAUTEMENT PERTINENTES pour la RÉCUPÉRATION (RAG) et l'APPRENTISSAGE d'apprentis.
 
-⚠️ RÈGLE ABSOLUE: N'INFÉREZ JAMAIS ET N'SUPPOSEZ JAMAIS
-- ✋ PAS DE DOUBLONS TECHNOLOGIQUES: Même si c'est "logique", ne le tagguez QUE s'il est EXPLICITEMENT MENTIONNÉ
-- ✋ PAS D'HYPOTHÈSES: "Sodium" ≠ autorise à taguer "verre_sodique" si non mentionné
-- ✋ PAS D'OUTILS IMPLICITES: Ne tagguez PAS "pince" si l'artisan ne l'a pas nommée
-- ✋ PAS D'INFÉRENCE CONTEXTUELLE: Même si logique, si ce n'est PAS ÉCRIT, ce n'est PAS TAGGÉ
-- ✋ EXTRACTION TEXTUELLE UNIQUEMENT: Lisez littéralement la transcription, rien de plus
+⚠️ RÈGLES ABSOLUES
 
-## Principes RAG - Tagging Strict
+1. **N'INFÉREZ JAMAIS** - Seulement ce qui est EXPLICITEMENT mentionné
+2. **TAGS COURTS** - Maximum 4 mots, préférer 1-2 mots
+3. **NOMS D'ENTITÉS** - Pas de phrases descriptives complètes
+4. **FILTRAGE RAG** - Le tag doit pouvoir servir de filtre de recherche
 
-Les tags doivent FACILITER LA RECHERCHE pour les apprentis:
-- ✓ Spécifiques et concrets (filtrage précis)
-- ✓ Réutilisables pour trouver d'autres élicitations similaires
-- ✓ Essentiels pour comprender ou reproduire la technique
-- ✓ SEULEMENT SI MENTIONNÉ EXPLICITEMENT dans la transcription
-- ✗ Génériques, vagues, ou redondants
-- ✗ Évidentes ou implicites (ex: "main", "personne")
-- ✗ Inférées ou supposées (ex: "sodium" n'implique pas "verre_sodique")
+## INTERDICTIONS STRICTES
+
+❌ **PAS DE PHRASES DESCRIPTIVES**
+  - Exemple INTERDIT: "eviter_de_chauffer_plus_une_partie_qu_une_autre"
+  - Exemple INTERDIT: "tourner_delicatement_le_verre_avec_mon_pouce_et_mon_index_tout_en_maintenant_a_la_perpendiculaire"
+  - Raison: Ce sont des instructions, pas des tags filtrable
+
+❌ **PAS D'INFÉRENCES**
+  - "sodium" mentionné ≠ taguer "verre_sodique"
+  - "pince" implicite ≠ taguer "pince"
+
+❌ **PAS DE TAGS GÉNÉRIQUES**
+  - Interdit: "outil", "main", "faire", "chose", "objet"
+
+❌ **PAS DE TAGS ÉVIDENTS**
+  - Interdit: "regarder", "tenir", "toucher", "bouger"
 
 ## Catégories de Tags (STRICTES)
 
-### TOOL (outil) - SEULEMENT OUTILS NOMMÉS SPÉCIFIQUES
-✓ Accepter: "pince_brucelles", "chalumeau", "mandrin", "tournevis_plat", "spatule_metal"
-✗ Refuser: "outil", "objet", "main", "doigt", "appareil"
-- Noms complets et spécifiques tels que mentionnés
-- REJECTER les outils génériques (marteau sans type, tournevis sans précision)
-- Si plusieurs types du même outil: TAG séparé pour chaque (ex: tournevis_plat vs tournevis_cruciforme)
+### TOOL (outil) - NOM SPÉCIFIQUE UNIQUEMENT
+✓ **BON**: "pince_brucelles", "chalumeau", "mandrin", "lime_diamant"
+✗ **MAUVAIS**: "outil", "pince" (trop générique), "main", "doigt"
+**Règle**: 1-3 mots maximum, nom propre de l'outil
 
-### MATERIAL (matériau) - SEULEMENT MATÉRIAUX PERTINENTS POUR APPRENTISSAGE
-✓ Accepter: "verre_sodique", "or_18k", "argent", "fil_acier", "cire_perdue"
-✗ Refuser: "chose", "matériel", "substance_vague", "ça"
-- Matériaux avec qualité/type si spécifié (ex: "or_18k" pas juste "or")
-- REJETER les matériaux transitoires non-essentiels (ex: "air", "eau")
+### MATERIAL (matériau) - NOM DU MATÉRIAU UNIQUEMENT
+✓ **BON**: "verre_sodique", "argent", "or_18k", "acier"
+✗ **MAUVAIS**: "matériau", "chose", "substance", "air", "eau" (transitoires)
+**Règle**: 1-2 mots maximum, avec qualité si critique (ex: or_18k)
 
-### TECHNIQUE (technique) - SEULEMENT TECHNIQUES APPRENTISSABLES
-✓ Accepter: "enfilage", "soudure_a_froid", "coulage", "polissage_grain_400"
-✗ Refuser: "faire", "processus", "étape", "action_vague"
-- Noms d'action spécifiques (forme nominale ou verbe d'action)
-- INCLURE le niveau/type si mentionné (ex: polissage_grain_400 plutôt que juste polissage)
-- REJECTER les techniques évidentes (couper, tenir, regarder)
+### TECHNIQUE (technique) - NOM D'ACTION CONCIS
+✓ **BON**: "enfilage", "soudure", "polissage", "recuit"
+✗ **MAUVAIS**: "faire", "processus", "eviter_de_chauffer_plus_une_partie_qu_une_autre"
+**Règle**: 1-2 mots maximum, forme nominale (nom du procédé)
+**Exception**: Si un qualificatif est CRITIQUE pour la technique: "soudure_a_froid" OK
 
-### HANDLING (manipulation) - SEULEMENT GESTES CRITIQUES
-✓ Accepter: "rotation_continue", "pression_legere", "mouvement_circulaire", "traction_douce"
-✗ Refuser: "bouger", "faire", "tenir", "manipulation"
-- Gestes CRITIQUES pour la qualité ou sécurité du résultat
-- Inclure l'intensité/direction si importante (ex: rotation_continue vs rotation_unique)
-- REJECTER les gestes évidents ou universels
+### HANDLING (manipulation) - GESTE CRITIQUE CONCIS
+✓ **BON**: "rotation_continue", "pression_legere", "mouvement_circulaire"
+✗ **MAUVAIS**: "tourner_delicatement_le_verre_avec_mon_pouce_et_mon_index_tout_en_maintenant_a_la_perpendiculaire"
+✗ **MAUVAIS**: "tenir", "bouger", "manipulation"
+**Règle**: Maximum 2-3 mots pour le geste ET son intensité/direction si critique
+**Astuce**: Si vous devez écrire plus de 4 mots, c'est une instruction, PAS un tag
 
-### SENSATION (sensation) - SEULEMENT SENSATIONS CRITIQUES POUR APPRENTISSAGE
-✓ Accepter: "chaleur_extreme", "resistance_tactile", "son_cristallin", "sensation_lisse"
-✗ Refuser: "quelque_chose", "sensation", "feeling"
-- Sensations qui INDIQUENT la qualité/progrès du travail (critères de feedback)
-- Inclure intensité/qualité si mentionnée (ex: chaleur_extreme vs chaleur, son_clair vs bruit)
-- REJECTER les sensations évidentes (froid quand pas mentionné, "existence de chose")
+### SENSATION (sensation) - INDICATEUR SENSORIEL CONCIS
+✓ **BON**: "chaleur_intense", "resistance", "son_cristallin", "texture_lisse"
+✗ **MAUVAIS**: "quelque_chose", "sensation", "feeling"
+**Règle**: 1-2 mots maximum, sensation + qualité si nécessaire
 
-## Format de Sortie
+## Exemples Contrastés
 
-Retournez UNIQUEMENT des lignes au format:
-TAG: nom | catégorie
-
-Exemples VALIDES (pertinents RAG):
+### ✓ TAGS CORRECTS (Filtrables RAG)
+```
 TAG: pince_brucelles | tool
-TAG: chalumeau_propane | tool
-TAG: verre_sodique | material
+TAG: argent | material
 TAG: enfilage | technique
-TAG: rotation_continue | handling
-TAG: chaleur_critique | sensation
+TAG: rotation_douce | handling
+TAG: chaleur_intense | sensation
+```
 
-Exemples INVALIDES (REJETER ces patterns):
-TAG: outil | tool          (✗ trop générique)
-TAG: main | handling       (✗ évident)
-TAG: faire | technique     (✗ trop vague)
-TAG: chose | material      (✗ non-spécifique)
-TAG: air | material        (✗ transitoire)
+### ✗ TAGS INTERDITS (Trop longs/descriptifs)
+```
+TAG: eviter_de_chauffer_plus_une_partie_qu_une_autre | technique
+  → ❌ C'est une phrase d'instruction, pas un nom de technique
+  → ✓ Remplacer par: "chauffage_uniforme" SI et SEULEMENT SI ces mots exacts sont dans la transcription
 
-## CAS D'ÉTUDE: HALLUCINATIONS À ÉVITER ABSOLUMENT
+TAG: tourner_delicatement_le_verre_avec_mon_pouce_et_mon_index_tout_en_maintenant_a_la_perpendiculaire | handling
+  → ❌ Phrase complète = pas un tag
+  → ✓ Remplacer par: "rotation_douce" ou "rotation_bimanuelle" (max 2-3 mots)
 
-TRANSCRIPTION: "Je mets mes lunettes de protection avec filtre Didymium pour filtrer la lumière jaune-oranger du sodium."
-❌ HALLUCINATIONS À ÉVITER:
-  TAG: verre_sodique | material     (✗ "sodium" mentionné ≠ "verre sodique" n'est PAS mentionné - NE PAS INFÉRER)
-  TAG: pinces_brucelles | tool      (✗ jamais mentionné - hallucination pure)
-  TAG: mandrin | tool               (✗ jamais mentionné - hallucination pure)
-  TAG: tournevis_plat | tool        (✗ jamais mentionné - hallucination pure)
-✓ CORRECT À TAGUER:
-  TAG: lunettes_protection | tool      (✓ explicitement: "lunettes de protection")
-  TAG: filtre_didymium | tool          (✓ explicitement: "filtre Didymium")
-  TAG: filtration_lumiere | technique  (✓ explicitement: "filtrer la lumière")
+TAG: outil | tool
+  → ❌ Trop générique, inutile pour filtrage
 
-## Règles Critiques pour RAG-Qualité
+TAG: main | handling
+  → ❌ Évident, toujours présent
+```
 
-1. *** MINIMUM 5 mots de contenu AVANT de retourner tags (sinon liste vide) ***
-2. *** REJETER les tags génériques - SEULEMENT concrets et spécifiques ***
-3. *** REJETER les évidences/universels (main, bouger, faire) ***
-4. *** MAXIMUM 12 tags (qualité > quantité) ***
-5. *** Prioriser les éléments APPRENTISSABLES et CRITIQUES ***
-6. *** PAS DE DOUBLONS - même nom/catégorie = une seule fois ***
-7. *** SI PAS SÛR: MIEUX REJETER QUE SURCHARGER ***
+## Test de Validité d'un Tag
 
-Analysez maintenant la transcription suivante et extrayez UNIQUEMENT les tags pertinents pour RAG/apprentissage:"""
+Avant d'accepter un tag, vérifier:
+1. ✓ Le tag fait moins de 4 mots? (Sinon REJETER)
+2. ✓ C'est un NOM d'entité/concept, pas une PHRASE? (Sinon REJETER)
+3. ✓ Il apparaît TEXTUELLEMENT dans la transcription? (Sinon REJETER)
+4. ✓ Il permettrait de filtrer/chercher d'autres élicitations similaires? (Sinon REJETER)
+5. ✓ C'est assez spécifique pour être utile? (Sinon REJETER)
+
+## Règles de Sortie
+
+1. **MINIMUM 5 mots** dans la transcription (sinon retourner liste vide)
+2. **MAXIMUM 10 tags** (qualité > quantité)
+3. **PAS DE DOUBLONS** - même nom/catégorie = une seule fois
+4. **EN CAS DE DOUTE: NE PAS TAGUER** - Mieux rien que du bruit
+
+## Format de Sortie STRICT
+
+Retournez UNIQUEMENT des lignes:
+```
+TAG: nom_court | catégorie
+```
+
+Analysez maintenant la transcription suivante et extrayez UNIQUEMENT les tags COURTS et PERTINENTS pour RAG:"""
 
 
 async def extract_tags(
@@ -370,11 +393,11 @@ Transcription: {transcription}
     payload = {
         "model": FIREWORKS_LLM_MODEL,
         "prompt": prompt,
-        "max_tokens": 400,
+        "max_tokens": 300,  # Reduced from 400 - concise tags need less tokens
         "temperature": 0.0,  # Absolute zero temperature: maximally deterministic, no hallucinations
         "top_p": 0.95,
-        "frequency_penalty": 0.5,  # Increased: strongly penalize repeated tokens
-        "presence_penalty": 0.5,  # Increased: strongly penalize unused tokens from training
+        "frequency_penalty": 0.8,  # Increased: even stronger penalty for repeated tokens (avoid verbose repetition)
+        "presence_penalty": 0.6,  # Increased: encourage diverse but concise tags
     }
 
     global LAST_FIREWORKS_TAG_REQUEST_AT, LAST_FIREWORKS_TAG_STATUS, LAST_FIREWORKS_TAG_ERROR

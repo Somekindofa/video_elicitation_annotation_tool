@@ -688,6 +688,81 @@ body {
     transition: var(--transition);
 }
 
+.detected-task-badge.editable {
+    cursor: pointer;
+    position: relative;
+    padding-right: 2rem; /* Space for edit icon */
+}
+
+.detected-task-badge.editable .task-edit-icon {
+    margin-left: 0.5rem;
+    opacity: 0.7;
+    font-size: 0.7rem;
+}
+
+.detected-task-badge.editable:hover {
+    box-shadow: var(--shadow-md);
+    background-color: #059669;
+}
+
+.detected-task-badge.editable:hover .task-edit-icon {
+    opacity: 1;
+}
+
+.detected-task-badge.empty {
+    background-color: var(--secondary-color);
+    font-style: italic;
+}
+
+.detected-task-badge.empty:hover {
+    background-color: #475569;
+}
+
+/* Task editor inline */
+.detected-task-badge.task-editor {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    background-color: var(--surface);
+    border: 2px solid var(--primary-color);
+}
+
+.task-edit-input {
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.25rem;
+    min-width: 150px;
+    outline: none;
+}
+
+.task-edit-save,
+.task-edit-clear,
+.task-edit-cancel {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--text-primary);
+    font-size: 0.7rem;
+    padding: 0.2rem 0.3rem;
+    transition: var(--transition);
+}
+
+.task-edit-save:hover {
+    color: var(--accent-color);
+}
+
+.task-edit-clear:hover {
+    color: var(--warning-color);
+}
+
+.task-edit-cancel:hover {
+    color: var(--danger-color);
+}
+
 .detected-task-badge:hover {
     box-shadow: var(--shadow-md);
     background-color: #059669;

@@ -20,7 +20,6 @@ Listes séparées par " | ". Booléens: true/false. Aucune ligne vide.
 
 CLES ATTENDUES:
 NEEDS_REVIEW
-CONFIDENCE
 REASONING
 MISSING_ELEMENTS
 STRENGTHS
@@ -85,15 +84,8 @@ def _parse_keyed_judge(text: str) -> Dict[str, Any]:
     def _to_bool(key: str) -> bool:
         return kv.get(key, "").lower() == "true"
 
-    try:
-        confidence = float(kv.get("CONFIDENCE", "0.5"))
-    except (TypeError, ValueError):
-        confidence = 0.5
-    confidence = max(0.0, min(1.0, confidence))
-
     result = {
         "needs_review": _to_bool("NEEDS_REVIEW"),
-        "confidence": confidence,
         "reasoning": kv.get("REASONING", "Judge analysis complete"),
         "missing_elements": _split_list("MISSING_ELEMENTS"),
         "strengths": _split_list("STRENGTHS"),
@@ -144,7 +136,7 @@ Retournez un objet JSON:
 3. Priorisez les SENSATIONS manquantes comme signal fort qu'une analyse est nécessaire
 4. Si vous êtes INCERTAIN (confidence < 0.6), acceptez que l'analyse soit utile
 5. Calculez needs_review = True si:
-   - (confidence < 0.6) OU (au moins 2 éléments manquent) OU (aucune sensation mentionnée)
+   - (au moins 2 éléments manquent) OU (aucune sensation mentionnée)
 
 Analysez maintenant cette élicitation:"""
 
@@ -181,7 +173,6 @@ async def judge_elicitation(
         logger.info("Transcription too short, needs review")
         return {
             "needs_review": True,
-            "confidence": 1.0,
             "reasoning": "Transcription too short to be sufficiently complete",
             "missing_elements": ["all dimensions"],
             "strengths": [],
@@ -228,7 +219,6 @@ Transcription: {transcription}
                     # If judge fails, default to requiring review (safer)
                     return {
                         "needs_review": True,
-                        "confidence": 0.5,
                         "reasoning": "Judge service error - defaulting to review",
                         "missing_elements": [],
                         "strengths": [],
@@ -241,7 +231,6 @@ Transcription: {transcription}
                     logger.error("No choices in Fireworks response")
                     return {
                         "needs_review": True,
-                        "confidence": 0.5,
                         "reasoning": "Judge service returned empty response",
                         "missing_elements": [],
                         "strengths": [],
@@ -257,7 +246,6 @@ Transcription: {transcription}
                     logger.error(f"Failed to parse judge keyed response: {content}")
                     return {
                         "needs_review": True,
-                        "confidence": 0.5,
                         "reasoning": "Could not parse judge decision",
                         "missing_elements": [],
                         "strengths": [],
@@ -266,8 +254,6 @@ Transcription: {transcription}
                 # Validate required fields
                 if "needs_review" not in judge_result:
                     judge_result["needs_review"] = True  # Default to safety
-                if "confidence" not in judge_result:
-                    judge_result["confidence"] = 0.5
                 if "reasoning" not in judge_result:
                     judge_result["reasoning"] = "Judge analysis complete"
                 if "missing_elements" not in judge_result:
@@ -275,14 +261,8 @@ Transcription: {transcription}
                 if "strengths" not in judge_result:
                     judge_result["strengths"] = []
 
-                # Ensure confidence is in valid range
-                judge_result["confidence"] = max(
-                    0.0, min(1.0, float(judge_result["confidence"]))
-                )
-
                 logger.info(
-                    f"Judge decision: needs_review={judge_result['needs_review']}, "
-                    f"confidence={judge_result['confidence']}"
+                    f"Judge decision: needs_review={judge_result['needs_review']}"
                 )
 
                 return judge_result
@@ -292,7 +272,6 @@ Transcription: {transcription}
         # Default to review on network errors
         return {
             "needs_review": True,
-            "confidence": 0.5,
             "reasoning": f"Network error: {e}",
             "missing_elements": [],
             "strengths": [],
@@ -301,7 +280,6 @@ Transcription: {transcription}
         logger.error(f"Unexpected error in judge: {e}")
         return {
             "needs_review": True,
-            "confidence": 0.5,
             "reasoning": f"Judge error: {e}",
             "missing_elements": [],
             "strengths": [],

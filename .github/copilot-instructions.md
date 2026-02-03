@@ -26,6 +26,20 @@ python main.py
 - No local Whisper model - all transcription is cloud-based via Fireworks.ai
 - Database auto-migrates on startup (SQLite async via aiosqlite in `chroma_langchain_db/annotations.db`)
 
+### Database Migration System
+**Single unified system**: `backend/migration.py` (6 idempotent migrations, ~500 lines)
+```bash
+python backend/migration.py              # Run all pending migrations (auto-runs on start.bat)
+python backend/migration.py --check      # Dry-run: show what would happen
+python backend/migration.py --reset      # DANGER: Delete and recreate database
+```
+**Key principle**: All migrations check if columns exist before adding (idempotent, safe to run multiple times)
+**To add new migration**: 
+1. Define `def migration_NNN_name(cursor) -> str` in `migration.py`
+2. Register in `MIGRATIONS` list: `("NNN_name", migration_NNN_name)`
+3. Run `python migration.py`
+See `MIGRATION_GUIDE.md` for complete documentation
+
 ## Architecture Deep Dive
 
 ### Backend Module Import Pattern
@@ -219,6 +233,200 @@ pip install sqlite-web
 sqlite_web data/annotations.db
 ```
 
+## API Endpoints Reference
+
+**34 endpoints across 6 resource groups. All async, use FastAPI dependency injection for sessions.**
+
+### Health & Frontend (2 endpoints)
+- `GET /` - Serve index.html frontend application
+- `GET /api/health` - Health check with whisper model info
+
+### Video Management (8 endpoints)
+- `POST /api/videos/upload` - Upload video file (multipart/form-data) - returns VideoResponse
+- `GET /api/videos` - List all videos with pagination
+- `GET /api/videos/{video_id}` - Get video metadata
+- `GET /api/videos/{video_id}/file` - Stream video file (supports range requests)
+- `PUT /api/videos/{video_id}` - Update video metadata (project_id, batch_position, craft, task)
+- `DELETE /api/videos/{video_id}` - Delete video and associated annotations
+- `GET /api/videos/local/browse?directory=C:\path` - Browse local filesystem for videos
+- `POST /api/videos/local/register` - Register local video file without copying (see `is_local` flag)
+
+### Project Management (6 endpoints)
+- `POST /api/projects` - Create new dataset project (name, description)
+- `GET /api/projects` - List all projects with video counts
+- `GET /api/projects/{project_id}` - Get project details
+- `GET /api/projects/{project_id}/videos` - List videos in project (ordered by batch_position)
+- `PUT /api/projects/{project_id}` - Update project (name, description)
+- `DELETE /api/projects/{project_id}` - Delete project and unlink videos
+
+### Tag Management (2 endpoints)
+- `GET /api/tags` - List all tags with usage counts and categories
+- `GET /api/tags/{tag_name}` - Get single tag details (name, category, usage_count)
+
+### Task Taxonomy (3 endpoints)
+- `GET /api/tasks?craft=jewelry&published=1` - List tasks filtered by craft/publish status
+- `POST /api/tasks` - Create new task (name, craft, description, is_published)
+- `DELETE /api/tasks/{task_name}?craft=jewelry` - Delete task for specific craft
+
+### Annotation Management (8 endpoints)
+- `POST /api/annotations` - Create annotation with audio recording (multipart: video_id, start_time, end_time, audio_blob, craft, task) - **auto-triggers transcription**
+- `GET /api/annotations` - List annotations (paginated, can filter by video_id)
+- `GET /api/annotations/{annotation_id}` - Get annotation details with all pipeline results
+- `PUT /api/annotations/{annotation_id}` - Update annotation (transcription, craft, task, feedback, etc.)
+- `DELETE /api/annotations/{annotation_id}` - Delete annotation and audio file
+- `POST /api/annotations/{annotation_id}/feedback` - Submit thumbs up/down feedback with choice array
+- `POST /api/annotations/{annotation_id}/review` - **Manually trigger AI review** (multi-dimensional assessment + salience)
+- `POST /api/annotations/{annotation_id}/tags` - **Manually trigger tagging** (extract metadata)
+
+### Maintenance & Diagnostics (3 endpoints)
+- `POST /api/maintenance/auto-trigger-tagging` - Run tagging on all annotations with needs_review=true
+- `POST /api/maintenance/deduplicate-tags` - Merge duplicate tags and update annotation references
+- `GET /api/diagnostics/tagging-fireworks` - Debug endpoint: show last Fireworks API request/response for tagging
+
+### Export (1 endpoint)
+- `GET /api/export/{video_id}` - Export all annotations for video as JSON with full pipeline results
+
+## Testing New Services Before Integration
+
+**Pattern for validating new AI services before merging into main pipeline:**
+
+### 1. **Unit Test in Python REPL** (No database needed)
+```python
+# From backend/ directory
+cd backend
+python
+
+# Import and test function synchronously
+from new_service import analyze_something
+
+# Test with French text (project uses French)
+result = await analyze_something("Expert décrit la technique...")
+assert result["confidence"] > 0.5  # Check expected output structure
+print(result)
+```
+
+### 2. **Integration Test with Real Annotation** (Full pipeline)
+```python
+# From backend/ directory
+import asyncio
+from database import AsyncSessionLocal
+from new_service import analyze_something_async
+
+async def test():
+    # Get real annotation with transcription
+    async with AsyncSessionLocal() as session:
+        annotation = await db.get_annotation(session, 123)  # Use real annotation ID
+        
+        result = await analyze_something_async(annotation.transcription)
+        print(f"Result: {result}")
+        
+        # Verify JSON serializable (will be stored in database)
+        import json
+        json_str = json.dumps(result)
+        print(f"Serialized: {json_str}")
+
+asyncio.run(test())
+```
+
+### 3. **WebSocket Broadcasting Validation** (Real-time frontend updates)
+```python
+# In main.py, add temporary debugging code:
+async def process_new_service(annotation_id: int, transcription: str):
+    try:
+        # Broadcast "processing" status
+        await manager.broadcast({
+            "type": "new_service_status",
+            "status": "processing",
+            "annotation_id": annotation_id
+        })
+        
+        # Run service
+        result = await new_service_function(transcription)
+        
+        # Broadcast results
+        await manager.broadcast({
+            "type": "new_service_complete",
+            "annotation_id": annotation_id,
+            "results": result  # Frontend expects this structure
+        })
+    except Exception as e:
+        await manager.broadcast({
+            "type": "new_service_error",
+            "annotation_id": annotation_id,
+            "error": str(e)
+        })
+```
+
+### 4. **Database Serialization** (JSON fields must be valid)
+```python
+# All complex fields stored as JSON strings, not objects
+import json
+from models import AnnotationUpdate
+
+# ✅ CORRECT - serialize to JSON string before storing
+update_data = models.AnnotationUpdate(
+    new_service_results=json.dumps({"tier": 1, "score": 85})
+)
+
+# ❌ WRONG - passing dict directly
+# update_data = models.AnnotationUpdate(new_service_results={"tier": 1})  # FAILS
+```
+
+### 5. **Idempotency Check** (Service must be safe to re-run)
+```python
+# Service should handle:
+# - Already processed annotations (check status != "pending")
+# - Partial results from previous failures
+# - Re-running with same input produces same output
+
+# Before adding to background pipeline, verify:
+# 1. Multiple runs with same input → same output
+# 2. No side effects (no file deletions, external API side effects)
+# 3. Can safely interrupt and resume
+```
+
+### 6. **Performance Baseline** (Don't block UI)
+```python
+import time
+
+# Measure execution time
+start = time.time()
+result = await new_service(test_transcription)
+elapsed = time.time() - start
+
+print(f"Processing time: {elapsed:.2f}s")
+
+# ✅ Good: < 5 seconds (non-blocking background task)
+# ⚠️  Warning: 5-30 seconds (background task, may timeout)
+# ❌ Bad: > 30 seconds (exceeds typical WebSocket timeout)
+```
+
+### 7. **Error Handling** (Consistent with project patterns)
+```python
+# Follow the project error handling pattern:
+try:
+    result = await my_service(text)
+except HTTPException:
+    raise  # FastAPI exceptions pass through
+except Exception as e:
+    logger.error(f"Service error: {e}")
+    raise HTTPException(status_code=500, detail=str(e))
+
+# For background tasks (no HTTP response):
+# Catch all exceptions and broadcast error via WebSocket
+```
+
+### Checklist Before Integrating into Pipeline
+- ✅ Output structure documented (expected keys, types)
+- ✅ Handles French text correctly (no ASCII-only assumptions)
+- ✅ JSON serializable results (no datetime, custom objects)
+- ✅ Idempotent (safe to re-run)
+- ✅ Performance baseline < 30 seconds per annotation
+- ✅ Error messages logged and broadcast via WebSocket
+- ✅ Database migration added if new columns needed (see MIGRATION_GUIDE.md)
+- ✅ Frontend handler added for WebSocket messages (js/app.js)
+- ✅ Tested with real annotations and Fireworks API (not mocked)
+
 ## Project-Specific Conventions
 
 ### French Language Context
@@ -257,9 +465,10 @@ backend/
 ├── judge_service.py   # LLM judge (needs_review decision)
 ├── review_service.py  # Multi-dimensional review + salience
 ├── tagging_service.py # Tag extraction (5 categories)
+├── task_detector_service.py # Auto-detect tasks from transcription
+├── migration.py       # Unified migration system (6 idempotent migrations) ← IMPORTANT: NEW SYSTEM
 ├── llm_service.py     # Legacy extended transcript service (deprecated)
-├── migrate_db.py      # Auto-migration script (reads models.py)
-└── migrate_*.py       # Individual migration scripts (historical)
+└── test_imports.py    # Quick test for imports and basic setup
 
 chroma_langchain_db/   # Database location
 └── annotations.db     # SQLite database (auto-created/migrated)
@@ -272,8 +481,8 @@ data/                  # Git-ignored runtime data
 .venv/                 # Python virtual environment (created by start.bat)
 
 evaluation/            # Testing data and results (not actively used)
-MIGRATIONS.md          # Database migration documentation
-IMPLEMENTATION_GUIDE.md # Backend implementation details (may be outdated)
+MIGRATION_GUIDE.md     # Database migration documentation (NEW)
+MIGRATION_QUICK_REFERENCE.md # Developer cheat sheet for migrations (NEW)
 ```
 
 ### Error Handling Pattern
@@ -367,26 +576,29 @@ API: `GET /api/tasks?craft=jewelry&published=1`, `POST /api/tasks`, `DELETE /api
 - `backend/judge_service.py` - Completeness assessment (needs_review decision)
 - `backend/review_service.py` - Multi-dimensional review + salience detection (HOW/EVAL/FEEDBACK)
 - `backend/tagging_service.py` - Tag extraction (5 categories for RAG)
+- `backend/task_detector_service.py` - Auto-detect tasks from transcription (NEW)
+- `backend/migration.py` - **UNIFIED migration system** (replaces scattered migrate_*.py files) - NEW
 - `backend/llm_service.py` - LEGACY extended transcript service (not used in current pipeline)
 - `backend/transcription.py` - Fireworks Whisper API client
-- `backend/migrate_db.py` - Auto-migration script (reads models.py, applies schema changes)
 - `js/app.js` - Complete frontend logic (~2500 lines - search for function names like `loadVideos`, `updateReviewResults`)
 - `start.bat` - Windows startup script (venv, deps, migration, server launch)
-- `MIGRATIONS.md` - Database migration system documentation
-- `IMPLEMENTATION_GUIDE.md` - Backend implementation details (may be outdated - check git blame)
+- `MIGRATION_GUIDE.md` - Database migration system documentation (NEW - comprehensive guide)
+- `MIGRATION_QUICK_REFERENCE.md` - Quick reference for adding migrations (NEW - copy-paste examples)
+- `MIGRATION_DOCS.md` - Documentation index for migration system (NEW)
 
 ## Avoiding Common Mistakes
 
 1. **Don't import backend modules with package notation** - use `import module` not `from backend import module`
 2. **Don't forget asyncio.create_task()** for background processing - blocks UX otherwise
 3. **Don't use db.get_session() in background tasks** - create new session with `AsyncSessionLocal()`
-4. **Don't modify annotations.db directly** - auto-migration handles schema changes (run `migrate_db.py`)
+4. **Don't manually modify annotations.db** - let unified `migration.py` handle schema changes (auto-runs on start.bat)
 5. **Port is 8005 not 8000** - check `backend/config.py` lines 28-29
 6. **Don't return JSON from LLM** - use key-value format (see `review_service.py` for pattern)
 7. **Don't skip WebSocket broadcasts** - frontend relies on real-time updates for all AI services
 8. **Database is in chroma_langchain_db/** not `elicitations_db/` - check `config.py` DATABASE_URL
 9. **Frontend expects JSON strings for complex fields** - serialize `tags`, `judge_decision`, `review_results` before storing
 10. **LLM temperature is 1, max_tokens is 4096** - changed from earlier versions (0.9 / 360 tokens)
+11. **Don't edit individual migration files** - use unified `backend/migration.py` system instead
 
 ## Testing Approach
 - No automated test suite - use manual testing with real audio/video
