@@ -338,6 +338,7 @@ def run_migrations(db_path: Path = DB_PATH) -> bool:
 
     logger.info(f"Checking database at: {db_path}")
 
+    conn = None
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
@@ -385,7 +386,8 @@ def run_migrations(db_path: Path = DB_PATH) -> bool:
 
     finally:
         try:
-            conn.close()
+            if conn is not None:
+                conn.close()
         except:
             pass
 
@@ -418,6 +420,7 @@ def check_migrations(db_path: Path = DB_PATH) -> bool:
         logger.warning(f"Database does not exist: {db_path}")
         return False
 
+    conn = None
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
@@ -439,7 +442,11 @@ def check_migrations(db_path: Path = DB_PATH) -> bool:
         return False
 
     finally:
-        conn.close()
+        try:
+            if conn is not None:
+                conn.close()
+        except:
+            pass
 
 
 def main():
