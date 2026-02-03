@@ -67,7 +67,7 @@ if not exist "data\exports" mkdir data\exports
 REM Run database migrations
 echo Running database migrations...
 cd backend
-python migrate_db.py
+python migration.py
 if errorlevel 1 (
     echo WARNING: Database migration had issues
     echo The server will still start, but some features may not work
