@@ -979,7 +979,7 @@ function renderAnnotations() {
                         ? JSON.parse(annotation.judge_decision) 
                         : annotation.judge_decision;
                     
-                    if (judge.needs_review === false && judge.confidence > 0.75) {
+                    if (judge.needs_review === false) {
                         // Judge says review not needed - show manual button with hint
                         const manualTriggerHtml = `
                             <div class="judge-decision">
@@ -992,8 +992,7 @@ function renderAnnotations() {
                                     Force Review
                                 </button>
                                 <div class="judge-reasoning" style="display: none;">
-                                    <strong>Assessment:</strong> ${judge.reasoning}<br/>
-                                    <strong>Confidence:</strong> ${(judge.confidence * 100).toFixed(0)}%
+                                    <strong>Assessment:</strong> ${judge.reasoning}
                                 </div>
                             </div>
                         `;
@@ -1109,7 +1108,7 @@ function renderAnnotations() {
                         (${duration.toFixed(1)}s)
                     </span>
                     ${annotation.detected_task && annotation.detected_task_confidence >= 0.5 ? `
-                        <span class="detected-task-badge" title="Detected task (confidence: ${(annotation.detected_task_confidence * 100).toFixed(0)}%)">
+                        <span class="detected-task-badge" title="Detected task">
                             <strong>${annotation.detected_task}</strong>
                         </span>
                     ` : ''}
@@ -1128,6 +1127,10 @@ function renderAnnotations() {
             </div>
             <div class="annotation-transcription">
                 ${annotation.transcription || '<em>Transcription pending...</em>'}
+            </div>
+            <div class="annotation-task-row">
+                <label for="task-${annotation.id}">Task:</label>
+                <input type="text" id="task-${annotation.id}" class="annotation-task-input" value="${annotation.task || ''}" placeholder="Enter or edit task" onchange="updateAnnotationTask(${annotation.id}, this.value)">
             </div>
             <div class="annotation-status-row">
                 <div class="annotation-status ${statusClass}">
@@ -1446,6 +1449,38 @@ function updateAnnotationTranscription(annotationId, transcription) {
         annotation.transcription_status = 'completed';
         renderAnnotations();
         renderTimeline();
+    }
+}
+
+async function updateAnnotationTask(annotationId, newTask) {
+    try {
+        const payload = { task: newTask || null };
+
+        const response = await fetch(`${API_BASE}/api/annotations/${annotationId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(errText || 'Failed to save task');
+        }
+
+        const updated = await response.json();
+
+        // Update local state
+        const annotation = state.annotations.find(a => a.id === annotationId);
+        if (annotation) {
+            annotation.task = updated.task;
+            annotation.updated_at = updated.updated_at;
+        }
+
+        showToast('Saved', 'Task updated', 'success');
+
+    } catch (error) {
+        console.error('Error saving task:', error);
+        showToast('Error', 'Failed to save task', 'error');
     }
 }
 
