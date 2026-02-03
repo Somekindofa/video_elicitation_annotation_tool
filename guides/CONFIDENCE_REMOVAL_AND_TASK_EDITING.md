@@ -1,15 +1,15 @@
-# Confidence Score Removal & Task Editing Feature
+# Confidence Score Removal & Task Badge Editing Feature
 
 **Date**: February 3, 2026  
 **Status**: Active  
-**Changes**: Judge service simplification + Task field editability
+**Changes**: Judge service simplification + Task badge inline editing
 
 ## Overview
 
 Two key improvements to the annotation interface:
 
 1. **Removed untrustworthy confidence metric** from judge service
-2. **Added editable task field** for user control over task assignment
+2. **Made detected-task-badge editable** for user control over task assignment
 
 ## Problem Solved
 
@@ -29,10 +29,14 @@ The judge service was returning a LLM-generated `confidence` value (0.0-1.0) whi
 ### Task Assignment
 Previously, task was:
 - Only auto-detected by LLM (`detected_task`)
-- Not directly editable by user
+- Shown in badge but not editable
 - User had to accept AI suggestion or leave blank
 
-**Solution**: Added inline task editing field that users can modify at any time
+**Solution**: Made the detected-task-badge clickable for inline editing
+- Click badge to edit the task name
+- Saves user's override in `annotation.task` field
+- Badge shows `task || detected_task` (prefer user override, fall back to AI detection)
+- Empty state shows "Add task..." if no task detected
 
 ## Changes Made
 
@@ -75,44 +79,74 @@ Previously, task was:
    if (judge.needs_review === false)
    ```
 
-3. **Added task editing row** (line ~1132-1134):
-   ```html
-   <div class="annotation-task-row">
-       <label for="task-${annotation.id}">Task:</label>
-       <input type="text" id="task-${annotation.id}" 
-              class="annotation-task-input" 
-              value="${annotation.task || ''}" 
-              placeholder="Enter or edit task" 
-              onchange="updateAnnotationTask(${annotation.id}, this.value)">
-   </div>
+3. **Made detected-task-badge editable** (line ~1111):
+   ```javascript
+   // BEFORE:
+   <span class="detected-task-badge" title="Detected task">
+       <strong>${annotation.detected_task}</strong>
+   </span>
+   
+   // AFTER:
+   <span class="detected-task-badge editable" 
+         onclick="startEditTask(${annotation.id})"
+         title="Click to edit task">
+       <strong id="task-display-${annotation.id}">
+           ${annotation.task || annotation.detected_task}
+       </strong>
+       <i class="fas fa-pencil-alt task-edit-icon"></i>
+   </span>
    ```
 
-4. **Added task update function** (new function):
-   ```javascript
-   async function updateAnnotationTask(annotationId, newTask) {
-       // Sends PUT /api/annotations/{id} with { task: newTask }
-       // Updates state and shows success/error toast
-   }
-   ```
+4. **Added inline task editing functions** (new functions):
+   - `startEditTask(annotationId)` - Creates inline editor on badge click
+   - `createTaskEditor(badgeElement, annotationId, currentTask)` - Builds the input/save/cancel UI
+   - `saveTaskEdit(annotationId, newTask)` - Saves via PUT request
+   - `cancelTaskEdit(annotationId)` - Closes editor without saving
 
 ### Frontend Styling: `css/styles.css`
 
-Added `.annotation-task-row` and `.annotation-task-input` styles:
+**Updated `.detected-task-badge` to support editing**:
 ```css
-.annotation-task-row {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-sm);
-    margin-bottom: var(--spacing-sm);
-    font-size: 0.875rem;
+.detected-task-badge.editable {
+    cursor: pointer;
+    position: relative;
+    padding-right: 2rem; /* Space for edit icon */
 }
 
-.annotation-task-input {
-    flex: 1;
-    padding: 0.4rem 0.6rem;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    /* ... focus states ... */
+.detected-task-badge.editable .task-edit-icon {
+    margin-left: 0.5rem;
+    opacity: 0.7;
+    font-size: 0.7rem;
+}
+
+.detected-task-badge.editable:hover .task-edit-icon {
+    opacity: 1; /* Show edit icon clearly on hover */
+}
+```
+
+**Added inline editor styles**:
+```css
+.detected-task-badge.task-editor {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    background-color: var(--surface);
+    border: 2px solid var(--primary-color);
+}
+
+.task-edit-input {
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.25rem;
+    min-width: 150px;
+}
+
+.task-edit-save, .task-edit-cancel {
+    /* Icon buttons for save/cancel */
 }
 ```
 
@@ -162,28 +196,37 @@ The `task` field was already supported in `AnnotationUpdate` schema - no new end
 ### Before
 1. Judge shows "AI found this elicitation complete" + 85% confidence
 2. User confused: "Why only 85%? Is it safe to trust?"
-3. Task is auto-detected, user cannot change it easily
+3. Task badge shows AI-detected task but is not editable
+4. User cannot override incorrect task detection
 
 ### After
 1. Judge shows "AI found this elicitation complete"
 2. No false confidence metric
 3. User can see confidence doesn't matter - judge either says needs review or doesn't
-4. **New**: Task field is visible and directly editable
-5. User can click on task input and type/modify the task name
-6. Changes auto-save on blur/enter
+4. **New**: Task badge is clickable with edit icon
+5. User clicks badge → inline editor appears with input field
+6. User types new task name, presses Enter or clicks checkmark
+7. Changes auto-save and badge updates immediately
+8. If no task detected, shows "Add task..." placeholder
 
 ## Testing Checklist
 
 - [ ] Verify judge responses no longer include confidence in WebSocket messages
 - [ ] Verify UI doesn't display confidence score anymore
-- [ ] Verify task field appears in annotation view
-- [ ] Try editing task name - should auto-save
+- [ ] Verify detected-task-badge shows edit icon on hover
+- [ ] Click badge → inline editor should appear
+- [ ] Type new task name and press Enter → should save
+- [ ] Click checkmark button → should save
+- [ ] Click X button → should cancel without saving
+- [ ] Press Escape key → should cancel
 - [ ] Verify task persists after page reload
 - [ ] Verify error toast appears if task update fails
 - [ ] Verify success toast appears after task update
 - [ ] Test empty task (clearing the field)
 - [ ] Test special characters in task name
-- [ ] Verify detected_task still appears as badge (separate from editable task)
+- [ ] Verify detected_task still auto-populates badge
+- [ ] Verify user override (`task`) takes priority over `detected_task`
+- [ ] Test "Add task..." placeholder when no task exists
 
 ## Browser Console Debugging
 
