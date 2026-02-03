@@ -1107,9 +1107,12 @@ function renderAnnotations() {
                         ${formatTime(annotation.start_time)} - ${formatTime(annotation.end_time)}
                         (${duration.toFixed(1)}s)
                     </span>
-                    ${annotation.detected_task && annotation.detected_task_confidence >= 0.5 ? `
-                        <span class="detected-task-badge" title="Detected task">
-                            <strong>${annotation.detected_task}</strong>
+                    ${annotation.task || annotation.detected_task ? `
+                        <span class="detected-task-badge editable" 
+                              onclick="startEditTask(${annotation.id})"
+                              title="Click to edit task">
+                            <strong id="task-display-${annotation.id}">${annotation.task || annotation.detected_task}</strong>
+                            <i class="fas fa-pencil-alt task-edit-icon"></i>
                         </span>
                     ` : ''}
                 </div>
@@ -1127,10 +1130,6 @@ function renderAnnotations() {
             </div>
             <div class="annotation-transcription">
                 ${annotation.transcription || '<em>Transcription pending...</em>'}
-            </div>
-            <div class="annotation-task-row">
-                <label for="task-${annotation.id}">Task:</label>
-                <input type="text" id="task-${annotation.id}" class="annotation-task-input" value="${annotation.task || ''}" placeholder="Enter or edit task" onchange="updateAnnotationTask(${annotation.id}, this.value)">
             </div>
             <div class="annotation-status-row">
                 <div class="annotation-status ${statusClass}">
@@ -1452,7 +1451,99 @@ function updateAnnotationTranscription(annotationId, transcription) {
     }
 }
 
-async function updateAnnotationTask(annotationId, newTask) {
+// Inline task editing
+function startEditTask(annotationId) {
+    const badge = document.querySelector(`#task-display-${annotationId}`);
+    if (!badge) {
+        // Empty state - create input in badge's parent
+        const emptyBadge = event.target.closest('.detected-task-badge');
+        if (!emptyBadge) return;
+        
+        const annotation = state.annotations.find(a => a.id === annotationId);
+        const currentTask = annotation?.task || annotation?.detected_task || '';
+        
+        createTaskEditor(emptyBadge, annotationId, currentTask);
+        return;
+    }
+
+    // Prevent multiple editors
+    if (document.querySelector(`.task-editor-${annotationId}`)) return;
+
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    const currentTask = annotation?.task || annotation?.detected_task || '';
+
+    const badgeParent = badge.closest('.detected-task-badge');
+    createTaskEditor(badgeParent, annotationId, currentTask);
+}
+
+function createTaskEditor(badgeElement, annotationId, currentTask) {
+    // Hide the badge
+    badgeElement.style.display = 'none';
+
+    // Create editor
+    const editor = document.createElement('span');
+    editor.className = `detected-task-badge task-editor task-editor-${annotationId}`;
+    
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'task-edit-input';
+    input.value = currentTask;
+    input.placeholder = 'Enter task name';
+    
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'task-edit-save';
+    saveBtn.innerHTML = '<i class="fas fa-check"></i>';
+    saveBtn.title = 'Save';
+    
+    const clearBtn = document.createElement('button');
+    clearBtn.className = 'task-edit-clear';
+    clearBtn.innerHTML = '<i class="fas fa-trash"></i>';
+    clearBtn.title = 'Clear task';
+    
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'task-edit-cancel';
+    cancelBtn.innerHTML = '<i class="fas fa-times"></i>';
+    cancelBtn.title = 'Cancel';
+    
+    // Event handlers
+    saveBtn.onclick = (e) => {
+        e.stopPropagation();
+        saveTaskEdit(annotationId, input.value.trim());
+    };
+    
+    clearBtn.onclick = (e) => {
+        e.stopPropagation();
+        if (confirm('Clear this task?')) {
+            saveTaskEdit(annotationId, null);
+        }
+    };
+    
+    cancelBtn.onclick = (e) => {
+        e.stopPropagation();
+        cancelTaskEdit(annotationId);
+    };
+    
+    input.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            saveTaskEdit(annotationId, input.value.trim());
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            cancelTaskEdit(annotationId);
+        }
+    };
+    
+    editor.appendChild(input);
+    editor.appendChild(saveBtn);
+    editor.appendChild(clearBtn);
+    editor.appendChild(cancelBtn);
+    
+    badgeElement.parentNode.insertBefore(editor, badgeElement.nextSibling);
+    input.focus();
+    input.select();
+}
+
+async function saveTaskEdit(annotationId, newTask) {
     try {
         const payload = { task: newTask || null };
 
@@ -1476,11 +1567,34 @@ async function updateAnnotationTask(annotationId, newTask) {
             annotation.updated_at = updated.updated_at;
         }
 
+        // Remove editor and re-render
+        renderAnnotations();
+        renderTimeline();
         showToast('Saved', 'Task updated', 'success');
 
     } catch (error) {
         console.error('Error saving task:', error);
         showToast('Error', 'Failed to save task', 'error');
+        cancelTaskEdit(annotationId);
+    }
+}
+
+function cancelTaskEdit(annotationId) {
+    const editor = document.querySelector(`.task-editor-${annotationId}`);
+    if (editor) {
+        editor.remove();
+    }
+    
+    // Show the badge again
+    const badge = document.querySelector(`#task-display-${annotationId}`)?.closest('.detected-task-badge');
+    if (badge) {
+        badge.style.display = '';
+    } else {
+        // Empty state badge
+        const emptyBadge = document.querySelector(`.detected-task-badge.empty`);
+        if (emptyBadge) {
+            emptyBadge.style.display = '';
+        }
     }
 }
 
