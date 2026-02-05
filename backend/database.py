@@ -9,7 +9,7 @@ from sqlalchemy.future import select
 from sqlalchemy import func
 from datetime import datetime, timezone
 
-from models import Base, Project, Video, Annotation, Tag, Task, ProjectCreate, ProjectUpdate, VideoCreate, AnnotationCreate, AnnotationUpdate, TagCreate, TaskCreate
+from models import Base, Project, Video, Annotation, Tag, Task, VideoSegment, ProjectCreate, ProjectUpdate, VideoCreate, AnnotationCreate, AnnotationUpdate, TagCreate, TaskCreate, VideoSegmentCreate, VideoSegmentUpdate
 from config import DATABASE_URL
 
 
@@ -86,6 +86,62 @@ async def delete_video(session: AsyncSession, video_id: int) -> bool:
     return False
 
 
+# VideoSegment CRUD Operations
+
+async def create_video_segment(session: AsyncSession, segment_data: VideoSegmentCreate) -> VideoSegment:
+    """Create a new video segment"""
+    segment = VideoSegment(**segment_data.model_dump())
+    session.add(segment)
+    await session.commit()
+    await session.refresh(segment)
+    return segment
+
+
+async def get_video_segment(session: AsyncSession, segment_id: int) -> Optional[VideoSegment]:
+    """Get a video segment by ID"""
+    result = await session.execute(
+        select(VideoSegment).where(VideoSegment.id == segment_id)
+    )
+    return result.scalar_one_or_none()
+
+
+async def get_video_segments(session: AsyncSession, video_id: int) -> List[VideoSegment]:
+    """Get all segments for a specific video"""
+    result = await session.execute(
+        select(VideoSegment)
+        .where(VideoSegment.parent_video_id == video_id)
+        .order_by(VideoSegment.start_time)
+    )
+    return list(result.scalars().all())
+
+
+async def update_video_segment(
+    session: AsyncSession, 
+    segment_id: int, 
+    segment_update: VideoSegmentUpdate
+) -> Optional[VideoSegment]:
+    """Update a video segment"""
+    segment = await get_video_segment(session, segment_id)
+    if segment:
+        update_data = segment_update.model_dump(exclude_unset=True, exclude_none=False)
+        for field, value in update_data.items():
+            setattr(segment, field, value)
+        segment.updated_at = datetime.now(timezone.utc)
+        await session.commit()
+        await session.refresh(segment)
+    return segment
+
+
+async def delete_video_segment(session: AsyncSession, segment_id: int) -> bool:
+    """Delete a video segment"""
+    segment = await get_video_segment(session, segment_id)
+    if segment:
+        await session.delete(segment)
+        await session.commit()
+        return True
+    return False
+
+
 # Annotation CRUD Operations
 
 async def create_annotation(session: AsyncSession, annotation_data: AnnotationCreate) -> Annotation:
@@ -130,7 +186,8 @@ async def update_annotation(
     """Update an annotation"""
     annotation = await get_annotation(session, annotation_id)
     if annotation:
-        update_data = annotation_update.model_dump(exclude_unset=True)
+        # Use exclude_unset=True but keep explicitly set None values
+        update_data = annotation_update.model_dump(exclude_unset=True, exclude_none=False)
         for field, value in update_data.items():
             setattr(annotation, field, value)
         annotation.updated_at = datetime.now(timezone.utc)

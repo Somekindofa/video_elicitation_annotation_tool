@@ -420,6 +420,123 @@ async def delete_video(video_id: int, session: AsyncSession = Depends(db.get_ses
 
 
 # ============================================================================
+# VIDEO SEGMENT ENDPOINTS
+# ============================================================================
+
+
+@app.post("/api/segments", response_model=models.VideoSegmentResponse)
+async def create_segment(
+    segment_data: models.VideoSegmentCreate,
+    session: AsyncSession = Depends(db.get_session)
+):
+    """Create a new video segment"""
+    try:
+        # Verify parent video exists
+        video = await db.get_video(session, segment_data.parent_video_id)
+        if not video:
+            raise HTTPException(status_code=404, detail="Parent video not found")
+        
+        # Validate time range
+        if segment_data.start_time >= segment_data.end_time:
+            raise HTTPException(status_code=400, detail="Start time must be before end time")
+        
+        if video.duration and segment_data.end_time > video.duration:
+            raise HTTPException(status_code=400, detail="End time exceeds video duration")
+        
+        segment = await db.create_video_segment(session, segment_data)
+        logger.info(f"Video segment created: ID={segment.id}, parent_video_id={segment.parent_video_id}")
+        
+        return models.VideoSegmentResponse.model_validate(segment)
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating video segment: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/segments/video/{video_id}", response_model=List[models.VideoSegmentResponse])
+async def list_video_segments(
+    video_id: int,
+    session: AsyncSession = Depends(db.get_session)
+):
+    """List all segments for a specific video"""
+    try:
+        segments = await db.get_video_segments(session, video_id)
+        return [models.VideoSegmentResponse.model_validate(s) for s in segments]
+    except Exception as e:
+        logger.error(f"Error listing video segments: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/segments/{segment_id}", response_model=models.VideoSegmentResponse)
+async def get_segment(
+    segment_id: int,
+    session: AsyncSession = Depends(db.get_session)
+):
+    """Get a specific video segment"""
+    try:
+        segment = await db.get_video_segment(session, segment_id)
+        if not segment:
+            raise HTTPException(status_code=404, detail="Segment not found")
+        return models.VideoSegmentResponse.model_validate(segment)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting video segment: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/segments/{segment_id}", response_model=models.VideoSegmentResponse)
+async def update_segment(
+    segment_id: int,
+    segment_update: models.VideoSegmentUpdate,
+    session: AsyncSession = Depends(db.get_session)
+):
+    """Update a video segment"""
+    try:
+        segment = await db.update_video_segment(session, segment_id, segment_update)
+        if not segment:
+            raise HTTPException(status_code=404, detail="Segment not found")
+        
+        logger.info(f"Video segment updated: ID={segment_id}")
+        return models.VideoSegmentResponse.model_validate(segment)
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating video segment: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/segments/{segment_id}")
+async def delete_segment(
+    segment_id: int,
+    session: AsyncSession = Depends(db.get_session)
+):
+    """Delete a video segment"""
+    try:
+        segment = await db.get_video_segment(session, segment_id)
+        if not segment:
+            raise HTTPException(status_code=404, detail="Segment not found")
+        
+        # Delete thumbnail file if exists
+        if segment.thumbnail_path and os.path.exists(segment.thumbnail_path):
+            os.remove(segment.thumbnail_path)
+        
+        await db.delete_video_segment(session, segment_id)
+        logger.info(f"Video segment deleted: ID={segment_id}")
+        
+        return {"status": "success", "message": "Segment deleted"}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting video segment: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
 # LOCAL VIDEO ENDPOINTS
 # ============================================================================
 

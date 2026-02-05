@@ -23,7 +23,13 @@ const state = {
     tasks: [],
     task: '',
     sortBy: 'newest',
-    showReviewPanels: {}  // Track which annotation review panels are visible (defaults to hidden)
+    showReviewPanels: {},  // Track which annotation review panels are visible (defaults to hidden)
+    // Segmentation state
+    segmentVideoId: null,
+    segmentVideoElement: null,
+    segments: [],
+    segmentStartTime: null,
+    segmentEndTime: null
 };
 
 // API Base URL
@@ -653,7 +659,7 @@ async function loadVideos() {
 }
 
 // Video Modal
-function showVideoModal() {
+async function showVideoModal() {
     const modal = document.getElementById('videoListModal');
     const container = document.getElementById('videoListContainer');
 
@@ -662,17 +668,38 @@ function showVideoModal() {
     if (state.videos.length === 0) {
         container.innerHTML = '<p class="empty-state">No videos available</p>';
     } else {
+        // Fetch segments for all videos
+        const segmentsMap = {};
+        for (const video of state.videos) {
+            try {
+                const response = await fetch(`${API_BASE}/api/segments/video/${video.id}`);
+                if (response.ok) {
+                    segmentsMap[video.id] = await response.json();
+                }
+            } catch (error) {
+                console.error(`Failed to load segments for video ${video.id}:`, error);
+                segmentsMap[video.id] = [];
+            }
+        }
+
+        // Render videos with hierarchical segments
         state.videos.forEach(video => {
+            const videoSegments = segmentsMap[video.id] || [];
+            
+            // Parent video item
             const item = document.createElement('div');
-            item.className = 'video-list-item';
+            item.className = 'video-list-item video-parent';
             if (state.currentVideoId === video.id) {
                 item.classList.add('active');
             }
 
             item.innerHTML = `
-                <div class="video-list-name">${video.filename}</div>
+                <div class="video-list-name">
+                    <i class="fas fa-video"></i> ${video.filename}
+                </div>
                 <div class="video-list-meta">
                     ${formatFileSize(video.file_size)} • ${video.annotation_count} elicitations
+                    ${videoSegments.length > 0 ? ` • ${videoSegments.length} segments` : ''}
                 </div>
                 <div class="video-list-actions">
                     <button class="btn btn-icon btn-small btn-danger video-delete-btn" title="Delete video" onclick="event.stopPropagation(); deleteVideo(${video.id})">
@@ -687,6 +714,33 @@ function showVideoModal() {
             });
 
             container.appendChild(item);
+
+            // Render segments under parent video
+            if (videoSegments.length > 0) {
+                videoSegments.forEach(segment => {
+                    const segmentItem = document.createElement('div');
+                    segmentItem.className = 'video-list-item video-segment';
+                    
+                    const segmentName = segment.name || 'Unnamed Segment';
+                    const duration = segment.end_time - segment.start_time;
+                    
+                    segmentItem.innerHTML = `
+                        <div class="video-list-name segment-name">
+                            <i class="fas fa-cut"></i> ${segmentName}
+                        </div>
+                        <div class="video-list-meta">
+                            ${formatTime(segment.start_time)} - ${formatTime(segment.end_time)} (${formatTime(duration)})
+                        </div>
+                    `;
+
+                    segmentItem.addEventListener('click', () => {
+                        loadVideoSegment(video.id, segment);
+                        closeVideoModal();
+                    });
+
+                    container.appendChild(segmentItem);
+                });
+            }
         });
     }
 
@@ -728,6 +782,12 @@ async function loadVideo(videoId) {
         videoSource.src = `${API_BASE}/api/videos/${videoId}/file`;
         videoPlayer.load();
 
+        // Remove segment end handler when loading full video
+        if (videoPlayer._segmentEndHandler) {
+            videoPlayer.removeEventListener('timeupdate', videoPlayer._segmentEndHandler);
+            videoPlayer._segmentEndHandler = null;
+        }
+
         // Update video info
         document.getElementById('videoName').textContent = video.filename;
         document.getElementById('annotationCount').textContent = video.annotation_count;
@@ -739,6 +799,78 @@ async function loadVideo(videoId) {
     } catch (error) {
         console.error('Error loading video:', error);
         showToast('Error', 'Failed to load video', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function loadVideoSegment(videoId, segment) {
+    try {
+        showLoading('Loading video segment...');
+
+        // First load the video
+        const response = await fetch(`${API_BASE}/api/videos/${videoId}`);
+        if (!response.ok) throw new Error('Failed to load video');
+
+        const video = await response.json();
+        state.currentVideo = video;
+        state.currentVideoId = videoId;
+
+        // Persist current video ID to localStorage
+        try {
+            localStorage.setItem('currentVideoId', videoId);
+        } catch (e) {
+            console.error('Failed to save video state:', e);
+        }
+
+        // Update UI
+        document.getElementById('videoSelector').style.display = 'none';
+        document.getElementById('videoPlayerContainer').style.display = 'block';
+        document.getElementById('recordingControls').style.display = 'block';
+        document.getElementById('videoInfo').style.display = 'flex';
+
+        // Set video source
+        const videoPlayer = document.getElementById('videoPlayer');
+        const videoSource = document.getElementById('videoSource');
+        videoSource.src = `${API_BASE}/api/videos/${videoId}/file`;
+        videoPlayer.load();
+
+        // Update video info
+        const segmentName = segment.name ? ` - ${segment.name}` : '';
+        document.getElementById('videoName').textContent = `${video.filename}${segmentName}`;
+        document.getElementById('annotationCount').textContent = video.annotation_count;
+
+        // Load annotations
+        await loadAnnotations(videoId);
+
+        // Seek to segment start time once video is loaded
+        videoPlayer.addEventListener('loadedmetadata', function seekToSegmentStart() {
+            videoPlayer.currentTime = segment.start_time;
+            videoPlayer.removeEventListener('loadedmetadata', seekToSegmentStart);
+        }, { once: true });
+
+        // Add timeupdate listener to pause at segment end time
+        const handleSegmentEnd = function() {
+            if (videoPlayer.currentTime >= segment.end_time) {
+                videoPlayer.pause();
+                videoPlayer.currentTime = segment.end_time;
+            }
+        };
+        
+        // Remove any existing segment end listener
+        if (videoPlayer._segmentEndHandler) {
+            videoPlayer.removeEventListener('timeupdate', videoPlayer._segmentEndHandler);
+        }
+        
+        // Store the handler reference and add the listener
+        videoPlayer._segmentEndHandler = handleSegmentEnd;
+        videoPlayer.addEventListener('timeupdate', handleSegmentEnd);
+
+        const duration = segment.end_time - segment.start_time;
+        showToast('Segment Loaded', `${segment.name || 'Segment'} (${formatTime(duration)})`, 'success');
+    } catch (error) {
+        console.error('Error loading video segment:', error);
+        showToast('Error', 'Failed to load video segment', 'error');
     } finally {
         hideLoading();
     }
@@ -2542,14 +2674,19 @@ function switchTab(tabName) {
 
     // Show/hide content
     const annotateTab = document.getElementById('annotateTab');
+    const segmentTab = document.getElementById('segmentTab');
     const projectsTab = document.getElementById('projectsTab');
 
     // Hide all tabs first (with null checks)
     if (annotateTab) annotateTab.style.display = 'none';
+    if (segmentTab) segmentTab.style.display = 'none';
     if (projectsTab) projectsTab.style.display = 'none';
 
     if (tabName === 'annotate') {
         if (annotateTab) annotateTab.style.display = '';
+    } else if (tabName === 'segment') {
+        if (segmentTab) segmentTab.style.display = '';
+        initializeSegmentTab();
     } else if (tabName === 'projects') {
         if (projectsTab) projectsTab.style.display = 'block';
         loadProjects();
@@ -3088,6 +3225,694 @@ window.toggleDimension = toggleDimension;
 window.triggerReview = triggerReview;
 window.editElicitation = editElicitation;
 window.closeEditElicitationModal = closeEditElicitationModal;
+
+// ============================================================================
+// SEGMENTATION TAB FUNCTIONS
+// ============================================================================
+
+function initializeSegmentTab() {
+    // Initialize event listeners for segmentation controls
+    const trimStartInput = document.getElementById('trimStartInput');
+    const trimEndInput = document.getElementById('trimEndInput');
+    const createSegmentBtn = document.getElementById('createSegmentBtn');
+    const clearSegmentBtn = document.getElementById('clearSegmentBtn');
+    const refreshSegmentsBtn = document.getElementById('refreshSegmentsBtn');
+    const segmentVideoPlayer = document.getElementById('segmentVideoPlayer');
+    
+    // CRITICAL FIX: Find timeline track WITHIN segmentation controls, not the whole page
+    const segmentationControls = document.getElementById('segmentationControls');
+    const timelineTrack = segmentationControls ? segmentationControls.querySelector('.timeline-track') : null;
+    
+    const trimHandleStart = document.getElementById('trimHandleStart');
+    const trimHandleEnd = document.getElementById('trimHandleEnd');
+    
+    console.log('initializeSegmentTab: Found elements:', {
+        trimStartInput: !!trimStartInput,
+        trimEndInput: !!trimEndInput,
+        createSegmentBtn: !!createSegmentBtn,
+        segmentationControls: !!segmentationControls,
+        timelineTrack: !!timelineTrack,
+        trimHandleStart: !!trimHandleStart,
+        trimHandleEnd: !!trimHandleEnd,
+        segmentVideoPlayer: !!segmentVideoPlayer
+    });
+
+    if (trimStartInput && !trimStartInput.dataset.initialized) {
+        trimStartInput.addEventListener('input', handleTimeInputChange);
+        trimStartInput.addEventListener('blur', validateTimeInput);
+        trimStartInput.dataset.initialized = 'true';
+    }
+
+    if (trimEndInput && !trimEndInput.dataset.initialized) {
+        trimEndInput.addEventListener('input', handleTimeInputChange);
+        trimEndInput.addEventListener('blur', validateTimeInput);
+        trimEndInput.dataset.initialized = 'true';
+    }
+
+    if (createSegmentBtn && !createSegmentBtn.dataset.initialized) {
+        createSegmentBtn.addEventListener('click', createSegment);
+        createSegmentBtn.dataset.initialized = 'true';
+    }
+
+    if (clearSegmentBtn && !clearSegmentBtn.dataset.initialized) {
+        clearSegmentBtn.addEventListener('click', clearSegmentMarkers);
+        clearSegmentBtn.dataset.initialized = 'true';
+    }
+
+    if (refreshSegmentsBtn && !refreshSegmentsBtn.dataset.initialized) {
+        refreshSegmentsBtn.addEventListener('click', () => {
+            if (state.segmentVideoId) {
+                loadSegments(state.segmentVideoId);
+            }
+        });
+        refreshSegmentsBtn.dataset.initialized = 'true';
+    }
+
+    // Timeline click to set position - ONLY if we found the correct one
+    if (timelineTrack && !timelineTrack.dataset.clickInitialized) {
+        console.log('Attaching click handler to segment timeline track');
+        timelineTrack.addEventListener('click', handleTimelineClick);
+        timelineTrack.dataset.clickInitialized = 'true';
+    }
+
+    // Draggable handles - use more robust event attachment
+    if (trimHandleStart && !trimHandleStart.dataset.initialized) {
+        console.log('Initializing start handle drag');
+        trimHandleStart.addEventListener('mousedown', (e) => {
+            console.log('Start handle mousedown event fired');
+            startDrag(e, 'start');
+        });
+        // Also add touch support
+        trimHandleStart.addEventListener('touchstart', (e) => {
+            console.log('Start handle touchstart event fired');
+            e.preventDefault();
+            const touch = e.touches[0];
+            const mouseEvent = new MouseEvent('mousedown', {
+                clientX: touch.clientX,
+                clientY: touch.clientY
+            });
+            startDrag(mouseEvent, 'start');
+        });
+        trimHandleStart.dataset.initialized = 'true';
+    }
+
+    if (trimHandleEnd && !trimHandleEnd.dataset.initialized) {
+        console.log('Initializing end handle drag');
+        trimHandleEnd.addEventListener('mousedown', (e) => {
+            console.log('End handle mousedown event fired');
+            startDrag(e, 'end');
+        });
+        // Also add touch support
+        trimHandleEnd.addEventListener('touchstart', (e) => {
+            console.log('End handle touchstart event fired');
+            e.preventDefault();
+            const touch = e.touches[0];
+            const mouseEvent = new MouseEvent('mousedown', {
+                clientX: touch.clientX,
+                clientY: touch.clientY
+            });
+            startDrag(mouseEvent, 'end');
+        });
+        trimHandleEnd.dataset.initialized = 'true';
+    }
+
+    // Update playhead position
+    if (segmentVideoPlayer && !segmentVideoPlayer.dataset.playheadInitialized) {
+        segmentVideoPlayer.addEventListener('timeupdate', updatePlayhead);
+        segmentVideoPlayer.dataset.playheadInitialized = 'true';
+    }
+
+    // If a video is already loaded in the elicitation tab, use it
+    if (state.currentVideoId && state.currentVideo) {
+        loadVideoForSegmentation(state.currentVideoId);
+    }
+}
+
+// Drag state
+let isDragging = false;
+let dragType = null;
+
+function startDrag(e, type) {
+    console.log('startDrag called with type:', type);
+    e.preventDefault();
+    e.stopPropagation();
+    isDragging = true;
+    dragType = type;
+    
+    // Debug: Check what element we clicked on
+    console.log('Event target:', e.target, 'Target classes:', e.target.className);
+    
+    // Debug: Find all timeline-track elements  
+    const allTracks = document.querySelectorAll('.timeline-track');
+    console.log('Total .timeline-track elements on page:', allTracks.length);
+    allTracks.forEach((track, idx) => {
+        const rect = track.getBoundingClientRect();
+        console.log(`Track ${idx}:`, {
+            width: rect.width,
+            height: rect.height,
+            display: window.getComputedStyle(track).display,
+            parentDisplay: window.getComputedStyle(track.parentElement).display,
+            grandparentDisplay: window.getComputedStyle(track.parentElement?.parentElement).display
+        });
+    });
+    
+    console.log('Drag started, isDragging:', isDragging, 'dragType:', dragType);
+    
+    document.addEventListener('mousemove', handleDrag);
+    document.addEventListener('mouseup', stopDrag);
+    document.addEventListener('touchmove', handleTouchDrag, { passive: false });
+    document.addEventListener('touchend', stopDrag);
+}
+
+function handleTouchDrag(e) {
+    e.preventDefault();
+    const touch = e.touches[0];
+    const mouseEvent = new MouseEvent('mousemove', {
+        clientX: touch.clientX,
+        clientY: touch.clientY
+    });
+    handleDrag(mouseEvent);
+}
+
+function handleDrag(e) {
+    if (!isDragging) {
+        console.log('handleDrag called but isDragging is false');
+        return;
+    }
+    
+    // Ensure we have valid mouse coordinates
+    if (typeof e.clientX === 'undefined' || typeof e.clientY === 'undefined') {
+        console.log('Invalid event object, missing clientX/clientY:', e);
+        return;
+    }
+    
+    // CRITICAL FIX: Find the timeline track in the SEGMENT tab, not the annotate tab
+    // Look within the segmentation controls container specifically
+    const segmentationControls = document.getElementById('segmentationControls');
+    if (!segmentationControls) {
+        console.log('Segmentation controls container not found');
+        return;
+    }
+    
+    const timelineTrack = segmentationControls.querySelector('.timeline-track');
+    if (!timelineTrack) {
+        console.log('Timeline track not found within segmentation controls');
+        return;
+    }
+    
+    const rect = timelineTrack.getBoundingClientRect();
+    console.log('Timeline rect:', {left: rect.left, width: rect.width, top: rect.top, bottom: rect.bottom}, 'clientX:', e.clientX);
+    console.log('Timeline track styles:', {
+        display: window.getComputedStyle(timelineTrack).display,
+        width: window.getComputedStyle(timelineTrack).width,
+        position: window.getComputedStyle(timelineTrack).position
+    });
+    
+    if (!rect.width || rect.width === 0) {
+        console.log('⚠️ Timeline track has no width! Rect:', rect);
+        console.log('Full debuginfo:');
+        console.log('- Segment tab display:', window.getComputedStyle(document.getElementById('segmentTab')).display);
+        console.log('- Segmentation controls display:', window.getComputedStyle(segmentationControls).display);
+        console.log('- Timeline scrubber display:', window.getComputedStyle(timelineTrack.parentElement).display);
+        return;
+    }
+    
+    const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+    const percentage = x / rect.width;
+    
+    console.log('x:', x, 'rect.width:', rect.width, 'percentage:', percentage);
+    
+    const player = document.getElementById('segmentVideoPlayer');
+    if (!player || !player.duration || isNaN(player.duration) || player.duration === 0) {
+        console.log('Player not ready, duration:', player?.duration, 'isNaN:', isNaN(player?.duration));
+        return;
+    }
+    
+    const time = percentage * player.duration;
+    console.log('Calculated time:', time, 'from percentage:', percentage, 'duration:', player.duration);
+    
+    if (dragType === 'start') {
+        state.segmentStartTime = time;
+        if (state.segmentEndTime !== null && time >= state.segmentEndTime) {
+            state.segmentEndTime = Math.min(time + 1, player.duration);
+        }
+        console.log('✅ Updated start time to:', time, 'state.segmentStartTime:', state.segmentStartTime);
+    } else if (dragType === 'end') {
+        state.segmentEndTime = time;
+        if (state.segmentStartTime !== null && time <= state.segmentStartTime) {
+            state.segmentStartTime = Math.max(0, time - 1);
+        }
+        console.log('✅ Updated end time to:', time, 'state.segmentEndTime:', state.segmentEndTime);
+    }
+    
+    console.log('About to call updateTimelineUI, current state:', {
+        startTime: state.segmentStartTime,
+        endTime: state.segmentEndTime
+    });
+    updateTimelineUI();
+}
+
+function stopDrag() {
+    console.log('stopDrag called, was dragging:', isDragging);
+    isDragging = false;
+    dragType = null;
+    document.removeEventListener('mousemove', handleDrag);
+    document.removeEventListener('mouseup', stopDrag);
+    document.removeEventListener('touchmove', handleTouchDrag);
+    document.removeEventListener('touchend', stopDrag);
+}
+
+function handleTimelineClick(e) {
+    if (isDragging) return;
+    
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const percentage = x / rect.width;
+    
+    const player = document.getElementById('segmentVideoPlayer');
+    if (!player || !player.duration) return;
+    
+    const time = percentage * player.duration;
+    
+    // Set start if not set, otherwise set end
+    if (state.segmentStartTime === null) {
+        state.segmentStartTime = time;
+    } else if (state.segmentEndTime === null || time > state.segmentStartTime) {
+        state.segmentEndTime = time;
+    } else {
+        state.segmentStartTime = time;
+    }
+    
+    updateTimelineUI();
+}
+
+function handleTimeInputChange(e) {
+    const input = e.target;
+    const value = input.value;
+    
+    // Only allow digits and colon
+    const cleaned = value.replace(/[^0-9:]/g, '');
+    if (cleaned !== value) {
+        input.value = cleaned;
+        return;
+    }
+    
+    // Try to parse if it looks complete
+    if (value.match(/^\d{1,2}:\d{2}$/)) {
+        const time = parseTimeInput(value);
+        if (time !== null) {
+            if (input.id === 'trimStartInput') {
+                state.segmentStartTime = time;
+            } else {
+                state.segmentEndTime = time;
+            }
+            updateTimelineUI();
+        }
+    }
+}
+
+function validateTimeInput(e) {
+    const input = e.target;
+    const value = input.value;
+    
+    if (!value) return;
+    
+    const time = parseTimeInput(value);
+    if (time !== null) {
+        if (input.id === 'trimStartInput') {
+            state.segmentStartTime = time;
+        } else {
+            state.segmentEndTime = time;
+        }
+    }
+    
+    updateTimelineUI();
+}
+
+function parseTimeInput(timeStr) {
+    const match = timeStr.match(/^(\d{1,2}):(\d{2})$/);
+    if (!match) return null;
+    
+    const minutes = parseInt(match[1], 10);
+    const seconds = parseInt(match[2], 10);
+    
+    if (seconds >= 60) return null;
+    
+    const player = document.getElementById('segmentVideoPlayer');
+    const time = minutes * 60 + seconds;
+    
+    if (player && player.duration && time > player.duration) {
+        return player.duration;
+    }
+    
+    return time;
+}
+
+function updatePlayhead() {
+    const player = document.getElementById('segmentVideoPlayer');
+    const playhead = document.getElementById('timelinePlayhead');
+    
+    if (!player || !player.duration || !playhead) return;
+    
+    const percentage = (player.currentTime / player.duration) * 100;
+    playhead.style.left = percentage + '%';
+}
+
+function updateTimelineUI() {
+    const player = document.getElementById('segmentVideoPlayer');
+    if (!player || !player.duration || isNaN(player.duration) || player.duration === 0) {
+        console.log('updateTimelineUI: Player not ready, duration:', player?.duration);
+        return;
+    }
+    
+    const startTime = state.segmentStartTime !== null ? state.segmentStartTime : 0;
+    const endTime = state.segmentEndTime !== null ? state.segmentEndTime : player.duration;
+    
+    console.log('updateTimelineUI: startTime:', startTime, 'endTime:', endTime, 'duration:', player.duration);
+    
+    // Update timeline selection
+    const selection = document.getElementById('timelineSelection');
+    if (selection) {
+        const startPercent = (startTime / player.duration) * 100;
+        const endPercent = (endTime / player.duration) * 100;
+        selection.style.left = startPercent + '%';
+        selection.style.width = (endPercent - startPercent) + '%';
+        console.log('✅ Timeline selection updated: left:', startPercent + '%', 'width:', (endPercent - startPercent) + '%');
+        console.log('   Selection element style:', window.getComputedStyle(selection).left, window.getComputedStyle(selection).width);
+    } else {
+        console.warn('❌ timelineSelection element not found');
+    }
+    
+    // Update input fields
+    const trimStartInput = document.getElementById('trimStartInput');
+    const trimEndInput = document.getElementById('trimEndInput');
+    if (trimStartInput) {
+        trimStartInput.value = formatTimeInput(startTime);
+        console.log('✅ Updated trimStartInput to:', formatTimeInput(startTime));
+    } else {
+        console.warn('❌ trimStartInput not found');
+    }
+    
+    if (trimEndInput) {
+        trimEndInput.value = formatTimeInput(endTime);
+        console.log('✅ Updated trimEndInput to:', formatTimeInput(endTime));
+    } else {
+        console.warn('❌ trimEndInput not found');
+    }
+    
+    // Update duration display
+    const duration = endTime - startTime;
+    const trimDurationEl = document.getElementById('trimDuration');
+    if (trimDurationEl) {
+        trimDurationEl.textContent = formatTime(duration);
+        console.log('✅ Updated trimDuration to:', formatTime(duration));
+    } else {
+        console.warn('❌ trimDuration not found');
+    }
+    
+    // Enable/disable create button
+    const createBtn = document.getElementById('createSegmentBtn');
+    if (createBtn) {
+        createBtn.disabled = state.segmentStartTime === null || state.segmentEndTime === null || 
+                             state.segmentEndTime <= state.segmentStartTime;
+    }
+}
+
+function formatTimeInput(seconds) {
+    if (isNaN(seconds) || !isFinite(seconds)) return '0:00';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+async function loadVideoForSegmentation(videoId) {
+    try {
+        const response = await fetch(`${API_BASE}/api/videos/${videoId}`);
+        if (!response.ok) throw new Error('Failed to load video');
+
+        const video = await response.json();
+        state.segmentVideoId = videoId;
+
+        // Show video player
+        document.getElementById('segmentVideoSelector').style.display = 'none';
+        document.getElementById('segmentVideoPlayerContainer').style.display = 'block';
+        document.getElementById('segmentationControls').style.display = 'flex';
+        document.getElementById('segmentVideoInfo').style.display = 'flex';
+
+        // Load video
+        const videoPlayer = document.getElementById('segmentVideoPlayer');
+        const videoSource = document.getElementById('segmentVideoSource');
+        videoSource.src = `${API_BASE}/api/videos/${videoId}/file`;
+        videoPlayer.load();
+
+        state.segmentVideoElement = videoPlayer;
+
+        // Initialize timeline when video metadata is loaded
+        videoPlayer.addEventListener('loadedmetadata', function initTimeline() {
+            console.log('Video metadata loaded, duration:', videoPlayer.duration);
+            // Set default segment to full video
+            state.segmentStartTime = 0;
+            state.segmentEndTime = videoPlayer.duration;
+            console.log('Set initial segment range:', state.segmentStartTime, '-', state.segmentEndTime);
+            updateTimelineUI();
+        }, { once: true });
+
+        // Update info
+        document.getElementById('segmentVideoName').textContent = video.filename;
+
+        // Load existing segments
+        await loadSegments(videoId);
+
+    } catch (error) {
+        console.error('Error loading video for segmentation:', error);
+        showToast('Error', 'Failed to load video', 'error');
+    }
+}
+
+function clearSegmentMarkers() {
+    const player = document.getElementById('segmentVideoPlayer');
+    
+    // Reset to full video range if video is loaded
+    if (player && player.duration) {
+        state.segmentStartTime = 0;
+        state.segmentEndTime = player.duration;
+        updateTimelineUI();
+    } else {
+        // No video loaded, just clear
+        state.segmentStartTime = null;
+        state.segmentEndTime = null;
+        document.getElementById('trimStartInput').value = '';
+        document.getElementById('trimEndInput').value = '';
+        document.getElementById('trimDuration').textContent = '0:00';
+        
+        // Reset timeline UI to initial state
+        const selection = document.getElementById('timelineSelection');
+        if (selection) {
+            selection.style.left = '0%';
+            selection.style.width = '100%';
+        }
+    }
+    
+    document.getElementById('segmentNameInput').value = '';
+    
+    const createBtn = document.getElementById('createSegmentBtn');
+    if (createBtn) {
+        createBtn.disabled = false; // Enable since full video is valid
+    }
+}
+
+async function createSegment() {
+    if (!state.segmentVideoId) {
+        showToast('Error', 'No video loaded', 'error');
+        return;
+    }
+
+    if (state.segmentStartTime === null || state.segmentEndTime === null) {
+        showToast('Error', 'Please set start and end times', 'error');
+        return;
+    }
+
+    if (state.segmentEndTime <= state.segmentStartTime) {
+        showToast('Error', 'End time must be after start time', 'error');
+        return;
+    }
+
+    try {
+        showLoading('Creating segment...');
+
+        const segmentName = document.getElementById('segmentNameInput').value.trim() || null;
+
+        const segmentData = {
+            parent_video_id: state.segmentVideoId,
+            name: segmentName,
+            start_time: state.segmentStartTime,
+            end_time: state.segmentEndTime
+        };
+
+        const response = await fetch(`${API_BASE}/api/segments`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(segmentData)
+        });
+
+        if (!response.ok) {
+            const error = await response.text();
+            throw new Error(error || 'Failed to create segment');
+        }
+
+        const segment = await response.json();
+        showToast('Success', 'Segment created successfully', 'success');
+
+        // Reload segments
+        await loadSegments(state.segmentVideoId);
+
+        // Clear form
+        clearSegmentMarkers();
+
+    } catch (error) {
+        console.error('Error creating segment:', error);
+        showToast('Error', error.message || 'Failed to create segment', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function loadSegments(videoId) {
+    try {
+        const response = await fetch(`${API_BASE}/api/segments/video/${videoId}`);
+        if (!response.ok) throw new Error('Failed to load segments');
+
+        state.segments = await response.json();
+        renderSegments();
+
+        // Update segment count
+        document.getElementById('segmentCount').textContent = state.segments.length;
+
+    } catch (error) {
+        console.error('Error loading segments:', error);
+        showToast('Error', 'Failed to load segments', 'error');
+    }
+}
+
+function renderSegments() {
+    const container = document.getElementById('segmentsList');
+
+    if (state.segments.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-scissors empty-icon"></i>
+                <p>No segments yet</p>
+                <p class="hint">Mark start and end times to create your first segment</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = '';
+
+    state.segments.forEach(segment => {
+        const duration = segment.end_time - segment.start_time;
+        const segmentName = segment.name || 'Unnamed Segment';
+
+        const item = document.createElement('div');
+        item.className = 'segment-item';
+        item.innerHTML = `
+            <div class="segment-header">
+                <div class="segment-name ${segment.name ? '' : 'unnamed'}">
+                    <i class="fas fa-cut"></i> ${segmentName}
+                </div>
+                <div class="segment-actions-buttons">
+                    <button class="btn btn-icon btn-small" onclick="seekToSegment(${segment.id})" title="Play segment">
+                        <i class="fas fa-play"></i>
+                    </button>
+                    <button class="btn btn-icon btn-small" onclick="editSegment(${segment.id})" title="Edit segment">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn btn-icon btn-small" onclick="deleteSegment(${segment.id})" title="Delete segment">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="segment-info">
+                <div class="segment-time-range">
+                    <i class="fas fa-clock"></i>
+                    <span>${formatTime(segment.start_time)} - ${formatTime(segment.end_time)}</span>
+                    <span>(${formatTime(duration)})</span>
+                </div>
+            </div>
+        `;
+
+        container.appendChild(item);
+    });
+}
+
+function seekToSegment(segmentId) {
+    const segment = state.segments.find(s => s.id === segmentId);
+    if (!segment) return;
+
+    const player = document.getElementById('segmentVideoPlayer');
+    if (player) {
+        player.currentTime = segment.start_time;
+        player.play();
+    }
+}
+
+async function editSegment(segmentId) {
+    const segment = state.segments.find(s => s.id === segmentId);
+    if (!segment) return;
+
+    const newName = prompt('Edit segment name:', segment.name || '');
+    if (newName === null) return; // User cancelled
+
+    try {
+        showLoading('Updating segment...');
+
+        const response = await fetch(`${API_BASE}/api/segments/${segmentId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: newName.trim() || null })
+        });
+
+        if (!response.ok) throw new Error('Failed to update segment');
+
+        showToast('Success', 'Segment updated', 'success');
+        await loadSegments(state.segmentVideoId);
+
+    } catch (error) {
+        console.error('Error updating segment:', error);
+        showToast('Error', 'Failed to update segment', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function deleteSegment(segmentId) {
+    if (!confirm('Delete this segment?')) return;
+
+    try {
+        showLoading('Deleting segment...');
+
+        const response = await fetch(`${API_BASE}/api/segments/${segmentId}`, {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) throw new Error('Failed to delete segment');
+
+        showToast('Success', 'Segment deleted', 'success');
+        await loadSegments(state.segmentVideoId);
+
+    } catch (error) {
+        console.error('Error deleting segment:', error);
+        showToast('Error', 'Failed to delete segment', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+// Make segmentation functions globally available
+window.seekToSegment = seekToSegment;
+window.editSegment = editSegment;
+window.deleteSegment = deleteSegment;
 window.saveElicitationEdit = saveElicitationEdit;
 window.markElicitationComplete = markElicitationComplete;
 window.registerLocalVideo = registerLocalVideo;
@@ -3099,3 +3924,52 @@ window.assignVideos = assignVideos;
 window.addVideoToProject = addVideoToProject;
 window.removeVideoFromProject = removeVideoFromProject;
 window.deleteVideo = deleteVideo;
+
+// DIAGNOSTIC FUNCTION: Call from console to debug segmentation issues
+window.debugSegmentation = function() {
+    console.log('=== SEGMENTATION DIAGNOSTICS ===');
+    
+    const segmentTab = document.getElementById('segmentTab');
+    const segmentationControls = document.getElementById('segmentationControls');
+    const timelineTrack = segmentationControls?.querySelector('.timeline-track');
+    const timelineSelection = document.getElementById('timelineSelection');
+    const trimHandleStart = document.getElementById('trimHandleStart');
+    const trimHandleEnd = document.getElementById('trimHandleEnd');
+    const segmentVideoPlayer = document.getElementById('segmentVideoPlayer');
+    
+    console.log('DOM Elements Found:');
+    console.log('- segmentTab:', !!segmentTab, 'display:', segmentTab ? window.getComputedStyle(segmentTab).display : 'N/A');
+    console.log('- segmentationControls:', !!segmentationControls, 'display:', segmentationControls ? window.getComputedStyle(segmentationControls).display : 'N/A');
+    console.log('- timelineTrack:', !!timelineTrack, 'display:', timelineTrack ? window.getComputedStyle(timelineTrack).display : 'N/A');
+    console.log('- timelineSelection:', !!timelineSelection, 'display:', timelineSelection ? window.getComputedStyle(timelineSelection).display : 'N/A');
+    console.log('- trimHandleStart:', !!trimHandleStart, 'display:', trimHandleStart ? window.getComputedStyle(trimHandleStart).display : 'N/A');
+    console.log('- trimHandleEnd:', !!trimHandleEnd, 'display:', trimHandleEnd ? window.getComputedStyle(trimHandleEnd).display : 'N/A');
+    console.log('- segmentVideoPlayer:', !!segmentVideoPlayer, 'duration:', segmentVideoPlayer?.duration || 'N/A');
+    
+    console.log('\nTimeline Track Measurements:');
+    if (timelineTrack) {
+        const rect = timelineTrack.getBoundingClientRect();
+        console.log('- getBoundingClientRect():', rect);
+        console.log('- offsetWidth:', timelineTrack.offsetWidth);
+        console.log('- clientWidth:', timelineTrack.clientWidth);
+    }
+    
+    console.log('\nHandle Positions:');
+    if (trimHandleStart) {
+        const rect = trimHandleStart.getBoundingClientRect();
+        console.log('- trimHandleStart rect:', rect);
+    }
+    if (trimHandleEnd) {
+        const rect = trimHandleEnd.getBoundingClientRect();
+        console.log('- trimHandleEnd rect:', rect);
+    }
+    
+    console.log('\nCurrent State:');
+    console.log('- state.segmentStartTime:', state.segmentStartTime);
+    console.log('- state.segmentEndTime:', state.segmentEndTime);
+    console.log('- isDragging:', isDragging);
+    console.log('- dragType:', dragType);
+    
+    console.log('\n(Tip: Try dragging a handle and watch the console logs)');
+    console.log('=== END DIAGNOSTICS ===');
+};
