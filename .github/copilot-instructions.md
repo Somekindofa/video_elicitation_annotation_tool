@@ -27,7 +27,7 @@ python main.py
 - Database auto-migrates on startup (SQLite async via aiosqlite in `chroma_langchain_db/annotations.db`)
 
 ### Database Migration System
-**Single unified system**: `backend/migration.py` (6 idempotent migrations, ~500 lines)
+**Single unified system**: `backend/migration.py` (7+ idempotent migrations, ~500 lines)
 ```bash
 python backend/migration.py              # Run all pending migrations (auto-runs on start.bat)
 python backend/migration.py --check      # Dry-run: show what would happen
@@ -39,6 +39,8 @@ python backend/migration.py --reset      # DANGER: Delete and recreate database
 2. Register in `MIGRATIONS` list: `("NNN_name", migration_NNN_name)`
 3. Run `python migration.py`
 See `MIGRATION_GUIDE.md` for complete documentation
+
+**Latest migration**: Video segments table (migration_007_add_video_segments)
 
 ## Architecture Deep Dive
 
@@ -111,6 +113,12 @@ is_salient: Integer (1=salient moment, 0=not salient)
 # Craft/domain context (affects LLM prompts):
 craft: String (e.g., "glassblowing", "jewelry", "scientific_glassblowing")
 task: String (free text or from Tasks taxonomy)
+detected_task: String (nullable - auto-detected task name from transcription via task_detector_service)
+
+# Video Segments (NEW - for focused elicitation work):
+VideoSegment model: parent_video_id, name, start_time, end_time, thumbnail_path, created_at, updated_at
+- Relationship: Video has many segments (cascade delete)
+- Used to create sub-clips of videos for annotation workflow
 
 # Legacy feedback system (French UI) - still present but not actively used:
 feedback: Integer (1=thumbs up, 0=thumbs down, null=no feedback)
@@ -164,11 +172,20 @@ const state = {
     annotations: [],         // Current video's annotations
     projects: [],            // Project list
     showReviewPanels: {},    // Track which review panels are visible
+    currentTab: 'annotate',  // Active tab: 'annotate', 'projects', 'segment'
+    // Segmentation state (NEW)
+    segmentVideoId: null,    // Video being segmented
+    segmentVideoElement: null, // Video player for segmentation
+    segments: [],            // Created segments for current video
+    segmentStartTime: null,  // Segment start marker
+    segmentEndTime: null,    // Segment end marker
     // ... recording state, WebSocket, etc.
 };
 ```
 
-All UI updates check this state - no framework, pure DOM manipulation. Review panels toggle visibility on click.
+All UI updates check this state - no framework, pure DOM manipulation. Three tabs: Annotate (main), Projects (dataset organization), Segment (video trimming).
+
+**Tab Management**: `switchTab(tabName)` clears previous tab state and initializes new tab (annotate/projects/segment)
 
 ### Export Format Structure
 ```json
@@ -235,7 +252,7 @@ sqlite_web data/annotations.db
 
 ## API Endpoints Reference
 
-**34 endpoints across 6 resource groups. All async, use FastAPI dependency injection for sessions.**
+**40+ endpoints across 7 resource groups. All async, use FastAPI dependency injection for sessions.**
 
 ### Health & Frontend (2 endpoints)
 - `GET /` - Serve index.html frontend application
@@ -285,6 +302,13 @@ sqlite_web data/annotations.db
 
 ### Export (1 endpoint)
 - `GET /api/export/{video_id}` - Export all annotations for video as JSON with full pipeline results
+
+### Video Segments (4 endpoints)
+- `POST /api/segments` - Create new video segment (requires parent_video_id, start_time, end_time, optional name)
+- `GET /api/segments/video/{video_id}` - List all segments for a parent video (ordered by start_time)
+- `GET /api/segments/{segment_id}` - Get specific segment details
+- `PUT /api/segments/{segment_id}` - Update segment (name, start_time, end_time)
+- `DELETE /api/segments/{segment_id}` - Delete video segment
 
 ## Testing New Services Before Integration
 
@@ -513,14 +537,7 @@ except Exception as e:
 
 ### Browser APIs
 - `MediaRecorder` API for WAV audio capture
-- HTML5 `<video>` element (no framework wrapper)
-- Native File API for video uploads
-- WebSocket for bidirectional real-time updates
-
-## Key Features & Components
-
-### Multi-Stage AI Pipeline (Current Architecture)
-**Transcription → Judge → Tagging → Review (with Salience)**
+- HTML5 `<video>` element (no framework wrapper) + Task Detection**
 
 1. **Judge Service** (`judge_service.py`):
    - Lightweight completeness assessment
@@ -540,11 +557,51 @@ except Exception as e:
    - Outputs tier (1-4), score (0-100), dimension coverage, priority prompts
    - Can be manually re-triggered via `POST /api/annotations/{id}/review`
 
+4. **Task Detection Service** (`task_detector_service.py`) - NEW:
+   - Automatically identifies performative tasks from transcription text
+   - Conservative approach - only assigns clear, explicit task names
+   - Outputs: `detected_task` (string or null), `confidence` (0-1), `reasoning`
+   - Can run during transcription or manually via API
+
+### Video Segmentation System (NEW)
+Professional video trimmer interface for creating focused annotation workflows:
+- **Purpose**: Create named time segments (e.g., "Étirage n°2") from long videos for targeted elicitation
+- **UI Features**: Dark-themed timeline scrubber with cyan accents, drag handles, manual time inputs
+- **Playback Control**: Auto-pause at segment end time using `timeupdate` event listener
+- **Workflow**: Set start/end markers → create segment → load segment for annotation
+- **Frontend Tab**: Dedicated "Segment" tab with overlay controls on video player
+- **Integration**: Segments appear in video selector as sub-items under parent videos
+
+**Segmentation Implementation Details**:
+```javascript
+// Frontend: app.js segment functions (~450 lines)
+- loadVideoForSegmentation(videoId)  // Initialize segment tab
+- createSegment()                     // Create segment with name, times
+- loadVideoSegment(videoId, segment) // Load and auto-pause at end_time
+- seekToSegment(segmentId)           // Jump to segment start
+- editSegment(segmentId)             // Update segment metadata
+- deleteSegment(segmentId)           // Remove segment
+
+// Backend: database.py segment CRUD
+- create_video_segment(session, segment_data)
+- get_video_segment(session, segment_id)
+- get_segments_by_video(session, video_id)
+- update_video_segment(session, segment_id, update_data)
+- delete_video_segment(session, segment_id)
+``ol"}, ...]`
+   - Auto-triggers review after completion
+
+3. **Review Service** (`review_service.py`):
+   - Multi-dimensional quality assessment (HOW/EVAL/FEEDBACK)
+   - Salience detection (pedagogical value for apprentices)
+   - Outputs tier (1-4), score (0-100), dimension coverage, priority prompts
+   - Can be manually re-triggered via `POST /api/annotations/{id}/review`
+
 ### Projects System
 Videos can be organized into projects (datasets) with batch ordering:
 ```python
-# Projects have many videos, videos belong to optional project
-project.videos  # Ordered by batch_position
+# Projects have many videos, videos belong to optional projectconservative LLM approach)
+- `backend/migration.py` - **UNIFIED migration system** (includes video_segments table migration)
 video.project_id  # Nullable - videos can exist standalone
 video.batch_position  # Integer position in batch (for ordered annotation workflows)
 video.craft  # Domain context (glassblowing, jewelry, etc.)
@@ -553,12 +610,20 @@ video.craft  # Domain context (glassblowing, jewelry, etc.)
 API endpoints: `POST /api/projects`, `GET /api/projects/{id}/videos`, `PUT /api/videos/{id}` to assign project/position
 
 ### Video Source Types
-Three ways to load videos (see `video.source_type` and `video.is_local`):
-1. **Uploaded** (`source_type="uploaded"`, `is_local=0`) - File copied to `data/videos/`
-2. **Local** (`source_type="local"`, `is_local=1`) - File referenced by absolute path, no copying (for large GB files)
-3. **Google Drive** (`source_type="gdrive"`) - Streamed from public GDrive folders (requires `GOOGLE_DRIVE_API_KEY`)
+Three ways to load & Auto-Detection
+Structured task descriptions per craft domain:
+```python
+task = {"name": "sertissage", "craft": "jewelry", "description": "...", "is_published": 1}
+```
+API: `GET /api/tasks?craft=jewelry&published=1`, `POST /api/tasks`, `DELETE /api/tasks/{name}?craft=...`
 
-Local video workflow: `GET /api/videos/local/browse?directory=C:\path` → `POST /api/videos/local/register` with filepath
+**Task Auto-Detection** (NEW): `task_detector_service.py` automatically analyzes transcriptions to identify performative tasks
+- Conservative by design - only assigns task names for explicit, actionable descriptions
+- Returns `detected_task` (string or null) and `confidence` (0-1)
+12. **Segment playback must auto-pause** - remove old `_segmentEndHandler` before adding new one in `loadVideoSegment()`
+13. **Task detection is conservative** - only returns `detected_task` for explicit performative descriptions, not general explanations
+- Distinguishes performative actions from general descriptions/history/concepts
+- Example: "L'expert explique comment on polit les arêtes" → `detected_task="polissage"er` with filepath
 
 ### Tasks Taxonomy
 Structured task descriptions per craft domain:

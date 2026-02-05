@@ -3238,9 +3238,24 @@ function initializeSegmentTab() {
     const clearSegmentBtn = document.getElementById('clearSegmentBtn');
     const refreshSegmentsBtn = document.getElementById('refreshSegmentsBtn');
     const segmentVideoPlayer = document.getElementById('segmentVideoPlayer');
-    const timelineTrack = document.querySelector('.timeline-track');
+    
+    // CRITICAL FIX: Find timeline track WITHIN segmentation controls, not the whole page
+    const segmentationControls = document.getElementById('segmentationControls');
+    const timelineTrack = segmentationControls ? segmentationControls.querySelector('.timeline-track') : null;
+    
     const trimHandleStart = document.getElementById('trimHandleStart');
     const trimHandleEnd = document.getElementById('trimHandleEnd');
+    
+    console.log('initializeSegmentTab: Found elements:', {
+        trimStartInput: !!trimStartInput,
+        trimEndInput: !!trimEndInput,
+        createSegmentBtn: !!createSegmentBtn,
+        segmentationControls: !!segmentationControls,
+        timelineTrack: !!timelineTrack,
+        trimHandleStart: !!trimHandleStart,
+        trimHandleEnd: !!trimHandleEnd,
+        segmentVideoPlayer: !!segmentVideoPlayer
+    });
 
     if (trimStartInput && !trimStartInput.dataset.initialized) {
         trimStartInput.addEventListener('input', handleTimeInputChange);
@@ -3273,10 +3288,11 @@ function initializeSegmentTab() {
         refreshSegmentsBtn.dataset.initialized = 'true';
     }
 
-    // Timeline click to set position
-    if (timelineTrack && !timelineTrack.dataset.initialized) {
+    // Timeline click to set position - ONLY if we found the correct one
+    if (timelineTrack && !timelineTrack.dataset.clickInitialized) {
+        console.log('Attaching click handler to segment timeline track');
         timelineTrack.addEventListener('click', handleTimelineClick);
-        timelineTrack.dataset.initialized = 'true';
+        timelineTrack.dataset.clickInitialized = 'true';
     }
 
     // Draggable handles - use more robust event attachment
@@ -3343,6 +3359,23 @@ function startDrag(e, type) {
     isDragging = true;
     dragType = type;
     
+    // Debug: Check what element we clicked on
+    console.log('Event target:', e.target, 'Target classes:', e.target.className);
+    
+    // Debug: Find all timeline-track elements  
+    const allTracks = document.querySelectorAll('.timeline-track');
+    console.log('Total .timeline-track elements on page:', allTracks.length);
+    allTracks.forEach((track, idx) => {
+        const rect = track.getBoundingClientRect();
+        console.log(`Track ${idx}:`, {
+            width: rect.width,
+            height: rect.height,
+            display: window.getComputedStyle(track).display,
+            parentDisplay: window.getComputedStyle(track.parentElement).display,
+            grandparentDisplay: window.getComputedStyle(track.parentElement?.parentElement).display
+        });
+    });
+    
     console.log('Drag started, isDragging:', isDragging, 'dragType:', dragType);
     
     document.addEventListener('mousemove', handleDrag);
@@ -3373,17 +3406,34 @@ function handleDrag(e) {
         return;
     }
     
-    const timelineTrack = document.querySelector('.timeline-track');
+    // CRITICAL FIX: Find the timeline track in the SEGMENT tab, not the annotate tab
+    // Look within the segmentation controls container specifically
+    const segmentationControls = document.getElementById('segmentationControls');
+    if (!segmentationControls) {
+        console.log('Segmentation controls container not found');
+        return;
+    }
+    
+    const timelineTrack = segmentationControls.querySelector('.timeline-track');
     if (!timelineTrack) {
-        console.log('Timeline track not found');
+        console.log('Timeline track not found within segmentation controls');
         return;
     }
     
     const rect = timelineTrack.getBoundingClientRect();
-    console.log('Timeline rect:', {left: rect.left, width: rect.width}, 'clientX:', e.clientX);
+    console.log('Timeline rect:', {left: rect.left, width: rect.width, top: rect.top, bottom: rect.bottom}, 'clientX:', e.clientX);
+    console.log('Timeline track styles:', {
+        display: window.getComputedStyle(timelineTrack).display,
+        width: window.getComputedStyle(timelineTrack).width,
+        position: window.getComputedStyle(timelineTrack).position
+    });
     
     if (!rect.width || rect.width === 0) {
-        console.log('Timeline track has no width');
+        console.log('⚠️ Timeline track has no width! Rect:', rect);
+        console.log('Full debuginfo:');
+        console.log('- Segment tab display:', window.getComputedStyle(document.getElementById('segmentTab')).display);
+        console.log('- Segmentation controls display:', window.getComputedStyle(segmentationControls).display);
+        console.log('- Timeline scrubber display:', window.getComputedStyle(timelineTrack.parentElement).display);
         return;
     }
     
@@ -3406,15 +3456,19 @@ function handleDrag(e) {
         if (state.segmentEndTime !== null && time >= state.segmentEndTime) {
             state.segmentEndTime = Math.min(time + 1, player.duration);
         }
-        console.log('Updated start time to:', time);
+        console.log('✅ Updated start time to:', time, 'state.segmentStartTime:', state.segmentStartTime);
     } else if (dragType === 'end') {
         state.segmentEndTime = time;
         if (state.segmentStartTime !== null && time <= state.segmentStartTime) {
             state.segmentStartTime = Math.max(0, time - 1);
         }
-        console.log('Updated end time to:', time);
+        console.log('✅ Updated end time to:', time, 'state.segmentEndTime:', state.segmentEndTime);
     }
     
+    console.log('About to call updateTimelineUI, current state:', {
+        startTime: state.segmentStartTime,
+        endTime: state.segmentEndTime
+    });
     updateTimelineUI();
 }
 
@@ -3543,16 +3597,38 @@ function updateTimelineUI() {
         const endPercent = (endTime / player.duration) * 100;
         selection.style.left = startPercent + '%';
         selection.style.width = (endPercent - startPercent) + '%';
-        console.log('Timeline updated: left:', startPercent + '%', 'width:', (endPercent - startPercent) + '%');
+        console.log('✅ Timeline selection updated: left:', startPercent + '%', 'width:', (endPercent - startPercent) + '%');
+        console.log('   Selection element style:', window.getComputedStyle(selection).left, window.getComputedStyle(selection).width);
+    } else {
+        console.warn('❌ timelineSelection element not found');
     }
     
     // Update input fields
-    document.getElementById('trimStartInput').value = formatTimeInput(startTime);
-    document.getElementById('trimEndInput').value = formatTimeInput(endTime);
+    const trimStartInput = document.getElementById('trimStartInput');
+    const trimEndInput = document.getElementById('trimEndInput');
+    if (trimStartInput) {
+        trimStartInput.value = formatTimeInput(startTime);
+        console.log('✅ Updated trimStartInput to:', formatTimeInput(startTime));
+    } else {
+        console.warn('❌ trimStartInput not found');
+    }
+    
+    if (trimEndInput) {
+        trimEndInput.value = formatTimeInput(endTime);
+        console.log('✅ Updated trimEndInput to:', formatTimeInput(endTime));
+    } else {
+        console.warn('❌ trimEndInput not found');
+    }
     
     // Update duration display
     const duration = endTime - startTime;
-    document.getElementById('trimDuration').textContent = formatTime(duration);
+    const trimDurationEl = document.getElementById('trimDuration');
+    if (trimDurationEl) {
+        trimDurationEl.textContent = formatTime(duration);
+        console.log('✅ Updated trimDuration to:', formatTime(duration));
+    } else {
+        console.warn('❌ trimDuration not found');
+    }
     
     // Enable/disable create button
     const createBtn = document.getElementById('createSegmentBtn');
@@ -3848,3 +3924,52 @@ window.assignVideos = assignVideos;
 window.addVideoToProject = addVideoToProject;
 window.removeVideoFromProject = removeVideoFromProject;
 window.deleteVideo = deleteVideo;
+
+// DIAGNOSTIC FUNCTION: Call from console to debug segmentation issues
+window.debugSegmentation = function() {
+    console.log('=== SEGMENTATION DIAGNOSTICS ===');
+    
+    const segmentTab = document.getElementById('segmentTab');
+    const segmentationControls = document.getElementById('segmentationControls');
+    const timelineTrack = segmentationControls?.querySelector('.timeline-track');
+    const timelineSelection = document.getElementById('timelineSelection');
+    const trimHandleStart = document.getElementById('trimHandleStart');
+    const trimHandleEnd = document.getElementById('trimHandleEnd');
+    const segmentVideoPlayer = document.getElementById('segmentVideoPlayer');
+    
+    console.log('DOM Elements Found:');
+    console.log('- segmentTab:', !!segmentTab, 'display:', segmentTab ? window.getComputedStyle(segmentTab).display : 'N/A');
+    console.log('- segmentationControls:', !!segmentationControls, 'display:', segmentationControls ? window.getComputedStyle(segmentationControls).display : 'N/A');
+    console.log('- timelineTrack:', !!timelineTrack, 'display:', timelineTrack ? window.getComputedStyle(timelineTrack).display : 'N/A');
+    console.log('- timelineSelection:', !!timelineSelection, 'display:', timelineSelection ? window.getComputedStyle(timelineSelection).display : 'N/A');
+    console.log('- trimHandleStart:', !!trimHandleStart, 'display:', trimHandleStart ? window.getComputedStyle(trimHandleStart).display : 'N/A');
+    console.log('- trimHandleEnd:', !!trimHandleEnd, 'display:', trimHandleEnd ? window.getComputedStyle(trimHandleEnd).display : 'N/A');
+    console.log('- segmentVideoPlayer:', !!segmentVideoPlayer, 'duration:', segmentVideoPlayer?.duration || 'N/A');
+    
+    console.log('\nTimeline Track Measurements:');
+    if (timelineTrack) {
+        const rect = timelineTrack.getBoundingClientRect();
+        console.log('- getBoundingClientRect():', rect);
+        console.log('- offsetWidth:', timelineTrack.offsetWidth);
+        console.log('- clientWidth:', timelineTrack.clientWidth);
+    }
+    
+    console.log('\nHandle Positions:');
+    if (trimHandleStart) {
+        const rect = trimHandleStart.getBoundingClientRect();
+        console.log('- trimHandleStart rect:', rect);
+    }
+    if (trimHandleEnd) {
+        const rect = trimHandleEnd.getBoundingClientRect();
+        console.log('- trimHandleEnd rect:', rect);
+    }
+    
+    console.log('\nCurrent State:');
+    console.log('- state.segmentStartTime:', state.segmentStartTime);
+    console.log('- state.segmentEndTime:', state.segmentEndTime);
+    console.log('- isDragging:', isDragging);
+    console.log('- dragType:', dragType);
+    
+    console.log('\n(Tip: Try dragging a handle and watch the console logs)');
+    console.log('=== END DIAGNOSTICS ===');
+};
