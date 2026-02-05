@@ -307,6 +307,40 @@ def migration_006_convert_tags_format(cursor) -> str:
     return f"Tags format migrated: {updated_count} updated, {already_migrated_count} already new format"
 
 
+def migration_007_video_segments_table(cursor) -> str:
+    """Create video_segments table for segmentation feature"""
+    try:
+        # Check if table already exists
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='video_segments'"
+        )
+        if cursor.fetchone():
+            logger.info("video_segments table already exists")
+            return "video_segments table already exists"
+        
+        # Create video_segments table
+        cursor.execute("""
+            CREATE TABLE video_segments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                parent_video_id INTEGER NOT NULL,
+                name TEXT,
+                start_time REAL NOT NULL,
+                end_time REAL NOT NULL,
+                thumbnail_path TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (parent_video_id) REFERENCES videos(id) ON DELETE CASCADE
+            )
+        """)
+        
+        logger.info("Created video_segments table")
+        return "Created video_segments table"
+    
+    except sqlite3.Error as e:
+        logger.error(f"Error creating video_segments table: {e}")
+        return f"Error: {e}"
+
+
 # ============================================================================
 # MIGRATION REGISTRY
 # ============================================================================
@@ -319,6 +353,7 @@ MIGRATIONS: List[Tuple[str, Callable]] = [
     ("004_is_salient_field", migration_004_is_salient_field),
     ("005_tagging_trigger_number", migration_005_tagging_trigger_number),
     ("006_convert_tags_format", migration_006_convert_tags_format),
+    ("007_video_segments_table", migration_007_video_segments_table),
 ]
 
 
