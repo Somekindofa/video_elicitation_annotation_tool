@@ -3232,21 +3232,26 @@ window.closeEditElicitationModal = closeEditElicitationModal;
 
 function initializeSegmentTab() {
     // Initialize event listeners for segmentation controls
-    const setStartBtn = document.getElementById('setStartBtn');
-    const setEndBtn = document.getElementById('setEndBtn');
+    const trimStartInput = document.getElementById('trimStartInput');
+    const trimEndInput = document.getElementById('trimEndInput');
     const createSegmentBtn = document.getElementById('createSegmentBtn');
     const clearSegmentBtn = document.getElementById('clearSegmentBtn');
     const refreshSegmentsBtn = document.getElementById('refreshSegmentsBtn');
     const segmentVideoPlayer = document.getElementById('segmentVideoPlayer');
+    const timelineTrack = document.querySelector('.timeline-track');
+    const trimHandleStart = document.getElementById('trimHandleStart');
+    const trimHandleEnd = document.getElementById('trimHandleEnd');
 
-    if (setStartBtn && !setStartBtn.dataset.initialized) {
-        setStartBtn.addEventListener('click', setSegmentStart);
-        setStartBtn.dataset.initialized = 'true';
+    if (trimStartInput && !trimStartInput.dataset.initialized) {
+        trimStartInput.addEventListener('input', handleTimeInputChange);
+        trimStartInput.addEventListener('blur', validateTimeInput);
+        trimStartInput.dataset.initialized = 'true';
     }
 
-    if (setEndBtn && !setEndBtn.dataset.initialized) {
-        setEndBtn.addEventListener('click', setSegmentEnd);
-        setEndBtn.dataset.initialized = 'true';
+    if (trimEndInput && !trimEndInput.dataset.initialized) {
+        trimEndInput.addEventListener('input', handleTimeInputChange);
+        trimEndInput.addEventListener('blur', validateTimeInput);
+        trimEndInput.dataset.initialized = 'true';
     }
 
     if (createSegmentBtn && !createSegmentBtn.dataset.initialized) {
@@ -3268,10 +3273,217 @@ function initializeSegmentTab() {
         refreshSegmentsBtn.dataset.initialized = 'true';
     }
 
+    // Timeline click to set position
+    if (timelineTrack && !timelineTrack.dataset.initialized) {
+        timelineTrack.addEventListener('click', handleTimelineClick);
+        timelineTrack.dataset.initialized = 'true';
+    }
+
+    // Draggable handles
+    if (trimHandleStart && !trimHandleStart.dataset.initialized) {
+        trimHandleStart.addEventListener('mousedown', (e) => startDrag(e, 'start'));
+        trimHandleStart.dataset.initialized = 'true';
+    }
+
+    if (trimHandleEnd && !trimHandleEnd.dataset.initialized) {
+        trimHandleEnd.addEventListener('mousedown', (e) => startDrag(e, 'end'));
+        trimHandleEnd.dataset.initialized = 'true';
+    }
+
+    // Update playhead position
+    if (segmentVideoPlayer && !segmentVideoPlayer.dataset.playheadInitialized) {
+        segmentVideoPlayer.addEventListener('timeupdate', updatePlayhead);
+        segmentVideoPlayer.dataset.playheadInitialized = 'true';
+    }
+
     // If a video is already loaded in the elicitation tab, use it
     if (state.currentVideoId && state.currentVideo) {
         loadVideoForSegmentation(state.currentVideoId);
     }
+}
+
+// Drag state
+let isDragging = false;
+let dragType = null;
+
+function startDrag(e, type) {
+    e.preventDefault();
+    e.stopPropagation();
+    isDragging = true;
+    dragType = type;
+    
+    document.addEventListener('mousemove', handleDrag);
+    document.addEventListener('mouseup', stopDrag);
+}
+
+function handleDrag(e) {
+    if (!isDragging) return;
+    
+    const timelineTrack = document.querySelector('.timeline-track');
+    const rect = timelineTrack.getBoundingClientRect();
+    const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+    const percentage = x / rect.width;
+    
+    const player = document.getElementById('segmentVideoPlayer');
+    if (!player || !player.duration) return;
+    
+    const time = percentage * player.duration;
+    
+    if (dragType === 'start') {
+        state.segmentStartTime = time;
+        if (state.segmentEndTime !== null && time >= state.segmentEndTime) {
+            state.segmentEndTime = Math.min(time + 1, player.duration);
+        }
+    } else if (dragType === 'end') {
+        state.segmentEndTime = time;
+        if (state.segmentStartTime !== null && time <= state.segmentStartTime) {
+            state.segmentStartTime = Math.max(0, time - 1);
+        }
+    }
+    
+    updateTimelineUI();
+}
+
+function stopDrag() {
+    isDragging = false;
+    dragType = null;
+    document.removeEventListener('mousemove', handleDrag);
+    document.removeEventListener('mouseup', stopDrag);
+}
+
+function handleTimelineClick(e) {
+    if (isDragging) return;
+    
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const percentage = x / rect.width;
+    
+    const player = document.getElementById('segmentVideoPlayer');
+    if (!player || !player.duration) return;
+    
+    const time = percentage * player.duration;
+    
+    // Set start if not set, otherwise set end
+    if (state.segmentStartTime === null) {
+        state.segmentStartTime = time;
+    } else if (state.segmentEndTime === null || time > state.segmentStartTime) {
+        state.segmentEndTime = time;
+    } else {
+        state.segmentStartTime = time;
+    }
+    
+    updateTimelineUI();
+}
+
+function handleTimeInputChange(e) {
+    const input = e.target;
+    const value = input.value;
+    
+    // Only allow digits and colon
+    const cleaned = value.replace(/[^0-9:]/g, '');
+    if (cleaned !== value) {
+        input.value = cleaned;
+        return;
+    }
+    
+    // Try to parse if it looks complete
+    if (value.match(/^\d{1,2}:\d{2}$/)) {
+        const time = parseTimeInput(value);
+        if (time !== null) {
+            if (input.id === 'trimStartInput') {
+                state.segmentStartTime = time;
+            } else {
+                state.segmentEndTime = time;
+            }
+            updateTimelineUI();
+        }
+    }
+}
+
+function validateTimeInput(e) {
+    const input = e.target;
+    const value = input.value;
+    
+    if (!value) return;
+    
+    const time = parseTimeInput(value);
+    if (time !== null) {
+        if (input.id === 'trimStartInput') {
+            state.segmentStartTime = time;
+        } else {
+            state.segmentEndTime = time;
+        }
+    }
+    
+    updateTimelineUI();
+}
+
+function parseTimeInput(timeStr) {
+    const match = timeStr.match(/^(\d{1,2}):(\d{2})$/);
+    if (!match) return null;
+    
+    const minutes = parseInt(match[1], 10);
+    const seconds = parseInt(match[2], 10);
+    
+    if (seconds >= 60) return null;
+    
+    const player = document.getElementById('segmentVideoPlayer');
+    const time = minutes * 60 + seconds;
+    
+    if (player && player.duration && time > player.duration) {
+        return player.duration;
+    }
+    
+    return time;
+}
+
+function updatePlayhead() {
+    const player = document.getElementById('segmentVideoPlayer');
+    const playhead = document.getElementById('timelinePlayhead');
+    
+    if (!player || !player.duration || !playhead) return;
+    
+    const percentage = (player.currentTime / player.duration) * 100;
+    playhead.style.left = percentage + '%';
+}
+
+function updateTimelineUI() {
+    const player = document.getElementById('segmentVideoPlayer');
+    if (!player || !player.duration) return;
+    
+    const startTime = state.segmentStartTime !== null ? state.segmentStartTime : 0;
+    const endTime = state.segmentEndTime !== null ? state.segmentEndTime : player.duration;
+    
+    // Update timeline selection
+    const selection = document.getElementById('timelineSelection');
+    if (selection) {
+        const startPercent = (startTime / player.duration) * 100;
+        const endPercent = (endTime / player.duration) * 100;
+        selection.style.left = startPercent + '%';
+        selection.style.width = (endPercent - startPercent) + '%';
+    }
+    
+    // Update input fields
+    document.getElementById('trimStartInput').value = formatTimeInput(startTime);
+    document.getElementById('trimEndInput').value = formatTimeInput(endTime);
+    
+    // Update duration display
+    const duration = endTime - startTime;
+    document.getElementById('trimDuration').textContent = formatTime(duration);
+    
+    // Enable/disable create button
+    const createBtn = document.getElementById('createSegmentBtn');
+    if (createBtn) {
+        createBtn.disabled = state.segmentStartTime === null || state.segmentEndTime === null || 
+                             state.segmentEndTime <= state.segmentStartTime;
+    }
+}
+
+function formatTimeInput(seconds) {
+    if (isNaN(seconds) || !isFinite(seconds)) return '0:00';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
 async function loadVideoForSegmentation(videoId) {
@@ -3310,54 +3522,25 @@ async function loadVideoForSegmentation(videoId) {
     }
 }
 
-function setSegmentStart() {
-    const player = document.getElementById('segmentVideoPlayer');
-    if (!player) return;
-
-    state.segmentStartTime = player.currentTime;
-    document.getElementById('segmentStartTime').textContent = formatTime(state.segmentStartTime);
-    updateSegmentDuration();
-    updateCreateSegmentButton();
-}
-
-function setSegmentEnd() {
-    const player = document.getElementById('segmentVideoPlayer');
-    if (!player) return;
-
-    state.segmentEndTime = player.currentTime;
-    document.getElementById('segmentEndTime').textContent = formatTime(state.segmentEndTime);
-    updateSegmentDuration();
-    updateCreateSegmentButton();
-}
-
-function updateSegmentDuration() {
-    if (state.segmentStartTime !== null && state.segmentEndTime !== null) {
-        const duration = Math.max(0, state.segmentEndTime - state.segmentStartTime);
-        document.getElementById('segmentDuration').textContent = formatTime(duration);
-    } else {
-        document.getElementById('segmentDuration').textContent = '0:00';
-    }
-}
-
-function updateCreateSegmentButton() {
-    const createBtn = document.getElementById('createSegmentBtn');
-    const isValid = state.segmentStartTime !== null && 
-                    state.segmentEndTime !== null && 
-                    state.segmentEndTime > state.segmentStartTime;
-    
-    if (createBtn) {
-        createBtn.disabled = !isValid;
-    }
-}
-
 function clearSegmentMarkers() {
     state.segmentStartTime = null;
     state.segmentEndTime = null;
-    document.getElementById('segmentStartTime').textContent = '0:00';
-    document.getElementById('segmentEndTime').textContent = '0:00';
-    document.getElementById('segmentDuration').textContent = '0:00';
+    document.getElementById('trimStartInput').value = '';
+    document.getElementById('trimEndInput').value = '';
+    document.getElementById('trimDuration').textContent = '0:00';
     document.getElementById('segmentNameInput').value = '';
-    updateCreateSegmentButton();
+    
+    // Reset timeline UI
+    const selection = document.getElementById('timelineSelection');
+    if (selection) {
+        selection.style.left = '0%';
+        selection.style.width = '100%';
+    }
+    
+    const createBtn = document.getElementById('createSegmentBtn');
+    if (createBtn) {
+        createBtn.disabled = true;
+    }
 }
 
 async function createSegment() {
