@@ -74,6 +74,7 @@ python backend/migration.py --reset      # DANGER: Delete and recreate database
 1. Define `def migration_NNN_name(cursor) -> str` in `migration.py`
 2. Register in `MIGRATIONS` list: `("NNN_name", migration_NNN_name)`
 3. Run `python migration.py`
+See inline comments in `migration.py` for examples and patterns
 
 ## Architecture Deep Dive
 
@@ -96,10 +97,11 @@ All backend files are in `backend/` but imported as if they're in the current di
 1. **Audio Recording** → `create_annotation()` saves WAV, returns immediately
 2. **Background Task 1**: `process_transcription()` → Fireworks Whisper API → broadcasts `transcription_complete`
 3. **Background Task 2**: `process_judge()` → LLM analyzes if elicitation needs review → broadcasts `judge_complete`
-   - If `needs_review=false` with high confidence → Shows "Force Review" button (allows manual override)
+   - If `needs_review=false` → Shows "Force Review" button (allows manual override)
    - If `needs_review=true` → Auto-triggers next stage (tagging)
 4. **Background Task 3**: `process_tagging()` → Extracts tools/materials/techniques → broadcasts `tagging_complete`
 5. **Background Task 4**: `process_review()` → Multi-dimensional quality analysis (HOW/EVAL/FEEDBACK) + salience detection → broadcasts `review_complete`
+6. **Background Task 5**: `process_task_detection()` → Auto-detects task name from transcription → stores in `detected_task`
 
 ```python
 # All background tasks use AsyncSessionLocal() to create independent sessions
@@ -108,9 +110,10 @@ async with db.AsyncSessionLocal() as session:
 ```
 
 **Key Services**:
-- **judge_service.py**: Determines if elicitation needs AI review (lightweight gatekeeper)
+- **judge_service.py**: Determines if elicitation needs AI review (lightweight gatekeeper) - **NO CONFIDENCE METRIC** (removed Feb 2026)
 - **review_service.py**: Multi-dimensional quality assessment + salience detection
 - **tagging_service.py**: Extracts structured metadata (tags) for RAG retrieval
+- **task_detector_service.py**: Auto-detects task name from transcription (conservative detection)
 - **llm_service.py**: Domain-specific LLM prompts (glassblowing, jewelry) - DEPRECATED for new features
 
 ### WebSocket Message Types
@@ -120,7 +123,7 @@ Frontend must handle these real-time events:
 - `transcription_complete` - Whisper done, includes `transcription` text
 - `transcription_error` - Whisper failed
 - `judge_status: "processing"` - Judge analysis started
-- `judge_complete` - Judge done, includes `judge_decision` (needs_review, confidence, reasoning)
+- `judge_complete` - Judge done, includes `judge_decision` (needs_review, reasoning, missing_elements, strengths) **NO CONFIDENCE**
 - `judge_error` - Judge failed
 - `tagging_status: "processing"` - Tag extraction started
 - `tagging_complete` - Tags extracted, includes array of tags with `name` and `category`
@@ -129,13 +132,15 @@ Frontend must handle these real-time events:
 - `review_complete` - Review done, includes `review_results` (dimensions, prompts, salience) + `is_salient` flag
 - `review_error` - Review failed
 - `annotation_deleted` - Cleanup trigger
+- `task_detection_complete` - Task auto-detected, includes `detected_task` name
 
 ### Database Schema Highlights
 ```python
 # Annotation model has FIVE processing pipelines (see backend/models.py Annotation class):
 transcription_status: pending/processing/completed/failed
 judge_status: pending/processing/completed/failed
-judge_decision: Text (JSON string with needs_review, confidence, reasoning, missing_elements, strengths)
+judge_decision: Text (JSON string with needs_review, reasoning, missing_elements, strengths)
+detected_task: Text (auto-detected task name from transcription, nullable)
 tagging_status: pending/processing/completed/failed
 tags: Text (JSON array of {name, category} objects)
 review_status: pending/processing/completed/failed/skipped
@@ -145,7 +150,7 @@ is_salient: Integer (1=salient moment, 0=not salient)
 
 # Craft/domain context (affects LLM prompts):
 craft: String (e.g., "glassblowing", "jewelry", "scientific_glassblowing")
-task: String (free text or from Tasks taxonomy)
+task: String (user-editable task name - overrides detected_task, free text or from Tasks taxonomy)
 
 # Legacy feedback system (French UI) - still present but not actively used:
 feedback: Integer (1=thumbs up, 0=thumbs down, null=no feedback)
@@ -178,7 +183,7 @@ Located in `backend/review_service.py` - French language prompts analyze 3 core 
 2. Use key-value output format (see `review_service.py` for pattern) - NOT JSON from LLM
 3. Add background processing function in `main.py` (e.g., `async def process_new_service()`)
 4. Add database fields to `models.py` (e.g., `new_service_status`, `new_service_results`)
-5. Run `python backend/migrate_db.py` to auto-add columns (or restart via `start.bat`)
+5. Run `python backend/migration.py` to auto-add columns (or restart via `start.bat`)
 6. Add WebSocket broadcast events (`new_service_status`, `new_service_complete`, `new_service_error`)
 7. Update frontend WebSocket handler in `js/app.js` to display results
 
@@ -218,7 +223,7 @@ All UI updates check this state - no framework, pure DOM manipulation. Review pa
     "end_time": 25.3,
     "transcription": "Expert describes technique...",
     "transcription_status": "completed",
-    "judge_decision": {"needs_review": true, "confidence": 0.85},
+    "judge_decision": {"needs_review": true, "reasoning": "...", "missing_elements": [...], "strengths": [...]},
     "tags": [{"name": "pince_brucelles", "category": "tool"}, {"name": "argent", "category": "material"}],
     "review_status": "completed",
     "review_results": {"tier": 1, "score": 85, "dimensions": {...}, "priority_prompts": [...]},
@@ -243,7 +248,7 @@ from tagging_service import extract_tags
 
 # Example: Test judge
 judge_result = await judge_elicitation("Le maître explique comment tenir les pinces...")
-print(judge_result)  # {"needs_review": true, "confidence": 0.9, ...}
+print(judge_result)  # {"needs_review": true, "reasoning": "...", "missing_elements": [...], "strengths": [...]}
 
 # Example: Test tagging
 tags = await extract_tags("Il utilise la pince brucelles sur l'argent...")
@@ -342,7 +347,7 @@ from new_service import analyze_something
 
 # Test with French text (project uses French)
 result = await analyze_something("Expert décrit la technique...")
-assert result["confidence"] > 0.5  # Check expected output structure
+assert result["needs_review"] is not None  # Check expected output structure
 print(result)
 ```
 
@@ -563,13 +568,13 @@ except Exception as e:
 ## Key Features & Components
 
 ### Multi-Stage AI Pipeline (Current Architecture)
-**Transcription → Judge → Tagging → Review (with Salience)**
+**Transcription → Judge → Tagging → Review (with Salience) + Task Detection**
 
 1. **Judge Service** (`judge_service.py`):
    - Lightweight completeness assessment
-   - Outputs: `needs_review` (bool), `confidence` (0-1), `reasoning`, `missing_elements`, `strengths`
-   - If `needs_review=false` + high confidence → user can force review manually
-   - If `needs_review=true` → auto-triggers tagging
+   - Outputs: `needs_review` (bool), `reasoning`, `missing_elements`, `strengths`
+   - If `needs_review=false` → Shows "Force Review" button (allows manual override)
+   - If `needs_review=true` → Auto-triggers tagging
 
 2. **Tagging Service** (`tagging_service.py`):
    - Extracts structured metadata for RAG retrieval
@@ -582,6 +587,12 @@ except Exception as e:
    - Salience detection (pedagogical value for apprentices)
    - Outputs tier (1-4), score (0-100), dimension coverage, priority prompts
    - Can be manually re-triggered via `POST /api/annotations/{id}/review`
+
+4. **Task Detection Service** (`task_detector_service.py`):
+   - Auto-detects task name from transcription (runs in parallel with other pipelines)
+   - Conservative detection - only assigns clear, performative task names
+   - Stores in `detected_task` field (user can override via `task` field)
+   - Used for organizing and filtering annotations by task type
 
 ### Projects System
 Videos can be organized into projects (datasets) with batch ordering:
