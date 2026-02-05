@@ -2835,15 +2835,17 @@ body {
 .timeline-handle {
     position: absolute;
     top: -4px;
-    width: 12px;
+    width: 16px;
     height: 32px;
     background: #00d9ff;
-    border-radius: 3px;
+    border-radius: 4px;
     cursor: ew-resize;
-    pointer-events: all;
+    pointer-events: all !important;
     transition: background 0.2s ease;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
     z-index: 10;
+    touch-action: none;
+    user-select: none;
 }
 
 .timeline-handle:hover {
@@ -2852,11 +2854,11 @@ body {
 }
 
 .timeline-handle-start {
-    left: -6px;
+    left: -8px;
 }
 
 .timeline-handle-end {
-    right: -6px;
+    right: -8px;
 }
 
 .timeline-playhead {

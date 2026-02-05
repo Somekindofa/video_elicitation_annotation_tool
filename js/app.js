@@ -3279,14 +3279,44 @@ function initializeSegmentTab() {
         timelineTrack.dataset.initialized = 'true';
     }
 
-    // Draggable handles
+    // Draggable handles - use more robust event attachment
     if (trimHandleStart && !trimHandleStart.dataset.initialized) {
-        trimHandleStart.addEventListener('mousedown', (e) => startDrag(e, 'start'));
+        console.log('Initializing start handle drag');
+        trimHandleStart.addEventListener('mousedown', (e) => {
+            console.log('Start handle mousedown event fired');
+            startDrag(e, 'start');
+        });
+        // Also add touch support
+        trimHandleStart.addEventListener('touchstart', (e) => {
+            console.log('Start handle touchstart event fired');
+            e.preventDefault();
+            const touch = e.touches[0];
+            const mouseEvent = new MouseEvent('mousedown', {
+                clientX: touch.clientX,
+                clientY: touch.clientY
+            });
+            startDrag(mouseEvent, 'start');
+        });
         trimHandleStart.dataset.initialized = 'true';
     }
 
     if (trimHandleEnd && !trimHandleEnd.dataset.initialized) {
-        trimHandleEnd.addEventListener('mousedown', (e) => startDrag(e, 'end'));
+        console.log('Initializing end handle drag');
+        trimHandleEnd.addEventListener('mousedown', (e) => {
+            console.log('End handle mousedown event fired');
+            startDrag(e, 'end');
+        });
+        // Also add touch support
+        trimHandleEnd.addEventListener('touchstart', (e) => {
+            console.log('End handle touchstart event fired');
+            e.preventDefault();
+            const touch = e.touches[0];
+            const mouseEvent = new MouseEvent('mousedown', {
+                clientX: touch.clientX,
+                clientY: touch.clientY
+            });
+            startDrag(mouseEvent, 'end');
+        });
         trimHandleEnd.dataset.initialized = 'true';
     }
 
@@ -3307,25 +3337,51 @@ let isDragging = false;
 let dragType = null;
 
 function startDrag(e, type) {
+    console.log('startDrag called with type:', type);
     e.preventDefault();
     e.stopPropagation();
     isDragging = true;
     dragType = type;
     
+    console.log('Drag started, isDragging:', isDragging, 'dragType:', dragType);
+    
     document.addEventListener('mousemove', handleDrag);
     document.addEventListener('mouseup', stopDrag);
+    document.addEventListener('touchmove', handleTouchDrag, { passive: false });
+    document.addEventListener('touchend', stopDrag);
+}
+
+function handleTouchDrag(e) {
+    e.preventDefault();
+    const touch = e.touches[0];
+    const mouseEvent = new MouseEvent('mousemove', {
+        clientX: touch.clientX,
+        clientY: touch.clientY
+    });
+    handleDrag(mouseEvent);
 }
 
 function handleDrag(e) {
-    if (!isDragging) return;
+    if (!isDragging) {
+        console.log('handleDrag called but isDragging is false');
+        return;
+    }
     
     const timelineTrack = document.querySelector('.timeline-track');
+    if (!timelineTrack) {
+        console.log('Timeline track not found');
+        return;
+    }
+    
     const rect = timelineTrack.getBoundingClientRect();
     const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
     const percentage = x / rect.width;
     
     const player = document.getElementById('segmentVideoPlayer');
-    if (!player || !player.duration) return;
+    if (!player || !player.duration) {
+        console.log('Player not ready, duration:', player?.duration);
+        return;
+    }
     
     const time = percentage * player.duration;
     
@@ -3334,21 +3390,26 @@ function handleDrag(e) {
         if (state.segmentEndTime !== null && time >= state.segmentEndTime) {
             state.segmentEndTime = Math.min(time + 1, player.duration);
         }
+        console.log('Updated start time to:', time);
     } else if (dragType === 'end') {
         state.segmentEndTime = time;
         if (state.segmentStartTime !== null && time <= state.segmentStartTime) {
             state.segmentStartTime = Math.max(0, time - 1);
         }
+        console.log('Updated end time to:', time);
     }
     
     updateTimelineUI();
 }
 
 function stopDrag() {
+    console.log('stopDrag called, was dragging:', isDragging);
     isDragging = false;
     dragType = null;
     document.removeEventListener('mousemove', handleDrag);
     document.removeEventListener('mouseup', stopDrag);
+    document.removeEventListener('touchmove', handleTouchDrag);
+    document.removeEventListener('touchend', stopDrag);
 }
 
 function handleTimelineClick(e) {
