@@ -2835,7 +2835,7 @@ body {
 .timeline-handle {
     position: absolute;
     top: -4px;
-    width: 16px;
+    width: 6px;
     height: 32px;
     background: #00d9ff;
     border-radius: 4px;
@@ -2854,11 +2854,11 @@ body {
 }
 
 .timeline-handle-start {
-    left: -8px;
+    left: 0px;
 }
 
 .timeline-handle-end {
-    right: -8px;
+    right: 0px;
 }
 
 .timeline-playhead {
