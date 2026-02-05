@@ -62,6 +62,33 @@ class Video(Base):
     annotations = relationship(
         "Annotation", back_populates="video", cascade="all, delete-orphan"
     )
+    segments = relationship(
+        "VideoSegment", back_populates="parent_video", cascade="all, delete-orphan"
+    )
+
+
+class VideoSegment(Base):
+    """Video segment created by user for focused elicitation work"""
+
+    __tablename__ = "video_segments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    parent_video_id = Column(
+        Integer, ForeignKey("videos.id"), nullable=False
+    )  # Reference to original video
+    name = Column(String, nullable=True)  # User-provided name/tag (e.g., "Etirage n°2")
+    start_time = Column(Float, nullable=False)  # Start time in seconds
+    end_time = Column(Float, nullable=False)  # End time in seconds
+    thumbnail_path = Column(String, nullable=True)  # Path to thumbnail image
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=datetime.now(timezone.utc),
+        onupdate=datetime.now(timezone.utc),
+    )
+
+    # Relationships
+    parent_video = relationship("Video", back_populates="segments")
 
 
 class Tag(Base):
@@ -235,6 +262,41 @@ class VideoResponse(BaseModel):
     source_type: str = "uploaded"
     uploaded_at: datetime
     annotation_count: int = 0
+
+    class Config:
+        from_attributes = True
+
+
+class VideoSegmentCreate(BaseModel):
+    """Schema for creating a video segment"""
+
+    parent_video_id: int
+    name: Optional[str] = None
+    start_time: float = Field(..., ge=0)
+    end_time: float = Field(..., gt=0)
+    thumbnail_path: Optional[str] = None
+
+
+class VideoSegmentUpdate(BaseModel):
+    """Schema for updating a video segment"""
+
+    name: Optional[str] = None
+    start_time: Optional[float] = Field(None, ge=0)
+    end_time: Optional[float] = Field(None, gt=0)
+    thumbnail_path: Optional[str] = None
+
+
+class VideoSegmentResponse(BaseModel):
+    """Schema for video segment response"""
+
+    id: int
+    parent_video_id: int
+    name: Optional[str] = None
+    start_time: float
+    end_time: float
+    thumbnail_path: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
 
     class Config:
         from_attributes = True
