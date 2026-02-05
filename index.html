@@ -34,6 +34,9 @@
             <button class="tab-btn active" data-tab="annotate">
                 <i class="fas fa-pen-to-square"></i> Elicit
             </button>
+            <button class="tab-btn" data-tab="segment">
+                <i class="fas fa-scissors"></i> Segment
+            </button>
         </div>
 
         <!-- Main Content -->
@@ -159,6 +162,98 @@
                         <i class="fas fa-pen-to-square empty-icon"></i>
                         <p>No annotations yet</p>
                         <p class="hint">Start recording to create your first elicitation</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Segment Tab Content -->
+        <div class="main-content" id="segmentTab" style="display: none;">
+            <!-- Video Player -->
+            <div class="video-panel">
+                <!-- Video Selection -->
+                <div class="video-selector" id="segmentVideoSelector">
+                    <div class="empty-state">
+                        <i class="fas fa-film empty-icon"></i>
+                        <h3>No Video Loaded</h3>
+                        <p>Click "Select Video" to load a video for segmentation</p>
+                    </div>
+                </div>
+
+                <!-- Video Player -->
+                <div class="video-player-container" id="segmentVideoPlayerContainer" style="display: none;">
+                    <div class="video-with-controls">
+                        <!-- Segmentation Controls -->
+                        <div class="segmentation-controls" id="segmentationControls" style="display: none;">
+                            <div class="segment-time-display">
+                                <div class="time-marker">
+                                    <span class="marker-label">Start:</span>
+                                    <span id="segmentStartTime" class="marker-time">0:00</span>
+                                    <button id="setStartBtn" class="btn btn-small btn-primary">
+                                        <i class="fas fa-flag"></i> Set Start
+                                    </button>
+                                </div>
+                                <div class="time-marker">
+                                    <span class="marker-label">End:</span>
+                                    <span id="segmentEndTime" class="marker-time">0:00</span>
+                                    <button id="setEndBtn" class="btn btn-small btn-primary">
+                                        <i class="fas fa-flag-checkered"></i> Set End
+                                    </button>
+                                </div>
+                                <div class="segment-duration">
+                                    Duration: <span id="segmentDuration">0:00</span>
+                                </div>
+                            </div>
+                            <div class="segment-actions">
+                                <input type="text" id="segmentNameInput" placeholder="Segment name (e.g., Etirage n°2)" class="segment-name-input">
+                                <button id="createSegmentBtn" class="btn btn-success" disabled>
+                                    <i class="fas fa-plus"></i> Create Segment
+                                </button>
+                                <button id="clearSegmentBtn" class="btn btn-secondary">
+                                    <i class="fas fa-times"></i> Clear
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Video Player -->
+                        <div class="video-content">
+                            <video id="segmentVideoPlayer" controls controlsList="nodownload" muted>
+                                <source id="segmentVideoSource" src="" type="video/mp4">
+                                Your browser does not support the video tag.
+                            </video>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Video Info -->
+                <div class="video-info" id="segmentVideoInfo" style="display: none;">
+                    <div class="info-item">
+                        <span class="info-label">Video:</span>
+                        <span class="info-value" id="segmentVideoName">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Segments:</span>
+                        <span class="info-value" id="segmentCount">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel: Segments List -->
+            <div class="annotations-panel">
+                <div class="panel-header">
+                    <h2>Segmented Videos</h2>
+                    <div class="panel-header-actions">
+                        <button id="refreshSegmentsBtn" class="btn btn-icon" title="Refresh">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="annotations-list" id="segmentsList">
+                    <div class="empty-state">
+                        <i class="fas fa-scissors empty-icon"></i>
+                        <p>No segments yet</p>
+                        <p class="hint">Load a video and mark segments to get started</p>
                     </div>
                 </div>
             </div>

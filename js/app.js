@@ -23,7 +23,13 @@ const state = {
     tasks: [],
     task: '',
     sortBy: 'newest',
-    showReviewPanels: {}  // Track which annotation review panels are visible (defaults to hidden)
+    showReviewPanels: {},  // Track which annotation review panels are visible (defaults to hidden)
+    // Segmentation state
+    segmentVideoId: null,
+    segmentVideoElement: null,
+    segments: [],
+    segmentStartTime: null,
+    segmentEndTime: null
 };
 
 // API Base URL
@@ -2542,14 +2548,19 @@ function switchTab(tabName) {
 
     // Show/hide content
     const annotateTab = document.getElementById('annotateTab');
+    const segmentTab = document.getElementById('segmentTab');
     const projectsTab = document.getElementById('projectsTab');
 
     // Hide all tabs first (with null checks)
     if (annotateTab) annotateTab.style.display = 'none';
+    if (segmentTab) segmentTab.style.display = 'none';
     if (projectsTab) projectsTab.style.display = 'none';
 
     if (tabName === 'annotate') {
         if (annotateTab) annotateTab.style.display = '';
+    } else if (tabName === 'segment') {
+        if (segmentTab) segmentTab.style.display = '';
+        initializeSegmentTab();
     } else if (tabName === 'projects') {
         if (projectsTab) projectsTab.style.display = 'block';
         loadProjects();
@@ -3088,6 +3099,333 @@ window.toggleDimension = toggleDimension;
 window.triggerReview = triggerReview;
 window.editElicitation = editElicitation;
 window.closeEditElicitationModal = closeEditElicitationModal;
+
+// ============================================================================
+// SEGMENTATION TAB FUNCTIONS
+// ============================================================================
+
+function initializeSegmentTab() {
+    // Initialize event listeners for segmentation controls
+    const setStartBtn = document.getElementById('setStartBtn');
+    const setEndBtn = document.getElementById('setEndBtn');
+    const createSegmentBtn = document.getElementById('createSegmentBtn');
+    const clearSegmentBtn = document.getElementById('clearSegmentBtn');
+    const refreshSegmentsBtn = document.getElementById('refreshSegmentsBtn');
+    const segmentVideoPlayer = document.getElementById('segmentVideoPlayer');
+
+    if (setStartBtn && !setStartBtn.dataset.initialized) {
+        setStartBtn.addEventListener('click', setSegmentStart);
+        setStartBtn.dataset.initialized = 'true';
+    }
+
+    if (setEndBtn && !setEndBtn.dataset.initialized) {
+        setEndBtn.addEventListener('click', setSegmentEnd);
+        setEndBtn.dataset.initialized = 'true';
+    }
+
+    if (createSegmentBtn && !createSegmentBtn.dataset.initialized) {
+        createSegmentBtn.addEventListener('click', createSegment);
+        createSegmentBtn.dataset.initialized = 'true';
+    }
+
+    if (clearSegmentBtn && !clearSegmentBtn.dataset.initialized) {
+        clearSegmentBtn.addEventListener('click', clearSegmentMarkers);
+        clearSegmentBtn.dataset.initialized = 'true';
+    }
+
+    if (refreshSegmentsBtn && !refreshSegmentsBtn.dataset.initialized) {
+        refreshSegmentsBtn.addEventListener('click', () => {
+            if (state.segmentVideoId) {
+                loadSegments(state.segmentVideoId);
+            }
+        });
+        refreshSegmentsBtn.dataset.initialized = 'true';
+    }
+
+    // If a video is already loaded in the elicitation tab, use it
+    if (state.currentVideoId && state.currentVideo) {
+        loadVideoForSegmentation(state.currentVideoId);
+    }
+}
+
+async function loadVideoForSegmentation(videoId) {
+    try {
+        const response = await fetch(`${API_BASE}/api/videos/${videoId}`);
+        if (!response.ok) throw new Error('Failed to load video');
+
+        const video = await response.json();
+        state.segmentVideoId = videoId;
+
+        // Show video player
+        document.getElementById('segmentVideoSelector').style.display = 'none';
+        document.getElementById('segmentVideoPlayerContainer').style.display = 'block';
+        document.getElementById('segmentationControls').style.display = 'flex';
+        document.getElementById('segmentVideoInfo').style.display = 'flex';
+
+        // Load video
+        const videoPlayer = document.getElementById('segmentVideoPlayer');
+        const videoSource = document.getElementById('segmentVideoSource');
+        videoSource.src = `${API_BASE}/api/videos/${videoId}/file`;
+        videoPlayer.load();
+
+        state.segmentVideoElement = videoPlayer;
+
+        // Update info
+        document.getElementById('segmentVideoName').textContent = video.filename;
+
+        // Load existing segments
+        await loadSegments(videoId);
+
+        clearSegmentMarkers();
+
+    } catch (error) {
+        console.error('Error loading video for segmentation:', error);
+        showToast('Error', 'Failed to load video', 'error');
+    }
+}
+
+function setSegmentStart() {
+    const player = document.getElementById('segmentVideoPlayer');
+    if (!player) return;
+
+    state.segmentStartTime = player.currentTime;
+    document.getElementById('segmentStartTime').textContent = formatTime(state.segmentStartTime);
+    updateSegmentDuration();
+    updateCreateSegmentButton();
+}
+
+function setSegmentEnd() {
+    const player = document.getElementById('segmentVideoPlayer');
+    if (!player) return;
+
+    state.segmentEndTime = player.currentTime;
+    document.getElementById('segmentEndTime').textContent = formatTime(state.segmentEndTime);
+    updateSegmentDuration();
+    updateCreateSegmentButton();
+}
+
+function updateSegmentDuration() {
+    if (state.segmentStartTime !== null && state.segmentEndTime !== null) {
+        const duration = Math.max(0, state.segmentEndTime - state.segmentStartTime);
+        document.getElementById('segmentDuration').textContent = formatTime(duration);
+    } else {
+        document.getElementById('segmentDuration').textContent = '0:00';
+    }
+}
+
+function updateCreateSegmentButton() {
+    const createBtn = document.getElementById('createSegmentBtn');
+    const isValid = state.segmentStartTime !== null && 
+                    state.segmentEndTime !== null && 
+                    state.segmentEndTime > state.segmentStartTime;
+    
+    if (createBtn) {
+        createBtn.disabled = !isValid;
+    }
+}
+
+function clearSegmentMarkers() {
+    state.segmentStartTime = null;
+    state.segmentEndTime = null;
+    document.getElementById('segmentStartTime').textContent = '0:00';
+    document.getElementById('segmentEndTime').textContent = '0:00';
+    document.getElementById('segmentDuration').textContent = '0:00';
+    document.getElementById('segmentNameInput').value = '';
+    updateCreateSegmentButton();
+}
+
+async function createSegment() {
+    if (!state.segmentVideoId) {
+        showToast('Error', 'No video loaded', 'error');
+        return;
+    }
+
+    if (state.segmentStartTime === null || state.segmentEndTime === null) {
+        showToast('Error', 'Please set start and end times', 'error');
+        return;
+    }
+
+    if (state.segmentEndTime <= state.segmentStartTime) {
+        showToast('Error', 'End time must be after start time', 'error');
+        return;
+    }
+
+    try {
+        showLoading('Creating segment...');
+
+        const segmentName = document.getElementById('segmentNameInput').value.trim() || null;
+
+        const segmentData = {
+            parent_video_id: state.segmentVideoId,
+            name: segmentName,
+            start_time: state.segmentStartTime,
+            end_time: state.segmentEndTime
+        };
+
+        const response = await fetch(`${API_BASE}/api/segments`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(segmentData)
+        });
+
+        if (!response.ok) {
+            const error = await response.text();
+            throw new Error(error || 'Failed to create segment');
+        }
+
+        const segment = await response.json();
+        showToast('Success', 'Segment created successfully', 'success');
+
+        // Reload segments
+        await loadSegments(state.segmentVideoId);
+
+        // Clear form
+        clearSegmentMarkers();
+
+    } catch (error) {
+        console.error('Error creating segment:', error);
+        showToast('Error', error.message || 'Failed to create segment', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function loadSegments(videoId) {
+    try {
+        const response = await fetch(`${API_BASE}/api/segments/video/${videoId}`);
+        if (!response.ok) throw new Error('Failed to load segments');
+
+        state.segments = await response.json();
+        renderSegments();
+
+        // Update segment count
+        document.getElementById('segmentCount').textContent = state.segments.length;
+
+    } catch (error) {
+        console.error('Error loading segments:', error);
+        showToast('Error', 'Failed to load segments', 'error');
+    }
+}
+
+function renderSegments() {
+    const container = document.getElementById('segmentsList');
+
+    if (state.segments.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-scissors empty-icon"></i>
+                <p>No segments yet</p>
+                <p class="hint">Mark start and end times to create your first segment</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = '';
+
+    state.segments.forEach(segment => {
+        const duration = segment.end_time - segment.start_time;
+        const segmentName = segment.name || 'Unnamed Segment';
+
+        const item = document.createElement('div');
+        item.className = 'segment-item';
+        item.innerHTML = `
+            <div class="segment-header">
+                <div class="segment-name ${segment.name ? '' : 'unnamed'}">
+                    <i class="fas fa-cut"></i> ${segmentName}
+                </div>
+                <div class="segment-actions-buttons">
+                    <button class="btn btn-icon btn-small" onclick="seekToSegment(${segment.id})" title="Play segment">
+                        <i class="fas fa-play"></i>
+                    </button>
+                    <button class="btn btn-icon btn-small" onclick="editSegment(${segment.id})" title="Edit segment">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn btn-icon btn-small" onclick="deleteSegment(${segment.id})" title="Delete segment">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="segment-info">
+                <div class="segment-time-range">
+                    <i class="fas fa-clock"></i>
+                    <span>${formatTime(segment.start_time)} - ${formatTime(segment.end_time)}</span>
+                    <span>(${formatTime(duration)})</span>
+                </div>
+            </div>
+        `;
+
+        container.appendChild(item);
+    });
+}
+
+function seekToSegment(segmentId) {
+    const segment = state.segments.find(s => s.id === segmentId);
+    if (!segment) return;
+
+    const player = document.getElementById('segmentVideoPlayer');
+    if (player) {
+        player.currentTime = segment.start_time;
+        player.play();
+    }
+}
+
+async function editSegment(segmentId) {
+    const segment = state.segments.find(s => s.id === segmentId);
+    if (!segment) return;
+
+    const newName = prompt('Edit segment name:', segment.name || '');
+    if (newName === null) return; // User cancelled
+
+    try {
+        showLoading('Updating segment...');
+
+        const response = await fetch(`${API_BASE}/api/segments/${segmentId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: newName.trim() || null })
+        });
+
+        if (!response.ok) throw new Error('Failed to update segment');
+
+        showToast('Success', 'Segment updated', 'success');
+        await loadSegments(state.segmentVideoId);
+
+    } catch (error) {
+        console.error('Error updating segment:', error);
+        showToast('Error', 'Failed to update segment', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function deleteSegment(segmentId) {
+    if (!confirm('Delete this segment?')) return;
+
+    try {
+        showLoading('Deleting segment...');
+
+        const response = await fetch(`${API_BASE}/api/segments/${segmentId}`, {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) throw new Error('Failed to delete segment');
+
+        showToast('Success', 'Segment deleted', 'success');
+        await loadSegments(state.segmentVideoId);
+
+    } catch (error) {
+        console.error('Error deleting segment:', error);
+        showToast('Error', 'Failed to delete segment', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+// Make segmentation functions globally available
+window.seekToSegment = seekToSegment;
+window.editSegment = editSegment;
+window.deleteSegment = deleteSegment;
 window.saveElicitationEdit = saveElicitationEdit;
 window.markElicitationComplete = markElicitationComplete;
 window.registerLocalVideo = registerLocalVideo;
