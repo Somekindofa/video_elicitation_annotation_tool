@@ -2829,6 +2829,7 @@ body {
     border-radius: 3px;
     box-sizing: border-box;
     pointer-events: none;
+    z-index: 1;
 }
 
 .timeline-handle {
@@ -2842,6 +2843,7 @@ body {
     pointer-events: all;
     transition: background 0.2s ease;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    z-index: 10;
 }
 
 .timeline-handle:hover {

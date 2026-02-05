@@ -3508,13 +3508,19 @@ async function loadVideoForSegmentation(videoId) {
 
         state.segmentVideoElement = videoPlayer;
 
+        // Initialize timeline when video metadata is loaded
+        videoPlayer.addEventListener('loadedmetadata', function initTimeline() {
+            // Set default segment to full video
+            state.segmentStartTime = 0;
+            state.segmentEndTime = videoPlayer.duration;
+            updateTimelineUI();
+        }, { once: true });
+
         // Update info
         document.getElementById('segmentVideoName').textContent = video.filename;
 
         // Load existing segments
         await loadSegments(videoId);
-
-        clearSegmentMarkers();
 
     } catch (error) {
         console.error('Error loading video for segmentation:', error);
@@ -3523,23 +3529,34 @@ async function loadVideoForSegmentation(videoId) {
 }
 
 function clearSegmentMarkers() {
-    state.segmentStartTime = null;
-    state.segmentEndTime = null;
-    document.getElementById('trimStartInput').value = '';
-    document.getElementById('trimEndInput').value = '';
-    document.getElementById('trimDuration').textContent = '0:00';
-    document.getElementById('segmentNameInput').value = '';
+    const player = document.getElementById('segmentVideoPlayer');
     
-    // Reset timeline UI
-    const selection = document.getElementById('timelineSelection');
-    if (selection) {
-        selection.style.left = '0%';
-        selection.style.width = '100%';
+    // Reset to full video range if video is loaded
+    if (player && player.duration) {
+        state.segmentStartTime = 0;
+        state.segmentEndTime = player.duration;
+        updateTimelineUI();
+    } else {
+        // No video loaded, just clear
+        state.segmentStartTime = null;
+        state.segmentEndTime = null;
+        document.getElementById('trimStartInput').value = '';
+        document.getElementById('trimEndInput').value = '';
+        document.getElementById('trimDuration').textContent = '0:00';
+        
+        // Reset timeline UI to initial state
+        const selection = document.getElementById('timelineSelection');
+        if (selection) {
+            selection.style.left = '0%';
+            selection.style.width = '100%';
+        }
     }
+    
+    document.getElementById('segmentNameInput').value = '';
     
     const createBtn = document.getElementById('createSegmentBtn');
     if (createBtn) {
-        createBtn.disabled = true;
+        createBtn.disabled = false; // Enable since full video is valid
     }
 }
 
