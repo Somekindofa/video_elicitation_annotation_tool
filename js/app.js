@@ -782,6 +782,12 @@ async function loadVideo(videoId) {
         videoSource.src = `${API_BASE}/api/videos/${videoId}/file`;
         videoPlayer.load();
 
+        // Remove segment end handler when loading full video
+        if (videoPlayer._segmentEndHandler) {
+            videoPlayer.removeEventListener('timeupdate', videoPlayer._segmentEndHandler);
+            videoPlayer._segmentEndHandler = null;
+        }
+
         // Update video info
         document.getElementById('videoName').textContent = video.filename;
         document.getElementById('annotationCount').textContent = video.annotation_count;
@@ -842,6 +848,23 @@ async function loadVideoSegment(videoId, segment) {
             videoPlayer.currentTime = segment.start_time;
             videoPlayer.removeEventListener('loadedmetadata', seekToSegmentStart);
         }, { once: true });
+
+        // Add timeupdate listener to pause at segment end time
+        const handleSegmentEnd = function() {
+            if (videoPlayer.currentTime >= segment.end_time) {
+                videoPlayer.pause();
+                videoPlayer.currentTime = segment.end_time;
+            }
+        };
+        
+        // Remove any existing segment end listener
+        if (videoPlayer._segmentEndHandler) {
+            videoPlayer.removeEventListener('timeupdate', videoPlayer._segmentEndHandler);
+        }
+        
+        // Store the handler reference and add the listener
+        videoPlayer._segmentEndHandler = handleSegmentEnd;
+        videoPlayer.addEventListener('timeupdate', handleSegmentEnd);
 
         const duration = segment.end_time - segment.start_time;
         showToast('Segment Loaded', `${segment.name || 'Segment'} (${formatTime(duration)})`, 'success');
