@@ -1,5 +1,41 @@
 # Video Elicitation Annotation Tool - AI Agent Instructions
 
+## Quick Start (TL;DR)
+
+**What it does**: Research tool capturing expert craftsmen knowledge via video annotation with audio elicitations → AI pipeline (transcription/judge/tagging/review) for traditional crafts RAG system.
+
+**Key Commands**:
+```bash
+# Windows startup (handles venv, deps, auto-migration, server)
+start.bat
+
+# Manual: Run from backend/ directory
+cd backend && python main.py
+```
+
+**Architecture**: FastAPI async backend + vanilla JS frontend + SQLite + WebSocket real-time updates  
+**Port**: `8005` (not 8000!)  
+**Critical Dependencies**: 
+- `FIREWORKS_API_KEY` (required in `.env`) - powers ALL AI services (Whisper transcription + Llama 3.3 70B LLM)
+- French language throughout (prompts, UI, transcription)
+
+**Import Pattern** (CRITICAL):
+```python
+# In backend files: Use relative imports WITHOUT package notation
+import database as db  # ✓ CORRECT
+from backend import database  # ✗ WRONG - breaks direct execution
+```
+
+**Background Processing Pipeline**: Annotation → Transcription → Judge → Tagging → Review (each stage broadcasts WebSocket updates)
+
+**Database**: Unified `migration.py` system (6 idempotent migrations). To add columns: edit `migration.py`, register in `MIGRATIONS` list, run `python backend/migration.py`
+
+**Development Guides**: See `/guides/` directory for recent feature documentation (task editing, tagging upgrades)
+
+**Common Pitfall**: Don't use `db.get_session()` in background tasks - create new session with `AsyncSessionLocal()` instead
+
+---
+
 ## Project Overview
 Research tool for the European "ReSource" project: capture expert craftsmen knowledge through video annotation with synchronized audio elicitations, automatic transcription (Whisper), AI-powered quality assessment (Judge), multi-dimensional review (HOW/EVAL/FEEDBACK), salience detection, and automatic tagging. Built for traditional crafts knowledge capture and RAG system integration.
 
@@ -38,7 +74,6 @@ python backend/migration.py --reset      # DANGER: Delete and recreate database
 1. Define `def migration_NNN_name(cursor) -> str` in `migration.py`
 2. Register in `MIGRATIONS` list: `("NNN_name", migration_NNN_name)`
 3. Run `python migration.py`
-See `MIGRATION_GUIDE.md` for complete documentation
 
 ## Architecture Deep Dive
 
@@ -225,13 +260,19 @@ Extended transcript completed for annotation 123
 
 ### Database Inspection
 ```bash
-# No ORM migrations - schema auto-creates
-# To reset: delete data/annotations.db and restart server
+# Schema auto-creates on first run
+# Database location: chroma_langchain_db/annotations.db
+# To reset: delete annotations.db and restart server
 
 # Inspect manually:
 pip install sqlite-web
-sqlite_web data/annotations.db
+sqlite_web chroma_langchain_db/annotations.db
 ```
+
+### Recent Feature Documentation
+Check `/guides/` directory for detailed feature upgrade documentation:
+- **Task Editing**: Inline edit for detected tasks (removed unreliable confidence scores)
+- **Tagging Upgrade**: Enforced 4-word max for RAG-optimized tags
 
 ## API Endpoints Reference
 
@@ -423,7 +464,7 @@ except Exception as e:
 - ✅ Idempotent (safe to re-run)
 - ✅ Performance baseline < 30 seconds per annotation
 - ✅ Error messages logged and broadcast via WebSocket
-- ✅ Database migration added if new columns needed (see MIGRATION_GUIDE.md)
+- ✅ Database migration added if new columns needed (see `backend/migration.py` for pattern)
 - ✅ Frontend handler added for WebSocket messages (js/app.js)
 - ✅ Tested with real annotations and Fireworks API (not mocked)
 
@@ -453,11 +494,11 @@ Tags extracted by `tagging_service.py` use strict categories:
 ### File Organization
 ```
 index.html             # Single-page app (at project root)
-js/app.js              # All JS logic (~2500 lines - no bundler)
+js/app.js              # All JS logic (~3100 lines - no bundler)
 css/styles.css         # Complete styling
 
 backend/
-├── main.py            # Entry point (run from backend dir) - 2000+ lines, 34+ endpoints
+├── main.py            # Entry point (run from backend dir) - 2255 lines, 34+ endpoints
 ├── database.py        # Async SQLAlchemy operations
 ├── models.py          # SQLAlchemy ORM + Pydantic schemas (5 tables)
 ├── config.py          # Centralized configuration and paths
@@ -480,9 +521,11 @@ data/                  # Git-ignored runtime data
 
 .venv/                 # Python virtual environment (created by start.bat)
 
+guides/                # Feature documentation and upgrade guides
+├── CONFIDENCE_REMOVAL_AND_TASK_EDITING.md  # Judge confidence removal + task editing (Feb 2026)
+└── TAGGING_PROMPT_UPGRADE.md              # Tag length enforcement + RAG optimization (Feb 2026)
+
 evaluation/            # Testing data and results (not actively used)
-MIGRATION_GUIDE.md     # Database migration documentation (NEW)
-MIGRATION_QUICK_REFERENCE.md # Developer cheat sheet for migrations (NEW)
 ```
 
 ### Error Handling Pattern
@@ -569,44 +612,44 @@ API: `GET /api/tasks?craft=jewelry&published=1`, `POST /api/tasks`, `DELETE /api
 
 ## Key Files Reference
 
-- `backend/config.py` - ALL configuration, file paths, API settings, environment variables, LLM settings
-- `backend/main.py` - Complete API surface (34+ endpoints), WebSocket manager, 5 background processing pipelines
-- `backend/models.py` - Database schema (5 tables: projects, videos, annotations, tags, tasks) + Pydantic schemas
+- `backend/config.py` - ALL configuration, file paths, API settings, environment variables, LLM settings (PORT=8005)
+- `backend/main.py` - Complete API surface (34+ endpoints, 2255 lines), WebSocket manager, 5 background processing pipelines
+- `backend/models.py` - Database schema (5 tables: projects, videos, annotations, tags, tasks) + Pydantic schemas (432 lines)
 - `backend/database.py` - All CRUD operations, uses `AsyncSessionLocal()` for background tasks
-- `backend/judge_service.py` - Completeness assessment (needs_review decision)
+- `backend/judge_service.py` - Completeness assessment (needs_review decision, confidence removed Feb 2026)
 - `backend/review_service.py` - Multi-dimensional review + salience detection (HOW/EVAL/FEEDBACK)
-- `backend/tagging_service.py` - Tag extraction (5 categories for RAG)
-- `backend/task_detector_service.py` - Auto-detect tasks from transcription (NEW)
-- `backend/migration.py` - **UNIFIED migration system** (replaces scattered migrate_*.py files) - NEW
+- `backend/tagging_service.py` - Tag extraction (5 categories for RAG, max 4 words per tag)
+- `backend/task_detector_service.py` - Auto-detect tasks from transcription
+- `backend/migration.py` - **UNIFIED migration system** (6 idempotent migrations, replaces scattered migrate_*.py files)
 - `backend/llm_service.py` - LEGACY extended transcript service (not used in current pipeline)
 - `backend/transcription.py` - Fireworks Whisper API client
-- `js/app.js` - Complete frontend logic (~2500 lines - search for function names like `loadVideos`, `updateReviewResults`)
+- `js/app.js` - Complete frontend logic (3101 lines - search for function names like `loadVideos`, `updateReviewResults`)
 - `start.bat` - Windows startup script (venv, deps, migration, server launch)
-- `MIGRATION_GUIDE.md` - Database migration system documentation (NEW - comprehensive guide)
-- `MIGRATION_QUICK_REFERENCE.md` - Quick reference for adding migrations (NEW - copy-paste examples)
-- `MIGRATION_DOCS.md` - Documentation index for migration system (NEW)
+- `guides/CONFIDENCE_REMOVAL_AND_TASK_EDITING.md` - Judge confidence removal + inline task editing feature (Feb 2026)
+- `guides/TAGGING_PROMPT_UPGRADE.md` - Tag length enforcement (max 4 words) + RAG optimization (Feb 2026)
 
 ## Avoiding Common Mistakes
 
 1. **Don't import backend modules with package notation** - use `import module` not `from backend import module`
 2. **Don't forget asyncio.create_task()** for background processing - blocks UX otherwise
 3. **Don't use db.get_session() in background tasks** - create new session with `AsyncSessionLocal()`
-4. **Don't manually modify annotations.db** - let unified `migration.py` handle schema changes (auto-runs on start.bat)
-5. **Port is 8005 not 8000** - check `backend/config.py` lines 28-29
+4. **Don't manually modify annotations.db** - let unified `backend/migration.py` handle schema changes (auto-runs on start.bat)
+5. **Port is 8005 not 8000** - check `backend/config.py` line 31 (README.md shows outdated port 8000)
 6. **Don't return JSON from LLM** - use key-value format (see `review_service.py` for pattern)
 7. **Don't skip WebSocket broadcasts** - frontend relies on real-time updates for all AI services
-8. **Database is in chroma_langchain_db/** not `elicitations_db/` - check `config.py` DATABASE_URL
+8. **Database is in chroma_langchain_db/annotations.db** not `elicitations_db/` - check `config.py` DATABASE_URL
 9. **Frontend expects JSON strings for complex fields** - serialize `tags`, `judge_decision`, `review_results` before storing
 10. **LLM temperature is 1, max_tokens is 4096** - changed from earlier versions (0.9 / 360 tokens)
 11. **Don't edit individual migration files** - use unified `backend/migration.py` system instead
 
 ## Testing Approach
-- No automated test suite - use manual testing with real audio/video
+- **No automated test suite** - manual testing with real audio/video (see `evaluation/` for test data)
 - Test full pipeline: Transcription → Judge → Tagging → Review
 - Monitor WebSocket messages in browser DevTools Network > WS tab
 - Check backend logs for API errors (Fireworks quota, network issues, JSON parsing)
 - Use `GET /api/diagnostics/tagging-fireworks` to check last Fireworks API request/response
-- Test individual services with Python REPL (see "Common Workflows" section)
+- Test individual services with Python REPL (see "Common Workflows" section above)
+- `backend/test_imports.py` - Quick sanity check for imports and basic setup
 
 ## Domain Context
 Traditional crafts video annotation for AI-assisted learning (Moodle plugin integration planned). Target crafts: glassblowing, jewelry making, scientific glassblowing. Videos show expert craftsmen explaining techniques in French. AI pipeline captures:
@@ -616,3 +659,12 @@ Traditional crafts video annotation for AI-assisted learning (Moodle plugin inte
 - **Pedagogical value**: Salience detection highlights critical moments for apprentices
 
 **Research Goal**: Build RAG system with rich metadata for retrieval and generation of apprentice-focused learning content.
+
+## Additional AI Agent Instructions
+
+This repository contains additional agent-specific instructions in `.github/instructions/`:
+
+- **`markdown_guides.instructions.md`**: Directs agents to use `/guides/` folder for documentation
+- **`system_prompt.instructions.md`**: Defines "patient coding mentor" role for learning-focused interactions
+
+These instructions complement this main guide and apply to specific interaction patterns with AI coding assistants.
