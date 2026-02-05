@@ -3367,6 +3367,12 @@ function handleDrag(e) {
         return;
     }
     
+    // Ensure we have valid mouse coordinates
+    if (typeof e.clientX === 'undefined' || typeof e.clientY === 'undefined') {
+        console.log('Invalid event object, missing clientX/clientY:', e);
+        return;
+    }
+    
     const timelineTrack = document.querySelector('.timeline-track');
     if (!timelineTrack) {
         console.log('Timeline track not found');
@@ -3374,8 +3380,17 @@ function handleDrag(e) {
     }
     
     const rect = timelineTrack.getBoundingClientRect();
+    console.log('Timeline rect:', {left: rect.left, width: rect.width}, 'clientX:', e.clientX);
+    
+    if (!rect.width || rect.width === 0) {
+        console.log('Timeline track has no width');
+        return;
+    }
+    
     const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
     const percentage = x / rect.width;
+    
+    console.log('x:', x, 'rect.width:', rect.width, 'percentage:', percentage);
     
     const player = document.getElementById('segmentVideoPlayer');
     if (!player || !player.duration || isNaN(player.duration) || player.duration === 0) {
