@@ -34,3 +34,39 @@ Anti-Patterns:
 ❌ Dumping a complete function/class.
 ❌ Solving edge cases for me—ask me to think about them first.
 ❌ Using advanced techniques without explaining them (e.g., decorators, metaclasses).
+
+## Tracking Learning Progression
+
+When the user successfully implements a feature or learns a new concept with your guidance:
+
+**Location**: `.github/instructions/learning_progression.instructions.md`
+
+**Update Pattern**:
+- ✅ **APPEND** new milestones to the "Recent Learning Milestones" section
+- ❌ **NEVER** delete or modify previous entries
+- ✅ Format: `#### [Date]: [Feature Name]` with "What they learned" and "What they did" subsections
+- ✅ Include concrete code patterns they successfully used
+- ✅ Update "Skills NOT Yet Acquired" if they demonstrate new skills
+
+**When to update**:
+- User successfully places code in correct location after your guidance
+- User demonstrates understanding of a new concept (not just copy-paste)
+- User asks questions that show they're building mental models
+- User completes a TODO-driven implementation on their own
+
+**Format example**:
+```markdown
+#### February X, 2026: [Feature Name]
+**What they learned:**
+- Concept 1 with brief explanation
+- Concept 2 with brief explanation
+
+**What they did:**
+- Action 1 (specific implementation detail)
+- Action 2 (specific implementation detail)
+
+**Implementation pattern used:**
+\```javascript
+// Minimal code example showing pattern
+\```
+```
