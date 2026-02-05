@@ -995,10 +995,34 @@ body {
     border-color: var(--primary-color);
 }
 
+.video-list-item.video-segment {
+    margin-left: 30px;
+    background: rgba(0, 0, 0, 0.02);
+    border-left: 3px solid var(--primary-color);
+}
+
+.video-list-item.video-segment:hover {
+    background: rgba(37, 99, 235, 0.08);
+}
+
+.video-list-item.video-parent {
+    font-weight: 600;
+}
+
 .video-list-name {
     font-weight: 500;
     color: var(--text-primary);
     margin-bottom: var(--spacing-xs);
+}
+
+.video-list-name.segment-name {
+    font-weight: 400;
+    font-size: 0.9rem;
+}
+
+.video-list-name i {
+    margin-right: 8px;
+    color: var(--primary-color);
 }
 
 .video-list-meta {

@@ -659,7 +659,7 @@ async function loadVideos() {
 }
 
 // Video Modal
-function showVideoModal() {
+async function showVideoModal() {
     const modal = document.getElementById('videoListModal');
     const container = document.getElementById('videoListContainer');
 
@@ -668,17 +668,38 @@ function showVideoModal() {
     if (state.videos.length === 0) {
         container.innerHTML = '<p class="empty-state">No videos available</p>';
     } else {
+        // Fetch segments for all videos
+        const segmentsMap = {};
+        for (const video of state.videos) {
+            try {
+                const response = await fetch(`${API_BASE}/api/segments/video/${video.id}`);
+                if (response.ok) {
+                    segmentsMap[video.id] = await response.json();
+                }
+            } catch (error) {
+                console.error(`Failed to load segments for video ${video.id}:`, error);
+                segmentsMap[video.id] = [];
+            }
+        }
+
+        // Render videos with hierarchical segments
         state.videos.forEach(video => {
+            const videoSegments = segmentsMap[video.id] || [];
+            
+            // Parent video item
             const item = document.createElement('div');
-            item.className = 'video-list-item';
+            item.className = 'video-list-item video-parent';
             if (state.currentVideoId === video.id) {
                 item.classList.add('active');
             }
 
             item.innerHTML = `
-                <div class="video-list-name">${video.filename}</div>
+                <div class="video-list-name">
+                    <i class="fas fa-video"></i> ${video.filename}
+                </div>
                 <div class="video-list-meta">
                     ${formatFileSize(video.file_size)} • ${video.annotation_count} elicitations
+                    ${videoSegments.length > 0 ? ` • ${videoSegments.length} segments` : ''}
                 </div>
                 <div class="video-list-actions">
                     <button class="btn btn-icon btn-small btn-danger video-delete-btn" title="Delete video" onclick="event.stopPropagation(); deleteVideo(${video.id})">
@@ -693,6 +714,33 @@ function showVideoModal() {
             });
 
             container.appendChild(item);
+
+            // Render segments under parent video
+            if (videoSegments.length > 0) {
+                videoSegments.forEach(segment => {
+                    const segmentItem = document.createElement('div');
+                    segmentItem.className = 'video-list-item video-segment';
+                    
+                    const segmentName = segment.name || 'Unnamed Segment';
+                    const duration = segment.end_time - segment.start_time;
+                    
+                    segmentItem.innerHTML = `
+                        <div class="video-list-name segment-name">
+                            <i class="fas fa-cut"></i> ${segmentName}
+                        </div>
+                        <div class="video-list-meta">
+                            ${formatTime(segment.start_time)} - ${formatTime(segment.end_time)} (${formatTime(duration)})
+                        </div>
+                    `;
+
+                    segmentItem.addEventListener('click', () => {
+                        loadVideoSegment(video.id, segment);
+                        closeVideoModal();
+                    });
+
+                    container.appendChild(segmentItem);
+                });
+            }
         });
     }
 
@@ -745,6 +793,61 @@ async function loadVideo(videoId) {
     } catch (error) {
         console.error('Error loading video:', error);
         showToast('Error', 'Failed to load video', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function loadVideoSegment(videoId, segment) {
+    try {
+        showLoading('Loading video segment...');
+
+        // First load the video
+        const response = await fetch(`${API_BASE}/api/videos/${videoId}`);
+        if (!response.ok) throw new Error('Failed to load video');
+
+        const video = await response.json();
+        state.currentVideo = video;
+        state.currentVideoId = videoId;
+
+        // Persist current video ID to localStorage
+        try {
+            localStorage.setItem('currentVideoId', videoId);
+        } catch (e) {
+            console.error('Failed to save video state:', e);
+        }
+
+        // Update UI
+        document.getElementById('videoSelector').style.display = 'none';
+        document.getElementById('videoPlayerContainer').style.display = 'block';
+        document.getElementById('recordingControls').style.display = 'block';
+        document.getElementById('videoInfo').style.display = 'flex';
+
+        // Set video source
+        const videoPlayer = document.getElementById('videoPlayer');
+        const videoSource = document.getElementById('videoSource');
+        videoSource.src = `${API_BASE}/api/videos/${videoId}/file`;
+        videoPlayer.load();
+
+        // Update video info
+        const segmentName = segment.name ? ` - ${segment.name}` : '';
+        document.getElementById('videoName').textContent = `${video.filename}${segmentName}`;
+        document.getElementById('annotationCount').textContent = video.annotation_count;
+
+        // Load annotations
+        await loadAnnotations(videoId);
+
+        // Seek to segment start time once video is loaded
+        videoPlayer.addEventListener('loadedmetadata', function seekToSegmentStart() {
+            videoPlayer.currentTime = segment.start_time;
+            videoPlayer.removeEventListener('loadedmetadata', seekToSegmentStart);
+        }, { once: true });
+
+        const duration = segment.end_time - segment.start_time;
+        showToast('Segment Loaded', `${segment.name || 'Segment'} (${formatTime(duration)})`, 'success');
+    } catch (error) {
+        console.error('Error loading video segment:', error);
+        showToast('Error', 'Failed to load video segment', 'error');
     } finally {
         hideLoading();
     }
