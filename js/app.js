@@ -3378,12 +3378,13 @@ function handleDrag(e) {
     const percentage = x / rect.width;
     
     const player = document.getElementById('segmentVideoPlayer');
-    if (!player || !player.duration) {
-        console.log('Player not ready, duration:', player?.duration);
+    if (!player || !player.duration || isNaN(player.duration) || player.duration === 0) {
+        console.log('Player not ready, duration:', player?.duration, 'isNaN:', isNaN(player?.duration));
         return;
     }
     
     const time = percentage * player.duration;
+    console.log('Calculated time:', time, 'from percentage:', percentage, 'duration:', player.duration);
     
     if (dragType === 'start') {
         state.segmentStartTime = time;
@@ -3510,10 +3511,15 @@ function updatePlayhead() {
 
 function updateTimelineUI() {
     const player = document.getElementById('segmentVideoPlayer');
-    if (!player || !player.duration) return;
+    if (!player || !player.duration || isNaN(player.duration) || player.duration === 0) {
+        console.log('updateTimelineUI: Player not ready, duration:', player?.duration);
+        return;
+    }
     
     const startTime = state.segmentStartTime !== null ? state.segmentStartTime : 0;
     const endTime = state.segmentEndTime !== null ? state.segmentEndTime : player.duration;
+    
+    console.log('updateTimelineUI: startTime:', startTime, 'endTime:', endTime, 'duration:', player.duration);
     
     // Update timeline selection
     const selection = document.getElementById('timelineSelection');
@@ -3522,6 +3528,7 @@ function updateTimelineUI() {
         const endPercent = (endTime / player.duration) * 100;
         selection.style.left = startPercent + '%';
         selection.style.width = (endPercent - startPercent) + '%';
+        console.log('Timeline updated: left:', startPercent + '%', 'width:', (endPercent - startPercent) + '%');
     }
     
     // Update input fields
@@ -3571,9 +3578,11 @@ async function loadVideoForSegmentation(videoId) {
 
         // Initialize timeline when video metadata is loaded
         videoPlayer.addEventListener('loadedmetadata', function initTimeline() {
+            console.log('Video metadata loaded, duration:', videoPlayer.duration);
             // Set default segment to full video
             state.segmentStartTime = 0;
             state.segmentEndTime = videoPlayer.duration;
+            console.log('Set initial segment range:', state.segmentStartTime, '-', state.segmentEndTime);
             updateTimelineUI();
         }, { once: true });
 
