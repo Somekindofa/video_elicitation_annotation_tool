@@ -130,7 +130,8 @@ async def update_annotation(
     """Update an annotation"""
     annotation = await get_annotation(session, annotation_id)
     if annotation:
-        update_data = annotation_update.model_dump(exclude_unset=True)
+        # Use exclude_unset=True but keep explicitly set None values
+        update_data = annotation_update.model_dump(exclude_unset=True, exclude_none=False)
         for field, value in update_data.items():
             setattr(annotation, field, value)
         annotation.updated_at = datetime.now(timezone.utc)
