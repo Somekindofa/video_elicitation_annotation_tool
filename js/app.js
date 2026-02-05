@@ -3394,6 +3394,13 @@ function handleTouchDrag(e) {
     handleDrag(mouseEvent);
 }
 
+function previewSegmentFrame(time) {
+    const player = document.getElementById('segmentVideoPlayer');
+    if (!player || !player.duration) return;
+    const safeTime = Math.max(0, Math.min(time, player.duration));
+    player.currentTime = safeTime;
+}
+
 function handleDrag(e) {
     if (!isDragging) {
         console.log('handleDrag called but isDragging is false');
@@ -3450,7 +3457,8 @@ function handleDrag(e) {
     
     const time = percentage * player.duration;
     console.log('Calculated time:', time, 'from percentage:', percentage, 'duration:', player.duration);
-    
+    previewSegmentFrame(time);
+
     if (dragType === 'start') {
         state.segmentStartTime = time;
         if (state.segmentEndTime !== null && time >= state.segmentEndTime) {
