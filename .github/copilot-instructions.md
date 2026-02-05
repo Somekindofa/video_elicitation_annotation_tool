@@ -1,5 +1,41 @@
 # Video Elicitation Annotation Tool - AI Agent Instructions
 
+## Quick Start (TL;DR)
+
+**What it does**: Research tool capturing expert craftsmen knowledge via video annotation with audio elicitations → AI pipeline (transcription/judge/tagging/review) for traditional crafts RAG system.
+
+**Key Commands**:
+```bash
+# Windows startup (handles venv, deps, auto-migration, server)
+start.bat
+
+# Manual: Run from backend/ directory
+cd backend && python main.py
+```
+
+**Architecture**: FastAPI async backend + vanilla JS frontend + SQLite + WebSocket real-time updates  
+**Port**: `8005` (not 8000!)  
+**Critical Dependencies**: 
+- `FIREWORKS_API_KEY` (required in `.env`) - powers ALL AI services (Whisper transcription + Llama 3.3 70B LLM)
+- French language throughout (prompts, UI, transcription)
+
+**Import Pattern** (CRITICAL):
+```python
+# In backend files: Use relative imports WITHOUT package notation
+import database as db  # ✓ CORRECT
+from backend import database  # ✗ WRONG - breaks direct execution
+```
+
+**Background Processing Pipeline**: Annotation → Transcription → Judge → Tagging → Review (each stage broadcasts WebSocket updates)
+
+**Database**: Unified `migration.py` system (6 idempotent migrations). To add columns: edit `migration.py`, register in `MIGRATIONS` list, run `python backend/migration.py`
+
+**Development Guides**: See `/guides/` directory for recent feature documentation (task editing, tagging upgrades)
+
+**Common Pitfall**: Don't use `db.get_session()` in background tasks - create new session with `AsyncSessionLocal()` instead
+
+---
+
 ## Project Overview
 Research tool for the European "ReSource" project: capture expert craftsmen knowledge through video annotation with synchronized audio elicitations, automatic transcription (Whisper), AI-powered quality assessment (Judge), multi-dimensional review (HOW/EVAL/FEEDBACK), salience detection, and automatic tagging. Built for traditional crafts knowledge capture and RAG system integration.
 
@@ -38,7 +74,7 @@ python backend/migration.py --reset      # DANGER: Delete and recreate database
 1. Define `def migration_NNN_name(cursor) -> str` in `migration.py`
 2. Register in `MIGRATIONS` list: `("NNN_name", migration_NNN_name)`
 3. Run `python migration.py`
-See `MIGRATION_GUIDE.md` for complete documentation
+See inline comments in `migration.py` for examples and patterns
 
 **Latest migration**: Video segments table (migration_007_add_video_segments)
 
@@ -63,10 +99,11 @@ All backend files are in `backend/` but imported as if they're in the current di
 1. **Audio Recording** → `create_annotation()` saves WAV, returns immediately
 2. **Background Task 1**: `process_transcription()` → Fireworks Whisper API → broadcasts `transcription_complete`
 3. **Background Task 2**: `process_judge()` → LLM analyzes if elicitation needs review → broadcasts `judge_complete`
-   - If `needs_review=false` with high confidence → Shows "Force Review" button (allows manual override)
+   - If `needs_review=false` → Shows "Force Review" button (allows manual override)
    - If `needs_review=true` → Auto-triggers next stage (tagging)
 4. **Background Task 3**: `process_tagging()` → Extracts tools/materials/techniques → broadcasts `tagging_complete`
 5. **Background Task 4**: `process_review()` → Multi-dimensional quality analysis (HOW/EVAL/FEEDBACK) + salience detection → broadcasts `review_complete`
+6. **Background Task 5**: `process_task_detection()` → Auto-detects task name from transcription → stores in `detected_task`
 
 ```python
 # All background tasks use AsyncSessionLocal() to create independent sessions
@@ -75,9 +112,10 @@ async with db.AsyncSessionLocal() as session:
 ```
 
 **Key Services**:
-- **judge_service.py**: Determines if elicitation needs AI review (lightweight gatekeeper)
+- **judge_service.py**: Determines if elicitation needs AI review (lightweight gatekeeper) - **NO CONFIDENCE METRIC** (removed Feb 2026)
 - **review_service.py**: Multi-dimensional quality assessment + salience detection
 - **tagging_service.py**: Extracts structured metadata (tags) for RAG retrieval
+- **task_detector_service.py**: Auto-detects task name from transcription (conservative detection)
 - **llm_service.py**: Domain-specific LLM prompts (glassblowing, jewelry) - DEPRECATED for new features
 
 ### WebSocket Message Types
@@ -87,7 +125,7 @@ Frontend must handle these real-time events:
 - `transcription_complete` - Whisper done, includes `transcription` text
 - `transcription_error` - Whisper failed
 - `judge_status: "processing"` - Judge analysis started
-- `judge_complete` - Judge done, includes `judge_decision` (needs_review, confidence, reasoning)
+- `judge_complete` - Judge done, includes `judge_decision` (needs_review, reasoning, missing_elements, strengths) **NO CONFIDENCE**
 - `judge_error` - Judge failed
 - `tagging_status: "processing"` - Tag extraction started
 - `tagging_complete` - Tags extracted, includes array of tags with `name` and `category`
@@ -96,13 +134,15 @@ Frontend must handle these real-time events:
 - `review_complete` - Review done, includes `review_results` (dimensions, prompts, salience) + `is_salient` flag
 - `review_error` - Review failed
 - `annotation_deleted` - Cleanup trigger
+- `task_detection_complete` - Task auto-detected, includes `detected_task` name
 
 ### Database Schema Highlights
 ```python
 # Annotation model has FIVE processing pipelines (see backend/models.py Annotation class):
 transcription_status: pending/processing/completed/failed
 judge_status: pending/processing/completed/failed
-judge_decision: Text (JSON string with needs_review, confidence, reasoning, missing_elements, strengths)
+judge_decision: Text (JSON string with needs_review, reasoning, missing_elements, strengths)
+detected_task: Text (auto-detected task name from transcription, nullable)
 tagging_status: pending/processing/completed/failed
 tags: Text (JSON array of {name, category} objects)
 review_status: pending/processing/completed/failed/skipped
@@ -151,7 +191,7 @@ Located in `backend/review_service.py` - French language prompts analyze 3 core 
 2. Use key-value output format (see `review_service.py` for pattern) - NOT JSON from LLM
 3. Add background processing function in `main.py` (e.g., `async def process_new_service()`)
 4. Add database fields to `models.py` (e.g., `new_service_status`, `new_service_results`)
-5. Run `python backend/migrate_db.py` to auto-add columns (or restart via `start.bat`)
+5. Run `python backend/migration.py` to auto-add columns (or restart via `start.bat`)
 6. Add WebSocket broadcast events (`new_service_status`, `new_service_complete`, `new_service_error`)
 7. Update frontend WebSocket handler in `js/app.js` to display results
 
@@ -200,7 +240,7 @@ All UI updates check this state - no framework, pure DOM manipulation. Three tab
     "end_time": 25.3,
     "transcription": "Expert describes technique...",
     "transcription_status": "completed",
-    "judge_decision": {"needs_review": true, "confidence": 0.85},
+    "judge_decision": {"needs_review": true, "reasoning": "...", "missing_elements": [...], "strengths": [...]},
     "tags": [{"name": "pince_brucelles", "category": "tool"}, {"name": "argent", "category": "material"}],
     "review_status": "completed",
     "review_results": {"tier": 1, "score": 85, "dimensions": {...}, "priority_prompts": [...]},
@@ -225,7 +265,7 @@ from tagging_service import extract_tags
 
 # Example: Test judge
 judge_result = await judge_elicitation("Le maître explique comment tenir les pinces...")
-print(judge_result)  # {"needs_review": true, "confidence": 0.9, ...}
+print(judge_result)  # {"needs_review": true, "reasoning": "...", "missing_elements": [...], "strengths": [...]}
 
 # Example: Test tagging
 tags = await extract_tags("Il utilise la pince brucelles sur l'argent...")
@@ -242,13 +282,19 @@ Extended transcript completed for annotation 123
 
 ### Database Inspection
 ```bash
-# No ORM migrations - schema auto-creates
-# To reset: delete data/annotations.db and restart server
+# Schema auto-creates on first run
+# Database location: chroma_langchain_db/annotations.db
+# To reset: delete annotations.db and restart server
 
 # Inspect manually:
 pip install sqlite-web
-sqlite_web data/annotations.db
+sqlite_web chroma_langchain_db/annotations.db
 ```
+
+### Recent Feature Documentation
+Check `/guides/` directory for detailed feature upgrade documentation:
+- **Task Editing**: Inline edit for detected tasks (removed unreliable confidence scores)
+- **Tagging Upgrade**: Enforced 4-word max for RAG-optimized tags
 
 ## API Endpoints Reference
 
@@ -325,7 +371,7 @@ from new_service import analyze_something
 
 # Test with French text (project uses French)
 result = await analyze_something("Expert décrit la technique...")
-assert result["confidence"] > 0.5  # Check expected output structure
+assert result["needs_review"] is not None  # Check expected output structure
 print(result)
 ```
 
@@ -447,7 +493,7 @@ except Exception as e:
 - ✅ Idempotent (safe to re-run)
 - ✅ Performance baseline < 30 seconds per annotation
 - ✅ Error messages logged and broadcast via WebSocket
-- ✅ Database migration added if new columns needed (see MIGRATION_GUIDE.md)
+- ✅ Database migration added if new columns needed (see `backend/migration.py` for pattern)
 - ✅ Frontend handler added for WebSocket messages (js/app.js)
 - ✅ Tested with real annotations and Fireworks API (not mocked)
 
@@ -477,11 +523,11 @@ Tags extracted by `tagging_service.py` use strict categories:
 ### File Organization
 ```
 index.html             # Single-page app (at project root)
-js/app.js              # All JS logic (~2500 lines - no bundler)
+js/app.js              # All JS logic (~3100 lines - no bundler)
 css/styles.css         # Complete styling
 
 backend/
-├── main.py            # Entry point (run from backend dir) - 2000+ lines, 34+ endpoints
+├── main.py            # Entry point (run from backend dir) - 2255 lines, 34+ endpoints
 ├── database.py        # Async SQLAlchemy operations
 ├── models.py          # SQLAlchemy ORM + Pydantic schemas (5 tables)
 ├── config.py          # Centralized configuration and paths
@@ -504,9 +550,11 @@ data/                  # Git-ignored runtime data
 
 .venv/                 # Python virtual environment (created by start.bat)
 
+guides/                # Feature documentation and upgrade guides
+├── CONFIDENCE_REMOVAL_AND_TASK_EDITING.md  # Judge confidence removal + task editing (Feb 2026)
+└── TAGGING_PROMPT_UPGRADE.md              # Tag length enforcement + RAG optimization (Feb 2026)
+
 evaluation/            # Testing data and results (not actively used)
-MIGRATION_GUIDE.md     # Database migration documentation (NEW)
-MIGRATION_QUICK_REFERENCE.md # Developer cheat sheet for migrations (NEW)
 ```
 
 ### Error Handling Pattern
@@ -537,13 +585,20 @@ except Exception as e:
 
 ### Browser APIs
 - `MediaRecorder` API for WAV audio capture
-- HTML5 `<video>` element (no framework wrapper) + Task Detection**
+- HTML5 `<video>` element (no framework wrapper)
+- Native File API for video uploads
+- WebSocket for bidirectional real-time updates
+
+## Key Features & Components
+
+### Multi-Stage AI Pipeline (Current Architecture)
+**Transcription → Judge → Tagging → Review (with Salience) + Task Detection**
 
 1. **Judge Service** (`judge_service.py`):
    - Lightweight completeness assessment
-   - Outputs: `needs_review` (bool), `confidence` (0-1), `reasoning`, `missing_elements`, `strengths`
-   - If `needs_review=false` + high confidence → user can force review manually
-   - If `needs_review=true` → auto-triggers tagging
+   - Outputs: `needs_review` (bool), `reasoning`, `missing_elements`, `strengths`
+   - If `needs_review=false` → Shows "Force Review" button (allows manual override)
+   - If `needs_review=true` → Auto-triggers tagging
 
 2. **Tagging Service** (`tagging_service.py`):
    - Extracts structured metadata for RAG retrieval
@@ -634,44 +689,44 @@ API: `GET /api/tasks?craft=jewelry&published=1`, `POST /api/tasks`, `DELETE /api
 
 ## Key Files Reference
 
-- `backend/config.py` - ALL configuration, file paths, API settings, environment variables, LLM settings
-- `backend/main.py` - Complete API surface (34+ endpoints), WebSocket manager, 5 background processing pipelines
-- `backend/models.py` - Database schema (5 tables: projects, videos, annotations, tags, tasks) + Pydantic schemas
+- `backend/config.py` - ALL configuration, file paths, API settings, environment variables, LLM settings (PORT=8005)
+- `backend/main.py` - Complete API surface (34+ endpoints, 2255 lines), WebSocket manager, 5 background processing pipelines
+- `backend/models.py` - Database schema (5 tables: projects, videos, annotations, tags, tasks) + Pydantic schemas (432 lines)
 - `backend/database.py` - All CRUD operations, uses `AsyncSessionLocal()` for background tasks
-- `backend/judge_service.py` - Completeness assessment (needs_review decision)
+- `backend/judge_service.py` - Completeness assessment (needs_review decision, confidence removed Feb 2026)
 - `backend/review_service.py` - Multi-dimensional review + salience detection (HOW/EVAL/FEEDBACK)
-- `backend/tagging_service.py` - Tag extraction (5 categories for RAG)
-- `backend/task_detector_service.py` - Auto-detect tasks from transcription (NEW)
-- `backend/migration.py` - **UNIFIED migration system** (replaces scattered migrate_*.py files) - NEW
+- `backend/tagging_service.py` - Tag extraction (5 categories for RAG, max 4 words per tag)
+- `backend/task_detector_service.py` - Auto-detect tasks from transcription
+- `backend/migration.py` - **UNIFIED migration system** (6 idempotent migrations, replaces scattered migrate_*.py files)
 - `backend/llm_service.py` - LEGACY extended transcript service (not used in current pipeline)
 - `backend/transcription.py` - Fireworks Whisper API client
-- `js/app.js` - Complete frontend logic (~2500 lines - search for function names like `loadVideos`, `updateReviewResults`)
+- `js/app.js` - Complete frontend logic (3101 lines - search for function names like `loadVideos`, `updateReviewResults`)
 - `start.bat` - Windows startup script (venv, deps, migration, server launch)
-- `MIGRATION_GUIDE.md` - Database migration system documentation (NEW - comprehensive guide)
-- `MIGRATION_QUICK_REFERENCE.md` - Quick reference for adding migrations (NEW - copy-paste examples)
-- `MIGRATION_DOCS.md` - Documentation index for migration system (NEW)
+- `guides/CONFIDENCE_REMOVAL_AND_TASK_EDITING.md` - Judge confidence removal + inline task editing feature (Feb 2026)
+- `guides/TAGGING_PROMPT_UPGRADE.md` - Tag length enforcement (max 4 words) + RAG optimization (Feb 2026)
 
 ## Avoiding Common Mistakes
 
 1. **Don't import backend modules with package notation** - use `import module` not `from backend import module`
 2. **Don't forget asyncio.create_task()** for background processing - blocks UX otherwise
 3. **Don't use db.get_session() in background tasks** - create new session with `AsyncSessionLocal()`
-4. **Don't manually modify annotations.db** - let unified `migration.py` handle schema changes (auto-runs on start.bat)
-5. **Port is 8005 not 8000** - check `backend/config.py` lines 28-29
+4. **Don't manually modify annotations.db** - let unified `backend/migration.py` handle schema changes (auto-runs on start.bat)
+5. **Port is 8005 not 8000** - check `backend/config.py` line 31 (README.md shows outdated port 8000)
 6. **Don't return JSON from LLM** - use key-value format (see `review_service.py` for pattern)
 7. **Don't skip WebSocket broadcasts** - frontend relies on real-time updates for all AI services
-8. **Database is in chroma_langchain_db/** not `elicitations_db/` - check `config.py` DATABASE_URL
+8. **Database is in chroma_langchain_db/annotations.db** not `elicitations_db/` - check `config.py` DATABASE_URL
 9. **Frontend expects JSON strings for complex fields** - serialize `tags`, `judge_decision`, `review_results` before storing
 10. **LLM temperature is 1, max_tokens is 4096** - changed from earlier versions (0.9 / 360 tokens)
 11. **Don't edit individual migration files** - use unified `backend/migration.py` system instead
 
 ## Testing Approach
-- No automated test suite - use manual testing with real audio/video
+- **No automated test suite** - manual testing with real audio/video (see `evaluation/` for test data)
 - Test full pipeline: Transcription → Judge → Tagging → Review
 - Monitor WebSocket messages in browser DevTools Network > WS tab
 - Check backend logs for API errors (Fireworks quota, network issues, JSON parsing)
 - Use `GET /api/diagnostics/tagging-fireworks` to check last Fireworks API request/response
-- Test individual services with Python REPL (see "Common Workflows" section)
+- Test individual services with Python REPL (see "Common Workflows" section above)
+- `backend/test_imports.py` - Quick sanity check for imports and basic setup
 
 ## Domain Context
 Traditional crafts video annotation for AI-assisted learning (Moodle plugin integration planned). Target crafts: glassblowing, jewelry making, scientific glassblowing. Videos show expert craftsmen explaining techniques in French. AI pipeline captures:
@@ -681,3 +736,12 @@ Traditional crafts video annotation for AI-assisted learning (Moodle plugin inte
 - **Pedagogical value**: Salience detection highlights critical moments for apprentices
 
 **Research Goal**: Build RAG system with rich metadata for retrieval and generation of apprentice-focused learning content.
+
+## Additional AI Agent Instructions
+
+This repository contains additional agent-specific instructions in `.github/instructions/`:
+
+- **`markdown_guides.instructions.md`**: Directs agents to use `/guides/` folder for documentation
+- **`system_prompt.instructions.md`**: Defines "patient coding mentor" role for learning-focused interactions
+
+These instructions complement this main guide and apply to specific interaction patterns with AI coding assistants.
