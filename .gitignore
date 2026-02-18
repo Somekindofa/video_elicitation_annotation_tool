@@ -30,6 +30,8 @@ wheels/
 *.swo
 *~
 .DS_Store
+tmpclaude*
+.claude
 
 # Data files (large media and database)
 data/videos/*.mp4
@@ -49,7 +51,9 @@ data/exports/*.json
 elicitations_db/annotations.db
 elicitations_db/*.db
 *.db
-*json
+
+# Ignore JSON files in data/exports (not source files)
+data/exports/*.json
 
 # Logs
 *.log
@@ -77,3 +81,8 @@ Desktop.ini
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Evaluation results (but keep test data and directory structure)
+evaluation/results/*.csv
+evaluation/results/*.json
+!evaluation/results/.gitkeep

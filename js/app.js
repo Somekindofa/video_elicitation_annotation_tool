@@ -22,11 +22,20 @@ const state = {
     craft: 'glassblowing',
     tasks: [],
     task: '',
-    sortBy: 'newest'
+    sortBy: 'newest',
+    showReviewPanels: {},  // Track which annotation review panels are visible (defaults to hidden)
+    // Segmentation state
+    segmentVideoId: null,
+    segmentVideoElement: null,
+    segments: [],
+    segmentStartTime: null,
+    segmentEndTime: null
 };
 
 // API Base URL
-const API_BASE = window.location.origin;
+const API_BASE = window.location.origin === 'null'
+    ? 'http://localhost:8005'
+    : window.location.origin;
 
 // Initialize Application
 document.addEventListener('DOMContentLoaded', () => {
@@ -128,25 +137,8 @@ async function initializeApp() {
 
     // Load craft selection from localStorage (default to glassblowing)
     state.craft = localStorage.getItem('craft') || 'glassblowing';
-    // Load task selection from localStorage (optional)
-    state.task = localStorage.getItem('task') || '';
     // Create selectors UI
     createCraftSelectorUI();
-    await initializeTaskSelector();
-
-    // Reload tasks when craft changes
-    const craftSelect = document.getElementById('craftSelector');
-    if (craftSelect) {
-        craftSelect.addEventListener('change', async () => {
-            state.craft = craftSelect.value;
-            try { localStorage.setItem('craft', state.craft); } catch (_) { }
-            // Reload tasks for the new craft domain
-            const taskSelect = document.getElementById('taskSelect');
-            if (taskSelect) {
-                await loadTasks(taskSelect, state.craft);
-            }
-        });
-    }
 
     // Load existing videos
     await loadVideos();
@@ -223,149 +215,6 @@ function createCraftSelectorUI() {
     }
 }
 
-// Task selector with select + add-new input
-async function initializeTaskSelector() {
-    const controls = document.getElementById('recordingControls');
-    if (!controls) return;
-
-    const wrapper = document.createElement('div');
-    wrapper.className = 'task-selector';
-    wrapper.style.margin = '10px 0';
-
-    const label = document.createElement('div');
-    label.textContent = 'Task (choose or add)';
-    label.style.fontSize = '0.9rem';
-    label.style.marginBottom = '6px';
-
-    const select = document.createElement('select');
-    select.id = 'taskSelect';
-    select.style.padding = '6px 8px';
-    select.style.borderRadius = '4px';
-    select.style.border = '1px solid #ccc';
-    select.style.minWidth = '240px';
-
-    const addInput = document.createElement('input');
-    addInput.id = 'taskAddInput';
-    addInput.placeholder = 'Type task name';
-    addInput.style.padding = '6px 8px';
-    addInput.style.borderRadius = '4px';
-    addInput.style.border = '1px solid #ccc';
-    addInput.style.marginLeft = '8px';
-    addInput.style.minWidth = '200px';
-
-    const addBtn = document.createElement('button');
-    addBtn.textContent = 'Add Task';
-    addBtn.style.marginLeft = '8px';
-    addBtn.style.padding = '6px 12px';
-    addBtn.style.borderRadius = '4px';
-    addBtn.style.border = '1px solid #ccc';
-    addBtn.style.background = '#f0f0f0';
-    addBtn.style.cursor = 'pointer';
-
-    select.addEventListener('change', (e) => {
-        state.task = e.target.value || '';
-        try { localStorage.setItem('task', state.task); } catch (_) { }
-    });
-
-    addBtn.addEventListener('click', async () => {
-        const value = addInput.value.trim();
-        if (!value) return;
-        try {
-            await createOrSelectTask(value);
-            addInput.value = '';
-        } catch (err) {
-            console.error('Failed to add task', err);
-        }
-    });
-
-    const row = document.createElement('div');
-    row.style.display = 'flex';
-    row.style.alignItems = 'center';
-    row.appendChild(select);
-    row.appendChild(addInput);
-    row.appendChild(addBtn);
-
-    wrapper.appendChild(label);
-    wrapper.appendChild(row);
-
-    const existingCraft = controls.querySelector('.craft-selector');
-    if (existingCraft && existingCraft.nextSibling) {
-        controls.insertBefore(wrapper, existingCraft.nextSibling);
-    } else {
-        controls.insertBefore(wrapper, controls.firstChild);
-    }
-
-    await loadTasks(select, state.craft);
-    renderTaskOptions(select);
-}
-
-async function loadTasks(selectEl, craft) {
-    try {
-        const craftQuery = craft ? `&craft=${encodeURIComponent(craft)}` : '';
-        const resp = await fetch(`${API_BASE}/api/tasks?published=1${craftQuery}`);
-        if (!resp.ok) throw new Error('Failed to fetch tasks');
-        const tasks = await resp.json();
-        state.tasks = tasks || [];
-    } catch (err) {
-        console.warn('Failed to fetch tasks', err);
-        state.tasks = [];
-    }
-    if (selectEl) {
-        renderTaskOptions(selectEl);
-    }
-}
-
-function renderTaskOptions(selectEl) {
-    if (!selectEl) return;
-    selectEl.innerHTML = '';
-    const placeholder = document.createElement('option');
-    placeholder.value = '';
-    placeholder.textContent = '-- Select a task --';
-    selectEl.appendChild(placeholder);
-    state.tasks.forEach(t => {
-        const opt = document.createElement('option');
-        opt.value = t.name;
-        opt.textContent = t.name;
-        selectEl.appendChild(opt);
-    });
-    // Reselect previous task if present
-    if (state.task) {
-        selectEl.value = state.task;
-    }
-}
-
-async function createOrSelectTask(taskName) {
-    // If task already in list for this craft, just select it
-    const existing = state.tasks.find(t => t.name === taskName && t.craft === state.craft);
-    if (existing) {
-        state.task = existing.name;
-        try { localStorage.setItem('task', state.task); } catch (_) { }
-        const selectEl = document.getElementById('taskSelect');
-        if (selectEl) {
-            selectEl.value = state.task;
-        }
-        return;
-    }
-
-    // Otherwise create and publish for this craft
-    const resp = await fetch(`${API_BASE}/api/tasks`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: taskName, craft: state.craft, description: null, is_published: 1 })
-    });
-    if (!resp.ok) {
-        throw new Error(`Failed to create task: ${resp.status}`);
-    }
-    const created = await resp.json();
-    state.tasks.push(created);
-    state.task = created.name;
-    try { localStorage.setItem('task', state.task); } catch (_) { }
-    const selectEl = document.getElementById('taskSelect');
-    if (selectEl) {
-        renderTaskOptions(selectEl);
-        selectEl.value = created.name;
-    }
-}
 
 // Event Listeners Setup
 function setupEventListeners() {
@@ -423,6 +272,8 @@ function setupEventListeners() {
     document.querySelectorAll('.sort-option').forEach(option => {
         option.addEventListener('click', handleSortChange);
     });
+    // Reload all analyses
+    document.getElementById('reloadAllBtn').addEventListener('click', reloadAllAnalyses);
     // Close sort dropdown when clicking outside
     document.addEventListener('click', (e) => {
         const dropdown = document.getElementById('sortDropdownMenu');
@@ -447,6 +298,19 @@ function setupEventListeners() {
     document.getElementById('projectForm').addEventListener('submit', handleProjectFormSubmit);
     document.getElementById('closeAssignVideosModalBtn').addEventListener('click', closeAssignVideosModal);
     document.getElementById('closeAssignVideosBtn').addEventListener('click', closeAssignVideosModal);
+
+    // Local Folder Browser
+    document.getElementById('browseLocalFolderBtn').addEventListener('click', handleBrowseLocalFolder);
+    document.getElementById('closeLocalFolderModalBtn').addEventListener('click', closeLocalFolderModal);
+    document.getElementById('cancelLocalBtn').addEventListener('click', closeLocalFolderModal);
+
+    // Allow Enter key in folder path input to trigger browse
+    document.getElementById('localFolderPath').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            handleBrowseLocalFolder();
+        }
+    });
 }
 
 // WebSocket Connection
@@ -500,37 +364,78 @@ function handleWebSocketMessage(message) {
             updateAnnotationStatus(message.annotation_id, 'failed');
             break;
 
-        case 'extended_transcript_status':
-            updateExtendedTranscriptStatus(message.annotation_id, message.status);
+        case 'review_status':
+            updateReviewStatus(message.annotation_id, message.status);
             break;
 
-        case 'extended_transcript_complete':
-            updateExtendedTranscript(message.annotation_id, message.extended_transcript);
+        case 'review_complete':
+            updateReviewResults(message.annotation_id, message.review_results, message.is_salient);
             if (state.currentVideoId) {
                 loadAnnotations(state.currentVideoId);
             }
             break;
 
-        case 'extended_transcript_error':
-            showToast('Extended Transcript Error', message.error, 'error');
-            updateExtendedTranscriptStatus(message.annotation_id, 'failed');
+        case 'review_error':
+            showToast('AI Review Error', message.error, 'error');
+            updateReviewStatus(message.annotation_id, 'failed');
             break;
 
-        // case 'tagging_status':
-        //     updateTaggingStatus(message.annotation_id, message.status);
-        //     break;
+        case 'judge_status':
+            updateJudgeStatus(message.annotation_id, message.status);
+            break;
 
-        // case 'tagging_complete':
-        //     updateTags(message.annotation_id, message.tags);
-        //     if (state.currentVideoId) {
-        //         loadAnnotations(state.currentVideoId);
-        //     }
-        //     break;
+        case 'judge_complete':
+            updateJudgeDecision(message.annotation_id, message.judge_decision);
+            if (state.currentVideoId) {
+                loadAnnotations(state.currentVideoId);
+            }
+            break;
 
-        // case 'tagging_error':
-        //     showToast('Tagging Error', message.error, 'error');
-        //     updateTaggingStatus(message.annotation_id, 'failed');
-        //     break;
+        case 'judge_error':
+            showToast('Judge Error', message.error, 'error');
+            updateJudgeStatus(message.annotation_id, 'failed');
+            break;
+
+        case 'tagging_status':
+            updateTaggingStatus(message.annotation_id, message.status);
+            break;
+
+        case 'tagging_complete':
+            updateTags(message.annotation_id, message.tags);
+            if (state.currentVideoId) {
+                loadAnnotations(state.currentVideoId);
+            }
+            break;
+
+        case 'tagging_error':
+            showToast('Tagging Error', message.error, 'error');
+            updateTaggingStatus(message.annotation_id, 'failed');
+            break;
+
+        case 'tagging_debug':
+            console.error('[TAGGING DEBUG]', message);
+            break;
+
+        case 'task_detection_status':
+            // Handle task detection status updates
+            console.log('[TASK_DETECTION]', message.status);
+            break;
+
+        case 'task_detection_complete':
+            // Update annotation with detected task
+            const annotation = state.annotations.find(a => a.id === message.annotation_id);
+            if (annotation) {
+                annotation.detected_task = message.detected_task;
+                annotation.detected_task_confidence = message.confidence;
+            }
+            if (state.currentVideoId) {
+                loadAnnotations(state.currentVideoId);
+            }
+            break;
+
+        case 'task_detection_error':
+            showToast('Task Detection Error', message.error, 'error');
+            break;
 
         case 'annotation_deleted':
             if (state.currentVideoId) {
@@ -556,124 +461,46 @@ async function checkMicrophonePermission() {
 
 // Handle Add Local Videos button click
 async function handleAddLocalVideos() {
-    // Check if File System Access API is available
-    if (window.showOpenFilePicker) {
+    // Check if File System Access API is available (for directory picking)
+    if (typeof window.showDirectoryPicker === 'function') {
         try {
-            // Use modern File System Access API to get full file paths
-            const fileHandles = await window.showOpenFilePicker({
-                multiple: true,
-                types: [{
-                    description: 'Video Files',
-                    accept: {
-                        'video/*': ['.mp4', '.webm', '.mov', '.avi', '.mkv']
-                    }
-                }]
-            });
+            // Use modern File System Access API to let user pick a directory
+            const directoryHandle = await window.showDirectoryPicker();
 
-            showLoading(`Registering ${fileHandles.length} video(s)...`);
+            // Get the directory path - we'll need to reconstruct it
+            // Note: The API doesn't directly give us the full path for security,
+            // but we can prompt the user to confirm/provide it
+            const dirName = directoryHandle.name;
 
-            let successCount = 0;
-            let duplicateCount = 0;
-            let lastRegisteredVideoId = null;
+            // Prompt user to provide or confirm the full path
+            const folderPath = prompt(
+                `Selected folder: "${dirName}"\n\n` +
+                `Please enter the complete path to this folder:\n` +
+                `(The browser doesn't expose full paths for security)`,
+                `C:\\Users\\dupon\\Documents\\${dirName}`
+            );
 
-            for (const fileHandle of fileHandles) {
-                try {
-                    const file = await fileHandle.getFile();
-
-                    // Try to get the full path - this may not work in all browsers
-                    // In Electron or when using file:// protocol, we might have access
-                    let filepath = null;
-
-                    // Try different methods to get the file path
-                    if (file.path) {
-                        filepath = file.path;
-                    } else if (fileHandle.name && window.location.protocol === 'file:') {
-                        // Running locally, might have access to path
-                        filepath = fileHandle.name;
-                    }
-
-                    if (!filepath) {
-                        // Fallback: ask user to provide the full path
-                        filepath = prompt(
-                            `Please enter the full path for "${file.name}":\n\n` +
-                            `(Example: C:\\Videos\\${file.name})`,
-                            `C:\\Videos\\${file.name}`
-                        );
-
-                        if (!filepath) {
-                            console.log(`Skipped ${file.name} - no path provided`);
-                            continue;
-                        }
-                    }
-
-                    const video = await registerLocalVideo(filepath, file.name);
-
-                    if (video) {
-                        successCount++;
-                        lastRegisteredVideoId = video.id;
-                    } else {
-                        duplicateCount++;
-                    }
-                } catch (error) {
-                    if (error.message.includes('Already Registered') || error.message.includes('UNIQUE constraint')) {
-                        duplicateCount++;
-                    } else {
-                        console.error(`Failed to register video:`, error);
-                        showToast('Registration Error', error.message, 'error');
-                    }
-                }
+            if (!folderPath) {
+                console.log('Folder selection cancelled');
+                return;
             }
 
-            // Reload video list
-            await loadVideos();
-
-            // Show summary message
-            if (successCount > 0) {
-                const message = duplicateCount > 0
-                    ? `${successCount} video(s) registered, ${duplicateCount} already existed`
-                    : `${successCount} video(s) registered successfully`;
-                showToast('Registration Complete', message, 'success');
-
-                // Auto-load the last registered video if only one was added
-                if (successCount === 1 && lastRegisteredVideoId) {
-                    await loadVideo(lastRegisteredVideoId);
-                }
-            } else if (duplicateCount > 0) {
-                showToast('Already Registered', `All video(s) were already in your library`, 'info');
-            }
-
-            hideLoading();
+            // Now browse and register all videos in that folder
+            await handleBrowseFolder(folderPath);
 
         } catch (error) {
-            hideLoading();
-
             if (error.name === 'AbortError') {
-                // User cancelled the file picker
-                console.log('File selection cancelled');
+                // User cancelled the picker
+                console.log('Folder selection cancelled');
             } else {
-                console.error('Error selecting files:', error);
-                showToast('Error', 'Failed to select files: ' + error.message, 'error');
+                console.error('Error selecting folder:', error);
+                showToast('Error', 'Failed to select folder: ' + error.message, 'error');
             }
         }
     } else {
-        // Fallback: use traditional file input (won't have full paths)
-        // Show a warning and fall back to the old folder browser
-        showToast(
-            'Browser Limitation',
-            'Your browser doesn\'t support direct file selection. Please enter a folder path manually.',
-            'warning'
-        );
-
-        // Prompt for folder path
-        const folderPath = prompt(
-            'Enter the full path to a folder containing videos:\n\n' +
-            '(Example: C:\\Users\\YourName\\Videos\\)',
-            ''
-        );
-
-        if (folderPath) {
-            await handleBrowseFolder(folderPath);
-        }
+        // Fallback: Open the manual folder path modal
+        // Brave and some browsers disable folder picker for privacy
+        openLocalFolderModal();
     }
 }
 
@@ -744,12 +571,32 @@ async function handleLocalVideoSelection(event) {
     try {
         let successCount = 0;
         let duplicateCount = 0;
+        let skippedCount = 0;
         let lastRegisteredVideoId = null;
 
         for (const file of files) {
             try {
-                // Use the file's full path for registration
-                const filepath = file.path || file.webkitRelativePath || file.name;
+                // Browsers don't expose full file paths for security reasons
+                // Try to get path from file object (works in some environments)
+                let filepath = file.path;
+
+                if (!filepath) {
+                    // Prompt user to provide the full path
+                    hideLoading(); // Hide loading while prompting
+                    filepath = prompt(
+                        `Please enter the full path for "${file.name}":\n\n` +
+                        `Example: C:\\Videos\\${file.name}`,
+                        `C:\\Videos\\${file.name}`
+                    );
+                    showLoading(`Registering ${files.length} video(s)...`); // Show loading again
+
+                    if (!filepath) {
+                        console.log(`Skipped ${file.name} - no path provided`);
+                        skippedCount++;
+                        continue;
+                    }
+                }
+
                 const video = await registerLocalVideo(filepath, file.name);
 
                 if (video) {
@@ -773,9 +620,9 @@ async function handleLocalVideoSelection(event) {
 
         // Show summary message
         if (successCount > 0) {
-            const message = duplicateCount > 0
-                ? `${successCount} video(s) registered, ${duplicateCount} already existed`
-                : `${successCount} video(s) registered successfully`;
+            let message = `${successCount} video(s) registered`;
+            if (duplicateCount > 0) message += `, ${duplicateCount} already existed`;
+            if (skippedCount > 0) message += `, ${skippedCount} skipped`;
             showToast('Registration Complete', message, 'success');
 
             // Auto-load the last registered video if only one was added
@@ -784,6 +631,8 @@ async function handleLocalVideoSelection(event) {
             }
         } else if (duplicateCount > 0) {
             showToast('Already Registered', `All ${duplicateCount} video(s) were already in your library`, 'info');
+        } else if (skippedCount > 0) {
+            showToast('No Videos Added', 'No videos were registered', 'info');
         }
 
     } catch (error) {
@@ -810,7 +659,7 @@ async function loadVideos() {
 }
 
 // Video Modal
-function showVideoModal() {
+async function showVideoModal() {
     const modal = document.getElementById('videoListModal');
     const container = document.getElementById('videoListContainer');
 
@@ -819,17 +668,38 @@ function showVideoModal() {
     if (state.videos.length === 0) {
         container.innerHTML = '<p class="empty-state">No videos available</p>';
     } else {
+        // Fetch segments for all videos
+        const segmentsMap = {};
+        for (const video of state.videos) {
+            try {
+                const response = await fetch(`${API_BASE}/api/segments/video/${video.id}`);
+                if (response.ok) {
+                    segmentsMap[video.id] = await response.json();
+                }
+            } catch (error) {
+                console.error(`Failed to load segments for video ${video.id}:`, error);
+                segmentsMap[video.id] = [];
+            }
+        }
+
+        // Render videos with hierarchical segments
         state.videos.forEach(video => {
+            const videoSegments = segmentsMap[video.id] || [];
+            
+            // Parent video item
             const item = document.createElement('div');
-            item.className = 'video-list-item';
+            item.className = 'video-list-item video-parent';
             if (state.currentVideoId === video.id) {
                 item.classList.add('active');
             }
 
             item.innerHTML = `
-                <div class="video-list-name">${video.filename}</div>
+                <div class="video-list-name">
+                    <i class="fas fa-video"></i> ${video.filename}
+                </div>
                 <div class="video-list-meta">
                     ${formatFileSize(video.file_size)} • ${video.annotation_count} elicitations
+                    ${videoSegments.length > 0 ? ` • ${videoSegments.length} segments` : ''}
                 </div>
                 <div class="video-list-actions">
                     <button class="btn btn-icon btn-small btn-danger video-delete-btn" title="Delete video" onclick="event.stopPropagation(); deleteVideo(${video.id})">
@@ -844,6 +714,33 @@ function showVideoModal() {
             });
 
             container.appendChild(item);
+
+            // Render segments under parent video
+            if (videoSegments.length > 0) {
+                videoSegments.forEach(segment => {
+                    const segmentItem = document.createElement('div');
+                    segmentItem.className = 'video-list-item video-segment';
+                    
+                    const segmentName = segment.name || 'Unnamed Segment';
+                    const duration = segment.end_time - segment.start_time;
+                    
+                    segmentItem.innerHTML = `
+                        <div class="video-list-name segment-name">
+                            <i class="fas fa-cut"></i> ${segmentName}
+                        </div>
+                        <div class="video-list-meta">
+                            ${formatTime(segment.start_time)} - ${formatTime(segment.end_time)} (${formatTime(duration)})
+                        </div>
+                    `;
+
+                    segmentItem.addEventListener('click', () => {
+                        loadVideoSegment(video.id, segment);
+                        closeVideoModal();
+                    });
+
+                    container.appendChild(segmentItem);
+                });
+            }
         });
     }
 
@@ -885,6 +782,12 @@ async function loadVideo(videoId) {
         videoSource.src = `${API_BASE}/api/videos/${videoId}/file`;
         videoPlayer.load();
 
+        // Remove segment end handler when loading full video
+        if (videoPlayer._segmentEndHandler) {
+            videoPlayer.removeEventListener('timeupdate', videoPlayer._segmentEndHandler);
+            videoPlayer._segmentEndHandler = null;
+        }
+
         // Update video info
         document.getElementById('videoName').textContent = video.filename;
         document.getElementById('annotationCount').textContent = video.annotation_count;
@@ -896,6 +799,78 @@ async function loadVideo(videoId) {
     } catch (error) {
         console.error('Error loading video:', error);
         showToast('Error', 'Failed to load video', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function loadVideoSegment(videoId, segment) {
+    try {
+        showLoading('Loading video segment...');
+
+        // First load the video
+        const response = await fetch(`${API_BASE}/api/videos/${videoId}`);
+        if (!response.ok) throw new Error('Failed to load video');
+
+        const video = await response.json();
+        state.currentVideo = video;
+        state.currentVideoId = videoId;
+
+        // Persist current video ID to localStorage
+        try {
+            localStorage.setItem('currentVideoId', videoId);
+        } catch (e) {
+            console.error('Failed to save video state:', e);
+        }
+
+        // Update UI
+        document.getElementById('videoSelector').style.display = 'none';
+        document.getElementById('videoPlayerContainer').style.display = 'block';
+        document.getElementById('recordingControls').style.display = 'block';
+        document.getElementById('videoInfo').style.display = 'flex';
+
+        // Set video source
+        const videoPlayer = document.getElementById('videoPlayer');
+        const videoSource = document.getElementById('videoSource');
+        videoSource.src = `${API_BASE}/api/videos/${videoId}/file`;
+        videoPlayer.load();
+
+        // Update video info
+        const segmentName = segment.name ? ` - ${segment.name}` : '';
+        document.getElementById('videoName').textContent = `${video.filename}${segmentName}`;
+        document.getElementById('annotationCount').textContent = video.annotation_count;
+
+        // Load annotations
+        await loadAnnotations(videoId);
+
+        // Seek to segment start time once video is loaded
+        videoPlayer.addEventListener('loadedmetadata', function seekToSegmentStart() {
+            videoPlayer.currentTime = segment.start_time;
+            videoPlayer.removeEventListener('loadedmetadata', seekToSegmentStart);
+        }, { once: true });
+
+        // Add timeupdate listener to pause at segment end time
+        const handleSegmentEnd = function() {
+            if (videoPlayer.currentTime >= segment.end_time) {
+                videoPlayer.pause();
+                videoPlayer.currentTime = segment.end_time;
+            }
+        };
+        
+        // Remove any existing segment end listener
+        if (videoPlayer._segmentEndHandler) {
+            videoPlayer.removeEventListener('timeupdate', videoPlayer._segmentEndHandler);
+        }
+        
+        // Store the handler reference and add the listener
+        videoPlayer._segmentEndHandler = handleSegmentEnd;
+        videoPlayer.addEventListener('timeupdate', handleSegmentEnd);
+
+        const duration = segment.end_time - segment.start_time;
+        showToast('Segment Loaded', `${segment.name || 'Segment'} (${formatTime(duration)})`, 'success');
+    } catch (error) {
+        console.error('Error loading video segment:', error);
+        showToast('Error', 'Failed to load video segment', 'error');
     } finally {
         hideLoading();
     }
@@ -1011,14 +986,7 @@ async function handleRecordingStop() {
         } catch (e) {
             console.warn('Could not append craft to FormData', e);
         }
-        // Attach task if provided
-        try {
-            if (state.task && state.task.trim().length > 0) {
-                formData.append('task', state.task.trim());
-            }
-        } catch (e) {
-            console.warn('Could not append task to FormData', e);
-        }
+
 
         const response = await fetch(`${API_BASE}/api/annotations?video_id=${state.currentVideoId}&start_time=${startTime}&end_time=${endTime}`, {
             method: 'POST',
@@ -1133,67 +1101,128 @@ function renderAnnotations() {
         const statusText = getStatusText(annotation.transcription_status);
         const statusClass = annotation.transcription_status;
 
-        // Extended transcript UI logic
-        let extendedTranscriptHTML = '';
+        // AI Review Panel UI logic
+        let reviewPanelHTML = '';
         if (annotation.transcription && annotation.transcription_status === 'completed') {
-            if (annotation.extended_transcript_status === 'processing') {
-                extendedTranscriptHTML = `
-                    <div class="extended-transcript-progress">
-                        <i class="fa-solid fa-hammer"></i>
-                        <span class="ellipsis">
-                            <span></span>
-                            <span></span>
-                            <span></span>
-                        </span>
-                    </div>
-                `;
-            } else if (annotation.extended_transcript_status === 'completed' && annotation.extended_transcript) {
-                const feedbackClass = annotation.feedback !== null ?
-                    (annotation.feedback === 1 ? 'thumbs-up' : 'thumbs-down') : '';
-                const extendedHtml = mdToHtml(annotation.extended_transcript);
-                extendedTranscriptHTML = `
-                    <div class="extended-transcript-container">
-                        <div class="extended-transcript-toggle" onclick="toggleExtendedTranscript(${annotation.id})">
-                            <i class="fa-solid fa-caret-down"></i>
-                            <span>See Extended Transcript</span>
-                        </div>
-                        <div class="extended-transcript-content" id="extended-${annotation.id}">
-                            <div class="md">${extendedHtml}</div>
-                            <div class="feedback-buttons">
-                                <button class="feedback-btn thumbs-up ${annotation.feedback === 1 ? 'active' : ''}" 
-                                    onclick="handleFeedback(${annotation.id}, 1, event)">
-                                    <i class="fa-solid fa-thumbs-up"></i>
-                                    <span>Utile</span>
+            // First check if judge has run and decided review is NOT needed
+            if (annotation.judge_status === 'completed' && annotation.judge_decision) {
+                try {
+                    const judge = typeof annotation.judge_decision === 'string' 
+                        ? JSON.parse(annotation.judge_decision) 
+                        : annotation.judge_decision;
+                    
+                    if (judge.needs_review === false) {
+                        // Judge says review not needed - show manual button with hint
+                        const manualTriggerHtml = `
+                            <div class="judge-decision">
+                                <div class="judge-message">
+                                    <i class="fa-solid fa-check-circle"></i>
+                                    <span>AI found this elicitation complete</span>
+                                </div>
+                                <button class="btn btn-secondary btn-small" onclick="triggerManualReview(${annotation.id}, event)">
+                                    <i class="fa-solid fa-magnifying-glass"></i>
+                                    Force Review
                                 </button>
-                                <button class="feedback-btn thumbs-down ${annotation.feedback === 0 ? 'active' : ''}" 
-                                    onclick="handleFeedback(${annotation.id}, 0, event)">
-                                    <i class="fa-solid fa-thumbs-down"></i>
-                                    <span>Pas utile</span>
-                                </button>
+                                <div class="judge-reasoning" style="display: none;">
+                                    <strong>Assessment:</strong> ${judge.reasoning}
+                                </div>
                             </div>
-                        </div>
+                        `;
+                        reviewPanelHTML = renderReviewContainer(annotation.id, manualTriggerHtml, 'Complet');
+                    } else if (judge.needs_review === true) {
+                        // Judge says review IS needed - will auto-trigger, so show processing or results
+                        if (annotation.review_status === 'processing') {
+                            const progressHtml = `
+                                <div class="review-progress">
+                                    <i class="fa-solid fa-magnifying-glass"></i>
+                                    <span>AI analyzing elicitation</span>
+                                    <span class="ellipsis">
+                                        <span></span>
+                                        <span></span>
+                                        <span></span>
+                                    </span>
+                                </div>
+                            `;
+                            reviewPanelHTML = renderReviewContainer(annotation.id, progressHtml, 'En cours');
+                        } else if (annotation.review_status === 'completed' && annotation.review_results) {
+                            try {
+                                const review = typeof annotation.review_results === 'string' 
+                                    ? JSON.parse(annotation.review_results) 
+                                    : annotation.review_results;
+                                reviewPanelHTML = renderReviewPanel(annotation.id, review);
+                            } catch (e) {
+                                console.error('Failed to parse review results:', e);
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error('Failed to parse judge decision:', e);
+                }
+            } else if (annotation.judge_status === 'processing') {
+                // Judge is running
+                const judgeProgressHtml = `
+                    <div class="judge-progress">
+                        <i class="fa-solid fa-gavel"></i>
+                        <span>AI evaluating elicitation</span>
                     </div>
                 `;
+                reviewPanelHTML = renderReviewContainer(annotation.id, judgeProgressHtml, 'Évaluation');
+            } else if (annotation.judge_status === 'pending' || annotation.judge_status === 'failed' || !annotation.judge_status) {
+                // Judge failed or hasn't run - fall back to direct review trigger
+                if (annotation.review_status === 'processing') {
+                    const progressHtml = `
+                        <div class="review-progress">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            <span>AI analyzing elicitation</span>
+                            <span class="ellipsis">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                            </span>
+                        </div>
+                    `;
+                    reviewPanelHTML = renderReviewContainer(annotation.id, progressHtml, 'En cours');
+                } else if (annotation.review_status === 'completed' && annotation.review_results) {
+                    try {
+                        const review = typeof annotation.review_results === 'string' 
+                            ? JSON.parse(annotation.review_results) 
+                            : annotation.review_results;
+                        reviewPanelHTML = renderReviewPanel(annotation.id, review);
+                    } catch (e) {
+                        console.error('Failed to parse review results:', e);
+                    }
+                } else if (annotation.review_status === 'pending' || annotation.review_status === 'failed') {
+                    const triggerHtml = `
+                        <div class="review-trigger">
+                            <button class="btn btn-review" onclick="triggerReview(${annotation.id})">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                                ${annotation.review_status === 'failed' ? 'Retry AI Review' : 'Trigger AI Review'}
+                            </button>
+                        </div>
+                    `;
+                    const statusLabel = annotation.review_status === 'failed' ? 'Échec' : 'En attente';
+                    reviewPanelHTML = renderReviewContainer(annotation.id, triggerHtml, statusLabel);
+                }
             }
         }
 
         // Tags UI logic
         let tagsHTML = '';
-        if (annotation.extended_transcript_status === 'completed') {
+        if (annotation.review_status === 'completed') {
             if (annotation.tagging_status === 'processing') {
                 tagsHTML = `
                     <div class="tagging-progress">
                         <i class="fa-solid fa-tag"></i>
-                        <span>Generating tags...</span>
+                        <span>Tagging in progress...</span>
                     </div>
                 `;
             } else if (annotation.tagging_status === 'completed' && annotation.tags && annotation.tags.length > 0) {
                 tagsHTML = `<div class="annotation-tags">`;
 
-                annotation.tags.forEach(tag => {
+                annotation.tags.forEach((tag, index) => {
                     const categoryClass = tag.category ? `category-${tag.category}` : '';
                     tagsHTML += `
-                        <span class="annotation-tag ${categoryClass}" title="${tag.category || 'tag'}">
+                        <span class="annotation-tag ${categoryClass}" title="${tag.category || 'tag'} - Click to delete" onclick="deleteTag(event, ${annotation.id}, ${index})">
                             ${tag.name}
                         </span>
                     `;
@@ -1205,12 +1234,22 @@ function renderAnnotations() {
 
         item.innerHTML = `
             <div class="annotation-header">
-                <span class="annotation-time">
-                    ${formatTime(annotation.start_time)} - ${formatTime(annotation.end_time)}
-                    (${duration.toFixed(1)}s)
-                </span>
+                <div class="annotation-time-wrapper">
+                    <span class="annotation-time">
+                        ${formatTime(annotation.start_time)} - ${formatTime(annotation.end_time)}
+                        (${duration.toFixed(1)}s)
+                    </span>
+                    ${annotation.task || annotation.detected_task ? `
+                        <span class="detected-task-badge editable" 
+                              onclick="startEditTask(${annotation.id})"
+                              title="Click to edit task">
+                            <strong id="task-display-${annotation.id}">${annotation.task || annotation.detected_task}</strong>
+                            <i class="fas fa-pencil-alt task-edit-icon"></i>
+                        </span>
+                    ` : ''}
+                </div>
                 <div class="annotation-actions">
-                    <button class="btn btn-icon btn-small" onclick="seekToAnnotation(${annotation.start_time})" title="Jump to time">
+                    <button class="btn btn-icon btn-small play-btn" onclick="seekToAnnotation(${annotation.start_time})" title="Jump to time">
                         <i class="fas fa-play"></i>
                     </button>
                     <button class="btn btn-icon btn-small" onclick="startEditTranscription(${annotation.id})" title="Edit transcription">
@@ -1224,21 +1263,39 @@ function renderAnnotations() {
             <div class="annotation-transcription">
                 ${annotation.transcription || '<em>Transcription pending...</em>'}
             </div>
-            <div class="annotation-status ${statusClass}">
-                ${statusText}
+            <div class="annotation-status-row">
+                <div class="annotation-status ${statusClass}">
+                    ${statusText}
+                </div>
+                ${annotation.transcription_status === 'completed' ? `
+                    <button class="btn btn-icon btn-tiny" onclick="event.stopPropagation(); triggerTagging(${annotation.id});" title="Relaunch tagging">
+                        <i class="fa-solid fa-tags"></i>
+                    </button>
+                ` : ''}
             </div>
             ${tagsHTML}
-            ${extendedTranscriptHTML}
+            ${reviewPanelHTML}
         `;
-
-        item.addEventListener('click', (e) => {
-            if (!e.target.closest('button') && !e.target.closest('.extended-transcript-toggle') && !e.target.closest('.feedback-btn')) {
-                seekToAnnotation(annotation.start_time);
-            }
-        });
 
         container.appendChild(item);
     });
+}
+
+function getFirstTagByCategory(tags, categories) {
+    if (!Array.isArray(tags)) return null;
+    return tags.find(tag => tag && categories.includes(tag.category)) || null;
+}
+
+function getSalientMetadata(tags) {
+    const gestureTag = getFirstTagByCategory(tags, ['technique', 'handling']);
+    const toolTag = getFirstTagByCategory(tags, ['tool']);
+    const materialTag = getFirstTagByCategory(tags, ['material']);
+
+    return {
+        gesture: gestureTag ? gestureTag.name : null,
+        tool: toolTag ? toolTag.name : null,
+        material: materialTag ? materialTag.name : null
+    };
 }
 
 function renderTimeline() {
@@ -1264,10 +1321,19 @@ function renderTimeline() {
         if (annotation.transcription_status === 'processing') {
             bar.classList.add('processing');
         }
+        if (annotation.is_salient) {
+            bar.classList.add('salient');
+        }
 
         // Position bar at start_time (vertical bar, not segment)
         const startPercent = (annotation.start_time / duration) * 100;
         bar.style.left = `${startPercent}%`;
+
+        // Add persistent timestamp label
+        const timeLabel = document.createElement('div');
+        timeLabel.className = 'timeline-segment-label';
+        timeLabel.textContent = formatTime(annotation.start_time);
+        bar.appendChild(timeLabel);
 
         // Build tooltip content
         const tooltip = document.createElement('div');
@@ -1290,35 +1356,69 @@ function renderTimeline() {
             tooltip.appendChild(transcriptDiv);
         }
 
-        // // Tags section
-        // if (annotation.tags && annotation.tags.length > 0) {
-        //     const tagsContainer = document.createElement('div');
-        //     tagsContainer.className = 'timeline-tooltip-tags';
+        if (annotation.is_salient) {
+            const salientMeta = getSalientMetadata(annotation.tags);
+            const salientBlock = document.createElement('div');
+            salientBlock.className = 'timeline-tooltip-salient';
 
-        //     annotation.tags.forEach(tag => {
-        //         const tagSpan = document.createElement('span');
-        //         tagSpan.className = 'timeline-tooltip-tag';
-        //         if (tag.category) {
-        //             tagSpan.classList.add(`category-${tag.category}`);
-        //         }
-        //         tagSpan.textContent = tag.name;
-        //         tagsContainer.appendChild(tagSpan);
-        //     });
+            const salientTitle = document.createElement('div');
+            salientTitle.className = 'timeline-tooltip-salient-title';
+            salientTitle.textContent = 'Salient moment';
+            salientBlock.appendChild(salientTitle);
 
-        //     tooltip.appendChild(tagsContainer);
-        // } else if (annotation.tagging_status === 'completed') {
-        //     // No tags but tagging was completed
-        //     const noTags = document.createElement('div');
-        //     noTags.className = 'timeline-tooltip-no-tags';
-        //     noTags.textContent = 'No tags generated';
-        //     tooltip.appendChild(noTags);
-        // } else if (annotation.tagging_status === 'processing') {
-        //     // Still processing tags
-        //     const processingTags = document.createElement('div');
-        //     processingTags.className = 'timeline-tooltip-no-tags';
-        //     processingTags.textContent = 'Generating tags...';
-        //     tooltip.appendChild(processingTags);
-        // }
+            const addMetaRow = (label, value) => {
+                const row = document.createElement('div');
+                row.className = 'timeline-tooltip-salient-row';
+
+                const labelSpan = document.createElement('span');
+                labelSpan.className = 'timeline-tooltip-salient-label';
+                labelSpan.textContent = label;
+
+                const valueSpan = document.createElement('span');
+                valueSpan.className = 'timeline-tooltip-salient-value';
+                valueSpan.textContent = value || '—';
+
+                row.appendChild(labelSpan);
+                row.appendChild(valueSpan);
+                salientBlock.appendChild(row);
+            };
+
+            addMetaRow('Gesture', salientMeta.gesture);
+            addMetaRow('Tool', salientMeta.tool);
+            addMetaRow('Material', salientMeta.material);
+
+            tooltip.appendChild(salientBlock);
+        }
+
+        // Tags section
+        if (annotation.tags && annotation.tags.length > 0) {
+            const tagsContainer = document.createElement('div');
+            tagsContainer.className = 'timeline-tooltip-tags';
+
+            annotation.tags.forEach(tag => {
+                const tagSpan = document.createElement('span');
+                tagSpan.className = 'timeline-tooltip-tag';
+                if (tag.category) {
+                    tagSpan.classList.add(`category-${tag.category}`);
+                }
+                tagSpan.textContent = tag.name;
+                tagsContainer.appendChild(tagSpan);
+            });
+
+            tooltip.appendChild(tagsContainer);
+        } else if (annotation.tagging_status === 'completed') {
+            // No tags but tagging was completed
+            const noTags = document.createElement('div');
+            noTags.className = 'timeline-tooltip-no-tags';
+            noTags.textContent = 'No tags generated';
+            tooltip.appendChild(noTags);
+        } else if (annotation.tagging_status === 'processing') {
+            // Still processing tags
+            const processingTags = document.createElement('div');
+            processingTags.className = 'timeline-tooltip-no-tags';
+            processingTags.textContent = 'Generating tags...';
+            tooltip.appendChild(processingTags);
+        }
 
         bar.appendChild(tooltip);
 
@@ -1425,6 +1525,45 @@ async function deleteAnnotation(annotationId) {
     }
 }
 
+async function deleteTag(event, annotationId, tagIndex) {
+    event.stopPropagation();
+    
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (!annotation || !annotation.tags) return;
+
+    const tag = annotation.tags[tagIndex];
+    if (!tag) return;
+
+    try {
+        // Remove tag from array
+        annotation.tags.splice(tagIndex, 1);
+
+        // Update annotation with new tags array
+        const response = await fetch(`${API_BASE}/api/annotations/${annotationId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                tags: JSON.stringify(annotation.tags, null, 2)
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to delete tag');
+        }
+
+        // Reload annotations to reflect changes
+        await loadAnnotations(state.currentVideoId);
+        showToast('Tag Deleted', `Removed tag: ${tag.name}`, 'success');
+    } catch (error) {
+        console.error('Error deleting tag:', error);
+        showToast('Error', 'Failed to delete tag', 'error');
+        // Reload to restore original state
+        await loadAnnotations(state.currentVideoId);
+    }
+}
+
 function updateAnnotationStatus(annotationId, status) {
     const annotation = state.annotations.find(a => a.id === annotationId);
     if (annotation) {
@@ -1441,6 +1580,153 @@ function updateAnnotationTranscription(annotationId, transcription) {
         annotation.transcription_status = 'completed';
         renderAnnotations();
         renderTimeline();
+    }
+}
+
+// Inline task editing
+function startEditTask(annotationId) {
+    const badge = document.querySelector(`#task-display-${annotationId}`);
+    if (!badge) {
+        // Empty state - create input in badge's parent
+        const emptyBadge = event.target.closest('.detected-task-badge');
+        if (!emptyBadge) return;
+        
+        const annotation = state.annotations.find(a => a.id === annotationId);
+        const currentTask = annotation?.task || annotation?.detected_task || '';
+        
+        createTaskEditor(emptyBadge, annotationId, currentTask);
+        return;
+    }
+
+    // Prevent multiple editors
+    if (document.querySelector(`.task-editor-${annotationId}`)) return;
+
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    const currentTask = annotation?.task || annotation?.detected_task || '';
+
+    const badgeParent = badge.closest('.detected-task-badge');
+    createTaskEditor(badgeParent, annotationId, currentTask);
+}
+
+function createTaskEditor(badgeElement, annotationId, currentTask) {
+    // Hide the badge
+    badgeElement.style.display = 'none';
+
+    // Create editor
+    const editor = document.createElement('span');
+    editor.className = `detected-task-badge task-editor task-editor-${annotationId}`;
+    
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'task-edit-input';
+    input.value = currentTask;
+    input.placeholder = 'Enter task name';
+    
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'task-edit-save';
+    saveBtn.innerHTML = '<i class="fas fa-check"></i>';
+    saveBtn.title = 'Save';
+    
+    const clearBtn = document.createElement('button');
+    clearBtn.className = 'task-edit-clear';
+    clearBtn.innerHTML = '<i class="fas fa-trash"></i>';
+    clearBtn.title = 'Clear task';
+    
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'task-edit-cancel';
+    cancelBtn.innerHTML = '<i class="fas fa-times"></i>';
+    cancelBtn.title = 'Cancel';
+    
+    // Event handlers
+    saveBtn.onclick = (e) => {
+        e.stopPropagation();
+        saveTaskEdit(annotationId, input.value.trim());
+    };
+    
+    clearBtn.onclick = (e) => {
+        e.stopPropagation();
+        if (confirm('Clear this task?')) {
+            saveTaskEdit(annotationId, null);
+        }
+    };
+    
+    cancelBtn.onclick = (e) => {
+        e.stopPropagation();
+        cancelTaskEdit(annotationId);
+    };
+    
+    input.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            saveTaskEdit(annotationId, input.value.trim());
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            cancelTaskEdit(annotationId);
+        }
+    };
+    
+    editor.appendChild(input);
+    editor.appendChild(saveBtn);
+    editor.appendChild(clearBtn);
+    editor.appendChild(cancelBtn);
+    
+    badgeElement.parentNode.insertBefore(editor, badgeElement.nextSibling);
+    input.focus();
+    input.select();
+}
+
+async function saveTaskEdit(annotationId, newTask) {
+    try {
+        const payload = { task: newTask || null };
+
+        const response = await fetch(`${API_BASE}/api/annotations/${annotationId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(errText || 'Failed to save task');
+        }
+
+        const updated = await response.json();
+
+        // Update local state
+        const annotation = state.annotations.find(a => a.id === annotationId);
+        if (annotation) {
+            annotation.task = updated.task;
+            annotation.updated_at = updated.updated_at;
+        }
+
+        // Remove editor and re-render
+        renderAnnotations();
+        renderTimeline();
+        showToast('Saved', 'Task updated', 'success');
+
+    } catch (error) {
+        console.error('Error saving task:', error);
+        showToast('Error', 'Failed to save task', 'error');
+        cancelTaskEdit(annotationId);
+    }
+}
+
+function cancelTaskEdit(annotationId) {
+    const editor = document.querySelector(`.task-editor-${annotationId}`);
+    if (editor) {
+        editor.remove();
+    }
+    
+    // Show the badge again
+    const badge = document.querySelector(`#task-display-${annotationId}`)?.closest('.detected-task-badge');
+    if (badge) {
+        badge.style.display = '';
+    } else {
+        // Empty state badge
+        const emptyBadge = document.querySelector(`.detected-task-badge.empty`);
+        if (emptyBadge) {
+            emptyBadge.style.display = '';
+        }
     }
 }
 
@@ -1522,8 +1808,6 @@ async function saveTranscriptionEdit(annotationId, newText, itemElement) {
         renderAnnotations();
         renderTimeline();
         showToast('Saved', 'Transcription updated', 'success');
-        // Trigger extended transcript regeneration
-        await regenerateExtendedTranscript(annotationId);
 
     } catch (error) {
         console.error('Error saving transcription edit:', error);
@@ -1533,31 +1817,441 @@ async function saveTranscriptionEdit(annotationId, newText, itemElement) {
     }
 }
 
-async function regenerateExtendedTranscript(annotationId) {
+// AI Review Functions
+
+function renderReviewContainer(annotationId, innerHtml, statusLabel = null) {
+    const isVisible = state.showReviewPanels[annotationId] || false;
+    const statusBadge = statusLabel
+        ? `<span class="review-status-badge">${statusLabel}</span>`
+        : '';
+
+    return `
+        <div class="review-panel-container">
+            <div class="review-toggle-header" onclick="toggleReviewPanel(${annotationId})">
+                <span class="review-toggle-label">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    AI Review
+                    ${statusBadge}
+                </span>
+                <span class="review-toggle-indicator">
+                    <i class="fa-solid fa-chevron-${isVisible ? 'up' : 'down'}"></i>
+                </span>
+            </div>
+            <div class="review-panel ${isVisible ? 'visible' : 'hidden'}" id="review-panel-${annotationId}">
+                ${innerHtml}
+            </div>
+        </div>
+    `;
+}
+
+function renderReviewPanel(annotationId, review) {
+    const coveredCount = Object.values(review.dimensions).filter(d => d.covered).length;
+    const completenessPercent = review.completeness_score || 0;
+    
+    let dimensionsHTML = '';
+    ['HOW', 'EVALUATION', 'FEEDBACK'].forEach(dimName => {
+        const dim = review.dimensions[dimName];
+        if (!dim) return;
+        
+        const covered = dim.covered;
+        const statusIcon = covered ? '✓' : '✗';
+        const statusClass = covered ? 'complete' : 'incomplete';
+        
+        // Show what's good (explainability)
+        const whatIsGoodHTML = dim.what_is_good && dim.what_is_good.length > 0
+            ? `<div class="what-is-good">
+                <strong>✓ Ce qui est bien :</strong>
+                <ul>
+                    ${dim.what_is_good.map(item => `<li>${item}</li>`).join('')}
+                </ul>
+            </div>`
+            : '';
+        
+        const promptsHTML = !covered && dim.prompts && dim.prompts.length > 0 
+            ? `<div class="prompts-list">
+                ${dim.prompts.map(prompt => `
+                    <div class="prompt-item">
+                        <span>${prompt}</span>
+                    </div>
+                `).join('')}
+            </div>`
+            : '';
+        
+        dimensionsHTML += `
+            <div class="dimension-card ${statusClass}" onclick="toggleDimension(${annotationId}, '${dimName}')">
+                <div class="dimension-header">
+                    <strong>${statusIcon} ${dimName}</strong>
+                    <span>${covered ? 'Complet' : 'Incomplet'}</span>
+                </div>
+                <div class="dimension-content" id="dim-${annotationId}-${dimName}" style="display: none;">
+                    ${whatIsGoodHTML}
+                    ${!covered && dim.missing_elements ? `
+                        <p class="missing-elements"><em>Manque: ${dim.missing_elements.join(', ')}</em></p>
+                    ` : ''}
+                    ${promptsHTML}
+                </div>
+            </div>
+        `;
+    });
+    
+    const readyToComplete = review.ready_to_proceed;
+    const isVisible = state.showReviewPanels[annotationId] || false;
+    const tier = review.completeness_tier || 'MINIMAL';
+    const tierLabels = {
+        'MINIMAL': 'Minimal',
+        'PARTIAL': 'Partiel',
+        'SUBSTANTIAL': 'Substantiel',
+        'COMPLETE': 'Complet'
+    };
+    const tierColors = {
+        'MINIMAL': '#dc3545',
+        'PARTIAL': '#ffc107',
+        'SUBSTANTIAL': '#17a2b8',
+        'COMPLETE': '#28a745'
+    };
+    
+    return `
+        <div class="review-panel-container">
+            <div class="review-toggle-header" onclick="toggleReviewPanel(${annotationId})">
+                <span class="review-toggle-label">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    AI Review
+                    <span class="tier-badge" style="background-color: ${tierColors[tier]}">
+                        ${tierLabels[tier]}
+                    </span>
+                </span>
+                <span class="review-toggle-indicator">
+                    <i class="fa-solid fa-chevron-${isVisible ? 'up' : 'down'}"></i>
+                </span>
+            </div>
+            <div class="review-panel ${isVisible ? 'visible' : 'hidden'}" id="review-panel-${annotationId}">
+                <div class="review-header-row">
+                    <div class="review-header">
+                        ${review.sensations_analysis ? `
+                        <div class="sensations-badges">
+                            ${review.sensations_analysis.visual_mentioned ? '<span class="sensation-badge visual"><i class="fa-solid fa-eye"></i> Visuel</span>' : ''}
+                            ${review.sensations_analysis.tactile_mentioned ? '<span class="sensation-badge tactile"><i class="fa-solid fa-hand"></i> Tactile</span>' : ''}
+                            ${review.sensations_analysis.auditory_mentioned ? '<span class="sensation-badge auditory"><i class="fa-solid fa-ear"></i> Auditif</span>' : ''}
+                            ${review.sensations_analysis.proprioceptive_mentioned ? '<span class="sensation-badge proprioceptive"><i class="fa-solid fa-person"></i> Proprioceptif</span>' : ''}
+                        </div>
+                    ` : ''}
+                    </div>
+                    <button class="btn btn-icon btn-tiny" onclick="triggerReview(${annotationId})" title="Relaunch AI Review">
+                        <i class="fa-solid fa-arrow-rotate-right"></i>
+                    </button>
+                </div>
+                ${dimensionsHTML}
+                <div class="review-actions">
+                    <button class="btn edit-elicitation-btn" onclick="editElicitation(${annotationId})">
+                        <i class="fa-solid fa-pencil"></i>
+                        Modifier l'élicitation
+                    </button>
+                    <button class="btn mark-complete-btn ${readyToComplete ? '' : 'disabled'}" 
+                        onclick="markElicitationComplete(${annotationId})"
+                        ${readyToComplete ? '' : 'disabled'}>
+                        <i class="fa-solid fa-check"></i>
+                        Marquer comme complet
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function toggleDimension(annotationId, dimName) {
+    const content = document.getElementById(`dim-${annotationId}-${dimName}`);
+    if (content) {
+        const isVisible = content.style.display !== 'none';
+        content.style.display = isVisible ? 'none' : 'block';
+    }
+}
+
+function toggleReviewPanel(annotationId) {
+    // Toggle state
+    state.showReviewPanels[annotationId] = !state.showReviewPanels[annotationId];
+    
+    // Re-render to update UI
+    renderAnnotations();
+}
+
+async function reloadAllAnalyses() {
+    if (!state.currentVideoId) {
+        showToast('Error', 'No video loaded', 'error');
+        return;
+    }
+
+    const annotations = Array.isArray(state.annotations) ? state.annotations : [];
+    if (annotations.length === 0) {
+        showToast('Info', 'No annotations to reload', 'info');
+        return;
+    }
+
+    const eligible = annotations.filter(a => a && a.transcription && a.transcription.trim());
+    const skipped = annotations.length - eligible.length;
+
+    if (eligible.length === 0) {
+        showToast('Info', 'No transcriptions available for reload', 'info');
+        return;
+    }
+
+    eligible.forEach(annotation => {
+        annotation.tagging_status = 'processing';
+        annotation.review_status = 'processing';
+    });
+    renderAnnotations();
+    renderTimeline();
+
     try {
-        // Call the new endpoint to trigger regeneration
-        const response = await fetch(`/api/annotations/${annotationId}/regenerate-extended`, {
+        showLoading('Reloading tagging and AI reviews...');
+
+        const requests = eligible.map(async annotation => {
+            const [tagResponse, reviewResponse] = await Promise.all([
+                fetch(`/api/annotations/${annotation.id}/tags`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                }),
+                fetch(`/api/annotations/${annotation.id}/review`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                })
+            ]);
+
+            return {
+                annotationId: annotation.id,
+                tagOk: tagResponse.ok,
+                reviewOk: reviewResponse.ok
+            };
+        });
+
+        const results = await Promise.allSettled(requests);
+        let failures = 0;
+
+        results.forEach(result => {
+            if (result.status === 'fulfilled') {
+                if (!result.value.tagOk) failures += 1;
+                if (!result.value.reviewOk) failures += 1;
+            } else {
+                failures += 2;
+            }
+        });
+
+        const summary = failures > 0
+            ? `Triggered ${eligible.length} reloads with ${failures} failures${skipped ? ` (${skipped} skipped)` : ''}`
+            : `Reloaded ${eligible.length} annotations${skipped ? ` (${skipped} skipped)` : ''}`;
+
+        showToast('Reload all', summary, failures > 0 ? 'warning' : 'success');
+    } catch (error) {
+        console.error('Error reloading all analyses:', error);
+        showToast('Error', 'Failed to reload all analyses', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function triggerTagging(annotationId) {
+    try {
+        console.error('[TAGGING UI] Relancer Tags clicked', annotationId);
+        showLoading('Relaunching tagging process...');
+        
+        console.error('[TAGGING UI] Sending request to /api/annotations/' + annotationId + '/tags');
+        const response = await fetch(`/api/annotations/${annotationId}/tags`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
         });
 
         if (!response.ok) {
-            throw new Error('Failed to trigger extended transcript regeneration');
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to trigger tagging');
         }
 
-        // Update UI to show processing status
-        const item = document.querySelector(`.annotation-item[data-id="${annotationId}"]`);
-        if (item) {
-            const extendedDiv = item.querySelector('.annotation-extended');
-            if (extendedDiv) {
-                extendedDiv.innerHTML = '<em>Regenerating extended transcript...</em>';
-            }
-        }
-        showToast('Extended Transcript', 'Regeneration triggered', 'info');
+        console.error('[TAGGING UI] Tagging request accepted', annotationId);
 
+        showToast('Tagging', 'Tagging process restarted', 'info');
+        
     } catch (error) {
-        console.error('Error regenerating extended transcript:', error);
-        showToast("Error", 'Failed to regenerate extended transcript', 'error');
+        console.error('Error triggering tagging:', error);
+        showToast('Error', error.message, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function triggerReview(annotationId) {
+    try {
+        showLoading('Triggering AI review...');
+        
+        const response = await fetch(`/api/annotations/${annotationId}/review`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to trigger review');
+        }
+
+        showToast('AI Review', 'Review started', 'info');
+        
+    } catch (error) {
+        console.error('Error triggering review:', error);
+        showToast('Error', error.message, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function editElicitation(annotationId) {
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (!annotation) return;
+    
+    // Create modal
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.id = 'editElicitationModal';
+    
+    const review = annotation.review_results 
+        ? (typeof annotation.review_results === 'string' ? JSON.parse(annotation.review_results) : annotation.review_results)
+        : null;
+    
+    const priorityPromptsHTML = review && review.priority_prompts 
+        ? `<div class="priority-prompts">
+            <strong>Points à adresser en priorité:</strong>
+            <ul>
+                ${review.priority_prompts.map(p => `<li>${p}</li>`).join('')}
+            </ul>
+        </div>`
+        : '';
+    
+    modal.innerHTML = `
+        <div class="modal-content">
+            <span class="close" onclick="closeEditElicitationModal()">&times;</span>
+            <h2>Modifier l'élicitation</h2>
+            ${priorityPromptsHTML}
+            <textarea id="elicitationTextEdit" rows="10">${annotation.transcription || ''}</textarea>
+            <div class="modal-actions">
+                <button class="btn btn-primary" onclick="saveElicitationEdit(${annotationId})">
+                    <i class="fa-solid fa-save"></i>
+                    Enregistrer et re-analyser
+                </button>
+                <button class="btn cancel-btn" onclick="closeEditElicitationModal()">Annuler</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    modal.style.display = 'block';
+    
+    // Focus on textarea
+    document.getElementById('elicitationTextEdit').focus();
+}
+
+function closeEditElicitationModal() {
+    const modal = document.getElementById('editElicitationModal');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+async function saveElicitationEdit(annotationId) {
+    const textarea = document.getElementById('elicitationTextEdit');
+    const newTranscription = textarea.value.trim();
+    
+    if (!newTranscription) {
+        showToast('Error', 'Transcription cannot be empty', 'error');
+        return;
+    }
+    
+    try {
+        showLoading('Saving and re-analyzing...');
+        
+        // Update transcription
+        const updateResponse = await fetch(`/api/annotations/${annotationId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ transcription: newTranscription })
+        });
+        
+        if (!updateResponse.ok) {
+            throw new Error('Failed to update transcription');
+        }
+        
+        // Trigger re-review
+        const reviewResponse = await fetch(`/api/annotations/${annotationId}/review`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        if (!reviewResponse.ok) {
+            throw new Error('Failed to trigger re-review');
+        }
+        
+        closeEditElicitationModal();
+        showToast('Success', 'Élicitation mise à jour, re-analyse en cours', 'success');
+        
+        // Reload annotations to show updated content
+        if (state.currentVideoId) {
+            await loadAnnotations(state.currentVideoId);
+        }
+        
+    } catch (error) {
+        console.error('Error saving elicitation:', error);
+        showToast('Error', error.message, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function markElicitationComplete(annotationId) {
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (!annotation) return;
+    
+    // Update review status to 'skipped' to indicate manual completion
+    try {
+        const response = await fetch(`/api/annotations/${annotationId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ review_status: 'skipped' })
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to mark as complete');
+        }
+        
+        showToast('Success', 'Élicitation marquée comme complète', 'success');
+        
+        if (state.currentVideoId) {
+            await loadAnnotations(state.currentVideoId);
+        }
+        
+    } catch (error) {
+        console.error('Error marking complete:', error);
+        showToast('Error', error.message, 'error');
+    }
+}
+
+function updateReviewStatus(annotationId, status) {
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (annotation) {
+        annotation.review_status = status;
+        if (state.currentVideoId) {
+            renderAnnotations();
+            renderTimeline();
+        }
+    }
+}
+
+function updateReviewResults(annotationId, reviewResults, isSalient = null) {
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (annotation) {
+        annotation.review_status = 'completed';
+        annotation.review_results = reviewResults;
+        if (isSalient !== null && typeof isSalient !== 'undefined') {
+            annotation.is_salient = isSalient;
+        }
+        if (state.currentVideoId) {
+            renderAnnotations();
+            renderTimeline();
+        }
     }
 }
 
@@ -1683,59 +2377,69 @@ function getStatusText(status) {
     return statusMap[status] || status;
 }
 
-// Extended Transcript Functions
-function toggleExtendedTranscript(annotationId) {
-    const content = document.getElementById(`extended-${annotationId}`);
-    const toggle = content.previousElementSibling;
-    const icon = toggle.querySelector('i');
-
-    if (content.classList.contains('expanded')) {
-        content.classList.remove('expanded');
-        icon.classList.remove('fa-caret-up');
-        icon.classList.add('fa-caret-down');
-        toggle.querySelector('span').textContent = 'See Extended Transcript';
-    } else {
-        content.classList.add('expanded');
-        icon.classList.remove('fa-caret-down');
-        icon.classList.add('fa-caret-up');
-        toggle.querySelector('span').textContent = 'Hide Extended Transcript';
-    }
-}
-
-function updateExtendedTranscriptStatus(annotationId, status) {
+function updateTaggingStatus(annotationId, status) {
     const annotation = state.annotations.find(a => a.id === annotationId);
     if (annotation) {
-        annotation.extended_transcript_status = status;
-        renderAnnotations();
-        renderTimeline();
-    }
-}
-
-function updateExtendedTranscript(annotationId, extendedTranscript) {
-    const annotation = state.annotations.find(a => a.id === annotationId);
-    if (annotation) {
-        annotation.extended_transcript = extendedTranscript;
-        annotation.extended_transcript_status = 'completed';
+        annotation.tagging_status = status;
         renderAnnotations();
     }
 }
 
-// function updateTaggingStatus(annotationId, status) {
-//     const annotation = state.annotations.find(a => a.id === annotationId);
-//     if (annotation) {
-//         annotation.tagging_status = status;
-//         renderAnnotations();
-//     }
-// }
+function updateTags(annotationId, tags) {
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (annotation) {
+        annotation.tags = tags;
+        annotation.tagging_status = 'completed';
+        renderAnnotations();
+    }
+}
 
-// function updateTags(annotationId, tags) {
-//     const annotation = state.annotations.find(a => a.id === annotationId);
-//     if (annotation) {
-//         annotation.tags = tags;
-//         annotation.tagging_status = 'completed';
-//         renderAnnotations();
-//     }
-// }
+function updateJudgeStatus(annotationId, status) {
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (annotation) {
+        annotation.judge_status = status;
+        renderAnnotations();
+    }
+}
+
+function updateJudgeDecision(annotationId, judge_decision) {
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (annotation) {
+        annotation.judge_decision = judge_decision;
+        annotation.judge_status = 'completed';
+        
+        // If judge says review NOT needed and confidence is high, show manual trigger button with hint
+        // Otherwise, the auto-review will have been triggered by process_judge in backend
+        renderAnnotations();
+    }
+}
+
+async function triggerManualReview(annotationId, event) {
+    event.stopPropagation();
+    
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (!annotation) return;
+    
+    try {
+        annotation.review_status = 'processing';
+        renderAnnotations();
+        
+        const response = await fetch(`/api/annotations/${annotationId}/review`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        if (!response.ok) {
+            throw new Error(await response.text());
+        }
+        
+        showToast('AI Review', 'Analysis in progress...', 'info');
+    } catch (error) {
+        showToast('Error', `Failed to trigger review: ${error.message}`, 'error');
+        annotation.review_status = 'failed';
+        renderAnnotations();
+    }
+}
 
 function handleFeedback(annotationId, feedbackValue, event) {
     event.stopPropagation();
@@ -1933,10 +2637,10 @@ function showToast(title, message, type = 'info') {
         removeToast(toast);
     });
 
-    // Auto remove after 5 seconds
+    // Auto remove after 4.25 seconds (15% reduction from 5000ms)
     const autoRemoveTimeout = setTimeout(() => {
         removeToast(toast);
-    }, 5000);
+    }, 4250);
 
     // Store timeout ID so we can cancel it if user closes manually
     toast.dataset.timeoutId = autoRemoveTimeout;
@@ -1970,14 +2674,19 @@ function switchTab(tabName) {
 
     // Show/hide content
     const annotateTab = document.getElementById('annotateTab');
+    const segmentTab = document.getElementById('segmentTab');
     const projectsTab = document.getElementById('projectsTab');
 
     // Hide all tabs first (with null checks)
     if (annotateTab) annotateTab.style.display = 'none';
+    if (segmentTab) segmentTab.style.display = 'none';
     if (projectsTab) projectsTab.style.display = 'none';
 
     if (tabName === 'annotate') {
         if (annotateTab) annotateTab.style.display = '';
+    } else if (tabName === 'segment') {
+        if (segmentTab) segmentTab.style.display = '';
+        initializeSegmentTab();
     } else if (tabName === 'projects') {
         if (projectsTab) projectsTab.style.display = 'block';
         loadProjects();
@@ -2402,6 +3111,27 @@ function openLocalFolderModal() {
         modal.style.display = 'flex';
         document.getElementById('localVideosContainer').style.display = 'none';
         document.getElementById('localFolderPath').value = '';
+
+        // Focus on the input field
+        setTimeout(() => {
+            document.getElementById('localFolderPath').focus();
+        }, 100);
+
+        // Close on Escape key
+        const escapeHandler = (e) => {
+            if (e.key === 'Escape') {
+                closeLocalFolderModal();
+                document.removeEventListener('keydown', escapeHandler);
+            }
+        };
+        document.addEventListener('keydown', escapeHandler);
+
+        // Close on background click
+        modal.onclick = (e) => {
+            if (e.target === modal) {
+                closeLocalFolderModal();
+            }
+        };
     } else {
         console.error('localFolderModal not found!');
     }
@@ -2419,36 +3149,9 @@ async function handleBrowseLocalFolder() {
         return;
     }
 
-    try {
-        showLoading('Browsing folder...');
-
-        const response = await fetch(`${API_BASE}/api/videos/local/browse?directory=${encodeURIComponent(folderPath)}`);
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Failed to browse folder');
-        }
-
-        const data = await response.json();
-
-        if (data.videos.length === 0) {
-            showToast('No Videos', 'No video files found in this folder', 'info');
-            return;
-        }
-
-        // Display found videos
-        renderLocalVideos(data.videos);
-        document.getElementById('localVideosContainer').style.display = 'block';
-        document.getElementById('localVideoCount').textContent = data.videos.length;
-
-        showToast('Success', `Found ${data.videos.length} video(s)`, 'success');
-
-    } catch (error) {
-        console.error('Error browsing folder:', error);
-        showToast('Error', error.message, 'error');
-    } finally {
-        hideLoading();
-    }
+    // Call the existing handleBrowseFolder function and close modal on success
+    await handleBrowseFolder(folderPath);
+    closeLocalFolderModal();
 }
 
 function renderLocalVideos(videos) {
@@ -2518,7 +3221,708 @@ async function registerLocalVideo(filepath, filename) {
 // Make functions globally available
 window.seekToAnnotation = seekToAnnotation;
 window.deleteAnnotation = deleteAnnotation;
-window.toggleExtendedTranscript = toggleExtendedTranscript;
+window.toggleDimension = toggleDimension;
+window.triggerReview = triggerReview;
+window.editElicitation = editElicitation;
+window.closeEditElicitationModal = closeEditElicitationModal;
+
+// ============================================================================
+// SEGMENTATION TAB FUNCTIONS
+// ============================================================================
+
+function initializeSegmentTab() {
+    // Initialize event listeners for segmentation controls
+    const trimStartInput = document.getElementById('trimStartInput');
+    const trimEndInput = document.getElementById('trimEndInput');
+    const createSegmentBtn = document.getElementById('createSegmentBtn');
+    const clearSegmentBtn = document.getElementById('clearSegmentBtn');
+    const refreshSegmentsBtn = document.getElementById('refreshSegmentsBtn');
+    const segmentVideoPlayer = document.getElementById('segmentVideoPlayer');
+    
+    // CRITICAL FIX: Find timeline track WITHIN segmentation controls, not the whole page
+    const segmentationControls = document.getElementById('segmentationControls');
+    const timelineTrack = segmentationControls ? segmentationControls.querySelector('.timeline-track') : null;
+    
+    const trimHandleStart = document.getElementById('trimHandleStart');
+    const trimHandleEnd = document.getElementById('trimHandleEnd');
+    
+    console.log('initializeSegmentTab: Found elements:', {
+        trimStartInput: !!trimStartInput,
+        trimEndInput: !!trimEndInput,
+        createSegmentBtn: !!createSegmentBtn,
+        segmentationControls: !!segmentationControls,
+        timelineTrack: !!timelineTrack,
+        trimHandleStart: !!trimHandleStart,
+        trimHandleEnd: !!trimHandleEnd,
+        segmentVideoPlayer: !!segmentVideoPlayer
+    });
+
+    if (trimStartInput && !trimStartInput.dataset.initialized) {
+        trimStartInput.addEventListener('input', handleTimeInputChange);
+        trimStartInput.addEventListener('blur', validateTimeInput);
+        trimStartInput.dataset.initialized = 'true';
+    }
+
+    if (trimEndInput && !trimEndInput.dataset.initialized) {
+        trimEndInput.addEventListener('input', handleTimeInputChange);
+        trimEndInput.addEventListener('blur', validateTimeInput);
+        trimEndInput.dataset.initialized = 'true';
+    }
+
+    if (createSegmentBtn && !createSegmentBtn.dataset.initialized) {
+        createSegmentBtn.addEventListener('click', createSegment);
+        createSegmentBtn.dataset.initialized = 'true';
+    }
+
+    if (clearSegmentBtn && !clearSegmentBtn.dataset.initialized) {
+        clearSegmentBtn.addEventListener('click', clearSegmentMarkers);
+        clearSegmentBtn.dataset.initialized = 'true';
+    }
+
+    if (refreshSegmentsBtn && !refreshSegmentsBtn.dataset.initialized) {
+        refreshSegmentsBtn.addEventListener('click', () => {
+            if (state.segmentVideoId) {
+                loadSegments(state.segmentVideoId);
+            }
+        });
+        refreshSegmentsBtn.dataset.initialized = 'true';
+    }
+
+    // Timeline click to set position - ONLY if we found the correct one
+    if (timelineTrack && !timelineTrack.dataset.clickInitialized) {
+        console.log('Attaching click handler to segment timeline track');
+        timelineTrack.addEventListener('click', handleTimelineClick);
+        timelineTrack.dataset.clickInitialized = 'true';
+    }
+
+    // Draggable handles - use more robust event attachment
+    if (trimHandleStart && !trimHandleStart.dataset.initialized) {
+        console.log('Initializing start handle drag');
+        trimHandleStart.addEventListener('mousedown', (e) => {
+            console.log('Start handle mousedown event fired');
+            startDrag(e, 'start');
+        });
+        // Also add touch support
+        trimHandleStart.addEventListener('touchstart', (e) => {
+            console.log('Start handle touchstart event fired');
+            e.preventDefault();
+            const touch = e.touches[0];
+            const mouseEvent = new MouseEvent('mousedown', {
+                clientX: touch.clientX,
+                clientY: touch.clientY
+            });
+            startDrag(mouseEvent, 'start');
+        });
+        trimHandleStart.dataset.initialized = 'true';
+    }
+
+    if (trimHandleEnd && !trimHandleEnd.dataset.initialized) {
+        console.log('Initializing end handle drag');
+        trimHandleEnd.addEventListener('mousedown', (e) => {
+            console.log('End handle mousedown event fired');
+            startDrag(e, 'end');
+        });
+        // Also add touch support
+        trimHandleEnd.addEventListener('touchstart', (e) => {
+            console.log('End handle touchstart event fired');
+            e.preventDefault();
+            const touch = e.touches[0];
+            const mouseEvent = new MouseEvent('mousedown', {
+                clientX: touch.clientX,
+                clientY: touch.clientY
+            });
+            startDrag(mouseEvent, 'end');
+        });
+        trimHandleEnd.dataset.initialized = 'true';
+    }
+
+    // Update playhead position
+    if (segmentVideoPlayer && !segmentVideoPlayer.dataset.playheadInitialized) {
+        segmentVideoPlayer.addEventListener('timeupdate', updatePlayhead);
+        segmentVideoPlayer.dataset.playheadInitialized = 'true';
+    }
+
+    // If a video is already loaded in the elicitation tab, use it
+    if (state.currentVideoId && state.currentVideo) {
+        loadVideoForSegmentation(state.currentVideoId);
+    }
+}
+
+// Drag state
+let isDragging = false;
+let dragType = null;
+
+function startDrag(e, type) {
+    console.log('startDrag called with type:', type);
+    e.preventDefault();
+    e.stopPropagation();
+    isDragging = true;
+    dragType = type;
+    
+    // Debug: Check what element we clicked on
+    console.log('Event target:', e.target, 'Target classes:', e.target.className);
+    
+    // Debug: Find all timeline-track elements  
+    const allTracks = document.querySelectorAll('.timeline-track');
+    console.log('Total .timeline-track elements on page:', allTracks.length);
+    allTracks.forEach((track, idx) => {
+        const rect = track.getBoundingClientRect();
+        console.log(`Track ${idx}:`, {
+            width: rect.width,
+            height: rect.height,
+            display: window.getComputedStyle(track).display,
+            parentDisplay: window.getComputedStyle(track.parentElement).display,
+            grandparentDisplay: window.getComputedStyle(track.parentElement?.parentElement).display
+        });
+    });
+    
+    console.log('Drag started, isDragging:', isDragging, 'dragType:', dragType);
+    
+    document.addEventListener('mousemove', handleDrag);
+    document.addEventListener('mouseup', stopDrag);
+    document.addEventListener('touchmove', handleTouchDrag, { passive: false });
+    document.addEventListener('touchend', stopDrag);
+}
+
+function handleTouchDrag(e) {
+    e.preventDefault();
+    const touch = e.touches[0];
+    const mouseEvent = new MouseEvent('mousemove', {
+        clientX: touch.clientX,
+        clientY: touch.clientY
+    });
+    handleDrag(mouseEvent);
+}
+
+function previewSegmentFrame(time) {
+    const player = document.getElementById('segmentVideoPlayer');
+    if (!player || !player.duration) return;
+    const safeTime = Math.max(0, Math.min(time, player.duration));
+    player.currentTime = safeTime;
+}
+
+function handleDrag(e) {
+    if (!isDragging) {
+        console.log('handleDrag called but isDragging is false');
+        return;
+    }
+    
+    // Ensure we have valid mouse coordinates
+    if (typeof e.clientX === 'undefined' || typeof e.clientY === 'undefined') {
+        console.log('Invalid event object, missing clientX/clientY:', e);
+        return;
+    }
+    
+    // CRITICAL FIX: Find the timeline track in the SEGMENT tab, not the annotate tab
+    // Look within the segmentation controls container specifically
+    const segmentationControls = document.getElementById('segmentationControls');
+    if (!segmentationControls) {
+        console.log('Segmentation controls container not found');
+        return;
+    }
+    
+    const timelineTrack = segmentationControls.querySelector('.timeline-track');
+    if (!timelineTrack) {
+        console.log('Timeline track not found within segmentation controls');
+        return;
+    }
+    
+    const rect = timelineTrack.getBoundingClientRect();
+    console.log('Timeline rect:', {left: rect.left, width: rect.width, top: rect.top, bottom: rect.bottom}, 'clientX:', e.clientX);
+    console.log('Timeline track styles:', {
+        display: window.getComputedStyle(timelineTrack).display,
+        width: window.getComputedStyle(timelineTrack).width,
+        position: window.getComputedStyle(timelineTrack).position
+    });
+    
+    if (!rect.width || rect.width === 0) {
+        console.log('⚠️ Timeline track has no width! Rect:', rect);
+        console.log('Full debuginfo:');
+        console.log('- Segment tab display:', window.getComputedStyle(document.getElementById('segmentTab')).display);
+        console.log('- Segmentation controls display:', window.getComputedStyle(segmentationControls).display);
+        console.log('- Timeline scrubber display:', window.getComputedStyle(timelineTrack.parentElement).display);
+        return;
+    }
+    
+    const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+    const percentage = x / rect.width;
+    
+    console.log('x:', x, 'rect.width:', rect.width, 'percentage:', percentage);
+    
+    const player = document.getElementById('segmentVideoPlayer');
+    if (!player || !player.duration || isNaN(player.duration) || player.duration === 0) {
+        console.log('Player not ready, duration:', player?.duration, 'isNaN:', isNaN(player?.duration));
+        return;
+    }
+    
+    const time = percentage * player.duration;
+    console.log('Calculated time:', time, 'from percentage:', percentage, 'duration:', player.duration);
+    previewSegmentFrame(time);
+
+    if (dragType === 'start') {
+        state.segmentStartTime = time;
+        if (state.segmentEndTime !== null && time >= state.segmentEndTime) {
+            state.segmentEndTime = Math.min(time + 1, player.duration);
+        }
+        console.log('✅ Updated start time to:', time, 'state.segmentStartTime:', state.segmentStartTime);
+    } else if (dragType === 'end') {
+        state.segmentEndTime = time;
+        if (state.segmentStartTime !== null && time <= state.segmentStartTime) {
+            state.segmentStartTime = Math.max(0, time - 1);
+        }
+        console.log('✅ Updated end time to:', time, 'state.segmentEndTime:', state.segmentEndTime);
+    }
+    
+    console.log('About to call updateTimelineUI, current state:', {
+        startTime: state.segmentStartTime,
+        endTime: state.segmentEndTime
+    });
+    updateTimelineUI();
+}
+
+function stopDrag() {
+    console.log('stopDrag called, was dragging:', isDragging);
+    isDragging = false;
+    dragType = null;
+    document.removeEventListener('mousemove', handleDrag);
+    document.removeEventListener('mouseup', stopDrag);
+    document.removeEventListener('touchmove', handleTouchDrag);
+    document.removeEventListener('touchend', stopDrag);
+}
+
+function handleTimelineClick(e) {
+    if (isDragging) return;
+    
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const percentage = x / rect.width;
+    
+    const player = document.getElementById('segmentVideoPlayer');
+    if (!player || !player.duration) return;
+    
+    const time = percentage * player.duration;
+    
+    // Set start if not set, otherwise set end
+    if (state.segmentStartTime === null) {
+        state.segmentStartTime = time;
+    } else if (state.segmentEndTime === null || time > state.segmentStartTime) {
+        state.segmentEndTime = time;
+    } else {
+        state.segmentStartTime = time;
+    }
+    
+    updateTimelineUI();
+}
+
+function handleTimeInputChange(e) {
+    const input = e.target;
+    const value = input.value;
+    
+    // Only allow digits and colon
+    const cleaned = value.replace(/[^0-9:]/g, '');
+    if (cleaned !== value) {
+        input.value = cleaned;
+        return;
+    }
+    
+    // Try to parse if it looks complete
+    if (value.match(/^\d{1,2}:\d{2}$/)) {
+        const time = parseTimeInput(value);
+        if (time !== null) {
+            if (input.id === 'trimStartInput') {
+                state.segmentStartTime = time;
+            } else {
+                state.segmentEndTime = time;
+            }
+            updateTimelineUI();
+        }
+    }
+}
+
+function validateTimeInput(e) {
+    const input = e.target;
+    const value = input.value;
+    
+    if (!value) return;
+    
+    const time = parseTimeInput(value);
+    if (time !== null) {
+        if (input.id === 'trimStartInput') {
+            state.segmentStartTime = time;
+        } else {
+            state.segmentEndTime = time;
+        }
+    }
+    
+    updateTimelineUI();
+}
+
+function parseTimeInput(timeStr) {
+    const match = timeStr.match(/^(\d{1,2}):(\d{2})$/);
+    if (!match) return null;
+    
+    const minutes = parseInt(match[1], 10);
+    const seconds = parseInt(match[2], 10);
+    
+    if (seconds >= 60) return null;
+    
+    const player = document.getElementById('segmentVideoPlayer');
+    const time = minutes * 60 + seconds;
+    
+    if (player && player.duration && time > player.duration) {
+        return player.duration;
+    }
+    
+    return time;
+}
+
+function updatePlayhead() {
+    const player = document.getElementById('segmentVideoPlayer');
+    const playhead = document.getElementById('timelinePlayhead');
+    
+    if (!player || !player.duration || !playhead) return;
+    
+    const percentage = (player.currentTime / player.duration) * 100;
+    playhead.style.left = percentage + '%';
+}
+
+function updateTimelineUI() {
+    const player = document.getElementById('segmentVideoPlayer');
+    if (!player || !player.duration || isNaN(player.duration) || player.duration === 0) {
+        console.log('updateTimelineUI: Player not ready, duration:', player?.duration);
+        return;
+    }
+    
+    const startTime = state.segmentStartTime !== null ? state.segmentStartTime : 0;
+    const endTime = state.segmentEndTime !== null ? state.segmentEndTime : player.duration;
+    
+    console.log('updateTimelineUI: startTime:', startTime, 'endTime:', endTime, 'duration:', player.duration);
+    
+    // Update timeline selection
+    const selection = document.getElementById('timelineSelection');
+    if (selection) {
+        const startPercent = (startTime / player.duration) * 100;
+        const endPercent = (endTime / player.duration) * 100;
+        selection.style.left = startPercent + '%';
+        selection.style.width = (endPercent - startPercent) + '%';
+        console.log('✅ Timeline selection updated: left:', startPercent + '%', 'width:', (endPercent - startPercent) + '%');
+        console.log('   Selection element style:', window.getComputedStyle(selection).left, window.getComputedStyle(selection).width);
+    } else {
+        console.warn('❌ timelineSelection element not found');
+    }
+    
+    // Update input fields
+    const trimStartInput = document.getElementById('trimStartInput');
+    const trimEndInput = document.getElementById('trimEndInput');
+    if (trimStartInput) {
+        trimStartInput.value = formatTimeInput(startTime);
+        console.log('✅ Updated trimStartInput to:', formatTimeInput(startTime));
+    } else {
+        console.warn('❌ trimStartInput not found');
+    }
+    
+    if (trimEndInput) {
+        trimEndInput.value = formatTimeInput(endTime);
+        console.log('✅ Updated trimEndInput to:', formatTimeInput(endTime));
+    } else {
+        console.warn('❌ trimEndInput not found');
+    }
+    
+    // Update duration display
+    const duration = endTime - startTime;
+    const trimDurationEl = document.getElementById('trimDuration');
+    if (trimDurationEl) {
+        trimDurationEl.textContent = formatTime(duration);
+        console.log('✅ Updated trimDuration to:', formatTime(duration));
+    } else {
+        console.warn('❌ trimDuration not found');
+    }
+    
+    // Enable/disable create button
+    const createBtn = document.getElementById('createSegmentBtn');
+    if (createBtn) {
+        createBtn.disabled = state.segmentStartTime === null || state.segmentEndTime === null || 
+                             state.segmentEndTime <= state.segmentStartTime;
+    }
+}
+
+function formatTimeInput(seconds) {
+    if (isNaN(seconds) || !isFinite(seconds)) return '0:00';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+async function loadVideoForSegmentation(videoId) {
+    try {
+        const response = await fetch(`${API_BASE}/api/videos/${videoId}`);
+        if (!response.ok) throw new Error('Failed to load video');
+
+        const video = await response.json();
+        state.segmentVideoId = videoId;
+
+        // Show video player
+        document.getElementById('segmentVideoSelector').style.display = 'none';
+        document.getElementById('segmentVideoPlayerContainer').style.display = 'block';
+        document.getElementById('segmentationControls').style.display = 'flex';
+        document.getElementById('segmentVideoInfo').style.display = 'flex';
+
+        // Load video
+        const videoPlayer = document.getElementById('segmentVideoPlayer');
+        const videoSource = document.getElementById('segmentVideoSource');
+        videoSource.src = `${API_BASE}/api/videos/${videoId}/file`;
+        videoPlayer.load();
+
+        state.segmentVideoElement = videoPlayer;
+
+        // Initialize timeline when video metadata is loaded
+        videoPlayer.addEventListener('loadedmetadata', function initTimeline() {
+            console.log('Video metadata loaded, duration:', videoPlayer.duration);
+            // Set default segment to full video
+            state.segmentStartTime = 0;
+            state.segmentEndTime = videoPlayer.duration;
+            console.log('Set initial segment range:', state.segmentStartTime, '-', state.segmentEndTime);
+            updateTimelineUI();
+        }, { once: true });
+
+        // Update info
+        document.getElementById('segmentVideoName').textContent = video.filename;
+
+        // Load existing segments
+        await loadSegments(videoId);
+
+    } catch (error) {
+        console.error('Error loading video for segmentation:', error);
+        showToast('Error', 'Failed to load video', 'error');
+    }
+}
+
+function clearSegmentMarkers() {
+    const player = document.getElementById('segmentVideoPlayer');
+    
+    // Reset to full video range if video is loaded
+    if (player && player.duration) {
+        state.segmentStartTime = 0;
+        state.segmentEndTime = player.duration;
+        updateTimelineUI();
+    } else {
+        // No video loaded, just clear
+        state.segmentStartTime = null;
+        state.segmentEndTime = null;
+        document.getElementById('trimStartInput').value = '';
+        document.getElementById('trimEndInput').value = '';
+        document.getElementById('trimDuration').textContent = '0:00';
+        
+        // Reset timeline UI to initial state
+        const selection = document.getElementById('timelineSelection');
+        if (selection) {
+            selection.style.left = '0%';
+            selection.style.width = '100%';
+        }
+    }
+    
+    document.getElementById('segmentNameInput').value = '';
+    
+    const createBtn = document.getElementById('createSegmentBtn');
+    if (createBtn) {
+        createBtn.disabled = false; // Enable since full video is valid
+    }
+}
+
+async function createSegment() {
+    if (!state.segmentVideoId) {
+        showToast('Error', 'No video loaded', 'error');
+        return;
+    }
+
+    if (state.segmentStartTime === null || state.segmentEndTime === null) {
+        showToast('Error', 'Please set start and end times', 'error');
+        return;
+    }
+
+    if (state.segmentEndTime <= state.segmentStartTime) {
+        showToast('Error', 'End time must be after start time', 'error');
+        return;
+    }
+
+    try {
+        showLoading('Creating segment...');
+
+        const segmentName = document.getElementById('segmentNameInput').value.trim() || null;
+
+        const segmentData = {
+            parent_video_id: state.segmentVideoId,
+            name: segmentName,
+            start_time: state.segmentStartTime,
+            end_time: state.segmentEndTime
+        };
+
+        const response = await fetch(`${API_BASE}/api/segments`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(segmentData)
+        });
+
+        if (!response.ok) {
+            const error = await response.text();
+            throw new Error(error || 'Failed to create segment');
+        }
+
+        const segment = await response.json();
+        showToast('Success', 'Segment created successfully', 'success');
+
+        // Reload segments
+        await loadSegments(state.segmentVideoId);
+
+        // Clear form
+        clearSegmentMarkers();
+
+    } catch (error) {
+        console.error('Error creating segment:', error);
+        showToast('Error', error.message || 'Failed to create segment', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function loadSegments(videoId) {
+    try {
+        const response = await fetch(`${API_BASE}/api/segments/video/${videoId}`);
+        if (!response.ok) throw new Error('Failed to load segments');
+
+        state.segments = await response.json();
+        renderSegments();
+
+        // Update segment count
+        document.getElementById('segmentCount').textContent = state.segments.length;
+
+    } catch (error) {
+        console.error('Error loading segments:', error);
+        showToast('Error', 'Failed to load segments', 'error');
+    }
+}
+
+function renderSegments() {
+    const container = document.getElementById('segmentsList');
+
+    if (state.segments.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-scissors empty-icon"></i>
+                <p>No segments yet</p>
+                <p class="hint">Mark start and end times to create your first segment</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = '';
+
+    state.segments.forEach(segment => {
+        const duration = segment.end_time - segment.start_time;
+        const segmentName = segment.name || 'Unnamed Segment';
+
+        const item = document.createElement('div');
+        item.className = 'segment-item';
+        item.innerHTML = `
+            <div class="segment-header">
+                <div class="segment-name ${segment.name ? '' : 'unnamed'}">
+                    <i class="fas fa-cut"></i> ${segmentName}
+                </div>
+                <div class="segment-actions-buttons">
+                    <button class="btn btn-icon btn-small" onclick="seekToSegment(${segment.id})" title="Play segment">
+                        <i class="fas fa-play"></i>
+                    </button>
+                    <button class="btn btn-icon btn-small" onclick="editSegment(${segment.id})" title="Edit segment">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn btn-icon btn-small" onclick="deleteSegment(${segment.id})" title="Delete segment">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="segment-info">
+                <div class="segment-time-range">
+                    <i class="fas fa-clock"></i>
+                    <span>${formatTime(segment.start_time)} - ${formatTime(segment.end_time)}</span>
+                    <span>(${formatTime(duration)})</span>
+                </div>
+            </div>
+        `;
+
+        container.appendChild(item);
+    });
+}
+
+function seekToSegment(segmentId) {
+    const segment = state.segments.find(s => s.id === segmentId);
+    if (!segment) return;
+
+    const player = document.getElementById('segmentVideoPlayer');
+    if (player) {
+        player.currentTime = segment.start_time;
+        player.play();
+    }
+}
+
+async function editSegment(segmentId) {
+    const segment = state.segments.find(s => s.id === segmentId);
+    if (!segment) return;
+
+    const newName = prompt('Edit segment name:', segment.name || '');
+    if (newName === null) return; // User cancelled
+
+    try {
+        showLoading('Updating segment...');
+
+        const response = await fetch(`${API_BASE}/api/segments/${segmentId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: newName.trim() || null })
+        });
+
+        if (!response.ok) throw new Error('Failed to update segment');
+
+        showToast('Success', 'Segment updated', 'success');
+        await loadSegments(state.segmentVideoId);
+
+    } catch (error) {
+        console.error('Error updating segment:', error);
+        showToast('Error', 'Failed to update segment', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function deleteSegment(segmentId) {
+    if (!confirm('Delete this segment?')) return;
+
+    try {
+        showLoading('Deleting segment...');
+
+        const response = await fetch(`${API_BASE}/api/segments/${segmentId}`, {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) throw new Error('Failed to delete segment');
+
+        showToast('Success', 'Segment deleted', 'success');
+        await loadSegments(state.segmentVideoId);
+
+    } catch (error) {
+        console.error('Error deleting segment:', error);
+        showToast('Error', 'Failed to delete segment', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+// Make segmentation functions globally available
+window.seekToSegment = seekToSegment;
+window.editSegment = editSegment;
+window.deleteSegment = deleteSegment;
+window.saveElicitationEdit = saveElicitationEdit;
+window.markElicitationComplete = markElicitationComplete;
 window.registerLocalVideo = registerLocalVideo;
 window.handleFeedback = handleFeedback;
 window.openProject = openProject;
@@ -2528,3 +3932,52 @@ window.assignVideos = assignVideos;
 window.addVideoToProject = addVideoToProject;
 window.removeVideoFromProject = removeVideoFromProject;
 window.deleteVideo = deleteVideo;
+
+// DIAGNOSTIC FUNCTION: Call from console to debug segmentation issues
+window.debugSegmentation = function() {
+    console.log('=== SEGMENTATION DIAGNOSTICS ===');
+    
+    const segmentTab = document.getElementById('segmentTab');
+    const segmentationControls = document.getElementById('segmentationControls');
+    const timelineTrack = segmentationControls?.querySelector('.timeline-track');
+    const timelineSelection = document.getElementById('timelineSelection');
+    const trimHandleStart = document.getElementById('trimHandleStart');
+    const trimHandleEnd = document.getElementById('trimHandleEnd');
+    const segmentVideoPlayer = document.getElementById('segmentVideoPlayer');
+    
+    console.log('DOM Elements Found:');
+    console.log('- segmentTab:', !!segmentTab, 'display:', segmentTab ? window.getComputedStyle(segmentTab).display : 'N/A');
+    console.log('- segmentationControls:', !!segmentationControls, 'display:', segmentationControls ? window.getComputedStyle(segmentationControls).display : 'N/A');
+    console.log('- timelineTrack:', !!timelineTrack, 'display:', timelineTrack ? window.getComputedStyle(timelineTrack).display : 'N/A');
+    console.log('- timelineSelection:', !!timelineSelection, 'display:', timelineSelection ? window.getComputedStyle(timelineSelection).display : 'N/A');
+    console.log('- trimHandleStart:', !!trimHandleStart, 'display:', trimHandleStart ? window.getComputedStyle(trimHandleStart).display : 'N/A');
+    console.log('- trimHandleEnd:', !!trimHandleEnd, 'display:', trimHandleEnd ? window.getComputedStyle(trimHandleEnd).display : 'N/A');
+    console.log('- segmentVideoPlayer:', !!segmentVideoPlayer, 'duration:', segmentVideoPlayer?.duration || 'N/A');
+    
+    console.log('\nTimeline Track Measurements:');
+    if (timelineTrack) {
+        const rect = timelineTrack.getBoundingClientRect();
+        console.log('- getBoundingClientRect():', rect);
+        console.log('- offsetWidth:', timelineTrack.offsetWidth);
+        console.log('- clientWidth:', timelineTrack.clientWidth);
+    }
+    
+    console.log('\nHandle Positions:');
+    if (trimHandleStart) {
+        const rect = trimHandleStart.getBoundingClientRect();
+        console.log('- trimHandleStart rect:', rect);
+    }
+    if (trimHandleEnd) {
+        const rect = trimHandleEnd.getBoundingClientRect();
+        console.log('- trimHandleEnd rect:', rect);
+    }
+    
+    console.log('\nCurrent State:');
+    console.log('- state.segmentStartTime:', state.segmentStartTime);
+    console.log('- state.segmentEndTime:', state.segmentEndTime);
+    console.log('- isDragging:', isDragging);
+    console.log('- dragType:', dragType);
+    
+    console.log('\n(Tip: Try dragging a handle and watch the console logs)');
+    console.log('=== END DIAGNOSTICS ===');
+};

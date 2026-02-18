@@ -2,9 +2,10 @@
 Database models and Pydantic schemas for Video Elicitation Annotation Tool
 """
 
-from datetime import datetime
-from typing import Optional, List
-from pydantic import BaseModel, Field
+from datetime import datetime, timezone
+from typing import Optional, List, Dict, Any
+import json
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
@@ -22,8 +23,12 @@ class Project(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
     description = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=datetime.now(timezone.utc),
+        onupdate=datetime.now(timezone.utc),
+    )
 
     # Relationship to videos
     videos = relationship(
@@ -50,13 +55,40 @@ class Video(Base):
         Integer, default=0
     )  # 0 for uploaded (copied), 1 for local (streaming)
     source_type = Column(String, default="uploaded")  # "uploaded", "local", "gdrive"
-    uploaded_at = Column(DateTime, default=datetime.utcnow)
+    uploaded_at = Column(DateTime, default=datetime.now(timezone.utc))
 
     # Relationships
     project = relationship("Project", back_populates="videos")
     annotations = relationship(
         "Annotation", back_populates="video", cascade="all, delete-orphan"
     )
+    segments = relationship(
+        "VideoSegment", back_populates="parent_video", cascade="all, delete-orphan"
+    )
+
+
+class VideoSegment(Base):
+    """Video segment created by user for focused elicitation work"""
+
+    __tablename__ = "video_segments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    parent_video_id = Column(
+        Integer, ForeignKey("videos.id"), nullable=False
+    )  # Reference to original video
+    name = Column(String, nullable=True)  # User-provided name/tag (e.g., "Etirage n°2")
+    start_time = Column(Float, nullable=False)  # Start time in seconds
+    end_time = Column(Float, nullable=False)  # End time in seconds
+    thumbnail_path = Column(String, nullable=True)  # Path to thumbnail image
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=datetime.now(timezone.utc),
+        onupdate=datetime.now(timezone.utc),
+    )
+
+    # Relationships
+    parent_video = relationship("Video", back_populates="segments")
 
 
 class Tag(Base):
@@ -70,8 +102,12 @@ class Tag(Base):
     )  # Single word tag (e.g., "scissors", "cutting")
     category = Column(String, nullable=False)  # tool, material, technique, handling
     usage_count = Column(Integer, default=0)  # Track how often this tag is used
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=datetime.now(timezone.utc),
+        onupdate=datetime.now(timezone.utc),
+    )
 
 
 class Task(Base):
@@ -86,8 +122,12 @@ class Task(Base):
     )  # e.g., 'glassblowing', 'scientific_glassblowing', 'jewelry'
     description = Column(Text, nullable=True)
     is_published = Column(Integer, default=0)  # 1 published, 0 draft
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=datetime.now(timezone.utc),
+        onupdate=datetime.now(timezone.utc),
+    )
 
 
 class Annotation(Base):
@@ -105,28 +145,58 @@ class Annotation(Base):
     transcription_status = Column(
         String, default="pending"
     )  # pending, processing, completed, failed
-    extended_transcript = Column(Text, nullable=True)  # LLM-enhanced transcript
-    extended_transcript_status = Column(
+    # Judge fields: determines if AI review is needed
+    judge_status = Column(
         String, default="pending"
     )  # pending, processing, completed, failed
+    judge_decision = Column(
+        String, nullable=True
+    )  # JSON string with needs_review, confidence, reasoning, etc.
+    # AI Review fields for elicitation quality assessment
+    review_status = Column(
+        String, default="pending"
+    )  # pending, processing, completed, failed, skipped
+    review_results = Column(
+        Text, nullable=True
+    )  # JSON string storing review dimensions and prompts
+    review_timestamp = Column(DateTime, nullable=True)  # When review was completed
+    review_attempts = Column(Integer, default=0)  # Track number of review cycles
+    is_salient = Column(Integer, default=0)  # 1 if salient moment, else 0
     tags = Column(
         Text, nullable=True
     )  # JSON string storing array of tag names ["scissors", "cutting"]
     tagging_status = Column(
         String, default="pending"
     )  # pending, processing, completed, failed
+    tagging_trigger_number = Column(
+        Integer, default=0
+    )  # Track how many times tagging has been triggered for this annotation
     # Craft/domain for prompt selection (e.g., 'glassblowing', 'jewelry')
     craft = Column(String, nullable=True)
     # Task described in the video segment (free text or chosen from tasks)
     task = Column(String, nullable=True)
+    # Automatic task detection via LLM
+    detected_task_status = Column(
+        String, default="pending"
+    )  # pending, processing, completed, failed
+    detected_task = Column(
+        String, nullable=True
+    )  # Auto-detected main task from transcription
+    detected_task_confidence = Column(
+        Float, default=0.0
+    )  # Confidence score (0-1) for detected task
     feedback = Column(
         Integer, nullable=True
     )  # 1 for thumbs up, 0 for thumbs down, null for no feedback
     feedback_choices = Column(
         String, nullable=True
     )  # JSON string storing array of 1s and 0s
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=datetime.now(timezone.utc),
+        onupdate=datetime.now(timezone.utc),
+    )
 
     # Relationship to video
     video = relationship("Video", back_populates="annotations")
@@ -197,6 +267,41 @@ class VideoResponse(BaseModel):
         from_attributes = True
 
 
+class VideoSegmentCreate(BaseModel):
+    """Schema for creating a video segment"""
+
+    parent_video_id: int
+    name: Optional[str] = None
+    start_time: float = Field(..., ge=0)
+    end_time: float = Field(..., gt=0)
+    thumbnail_path: Optional[str] = None
+
+
+class VideoSegmentUpdate(BaseModel):
+    """Schema for updating a video segment"""
+
+    name: Optional[str] = None
+    start_time: Optional[float] = Field(None, ge=0)
+    end_time: Optional[float] = Field(None, gt=0)
+    thumbnail_path: Optional[str] = None
+
+
+class VideoSegmentResponse(BaseModel):
+    """Schema for video segment response"""
+
+    id: int
+    parent_video_id: int
+    name: Optional[str] = None
+    start_time: float
+    end_time: float
+    thumbnail_path: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 class AnnotationCreate(BaseModel):
     """Schema for creating an annotation"""
 
@@ -214,10 +319,19 @@ class AnnotationUpdate(BaseModel):
 
     transcription: Optional[str] = None
     transcription_status: Optional[str] = None
-    extended_transcript: Optional[str] = None
-    extended_transcript_status: Optional[str] = None
+    judge_status: Optional[str] = None
+    judge_decision: Optional[str] = None
+    review_status: Optional[str] = None
+    review_results: Optional[str] = None
+    review_timestamp: Optional[datetime] = None
+    review_attempts: Optional[int] = None
+    is_salient: Optional[bool] = None
     tags: Optional[str] = None
     tagging_status: Optional[str] = None
+    tagging_trigger_number: Optional[int] = None
+    detected_task_status: Optional[str] = None
+    detected_task: Optional[str] = None
+    detected_task_confidence: Optional[float] = None
     feedback: Optional[int] = None
     feedback_choices: Optional[str] = None
     craft: Optional[str] = None
@@ -235,10 +349,19 @@ class AnnotationResponse(BaseModel):
     audio_filepath: str
     transcription: Optional[str] = None
     transcription_status: str
-    extended_transcript: Optional[str] = None
-    extended_transcript_status: str
-    tags: Optional[str] = None
+    review_status: str = "pending"
+    review_results: Optional[str] = None
+    review_timestamp: Optional[datetime] = None
+    review_attempts: int = 0
+    is_salient: bool = False
+    judge_status: str = "pending"
+    judge_decision: Optional[str] = None
+    tags: Optional[List[Dict[str, Optional[str]]]] = None
     tagging_status: str
+    tagging_trigger_number: int = 0
+    detected_task_status: str = "pending"
+    detected_task: Optional[str] = None
+    detected_task_confidence: float = 0.0
     feedback: Optional[int] = None
     feedback_choices: Optional[str] = None
     craft: Optional[str] = None
@@ -248,6 +371,28 @@ class AnnotationResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def parse_tags(cls, v):
+        """Parse tags from JSON string to list, handling both old and new formats"""
+        if v is None:
+            return None
+
+        # Parse JSON string if needed
+        if isinstance(v, str):
+            try:
+                v = json.loads(v)
+            except (json.JSONDecodeError, ValueError):
+                return None
+
+        # Handle old format: list of strings -> convert to list of objects
+        if isinstance(v, list) and len(v) > 0 and isinstance(v[0], str):
+            # Convert old format ["tag1", "tag2"] to new format [{"name": "tag1", "category": None}, ...]
+            return [{"name": tag, "category": None} for tag in v]
+
+        # New format is already correct
+        return v
 
     @property
     def duration(self) -> float:

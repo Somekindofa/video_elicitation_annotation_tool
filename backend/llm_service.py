@@ -5,7 +5,7 @@ LLM service for generating extended transcripts and tags using Fireworks.ai
 import logging
 import aiohttp
 import json
-from typing import Optional, List, Dict, Tuple
+from typing import Any, Optional, List, Dict, Tuple
 
 from config import (
     FIREWORKS_API_KEY,
@@ -29,10 +29,11 @@ Basé sur la transcription fournie, ajoutez :
 Directives :
 - Gardez la version étendue conversationnelle et fluide
 - Reste strictement aligné avec le contexte de la transcription sans la répéter ou la paraphraser.
-- N'ajoutez pas d'informations excessives ou non pertinentes
+- Ne pas citer l'élicitation de départ.
+- N'ajoute pas d'informations superflues, hors sujet ou qui ne sont pas mentionnées dans l'élicitation de départ.
 - Soyez spécifique concernant les outils, mouvements et techniques
 - Mentionnez la position du corps, l'application de la force et la précision quand c'est pertinent
-- Gardez la forme du texte concise et ciblée (2-3 phrases maximum si pertinent)
+- Gardez la forme du texte concise et ciblée
 - Évitez les répétitions inutiles
 - Le texte doit être en français
 - Utiliser que du texte brut, sans markdown ni balises HTML
@@ -55,9 +56,10 @@ Directives :
 
 - Garde la version étendue conversationnelle et fluide, tout en restant technique.
 - Reste strictement aligné avec le contexte de la transcription sans la répéter ou la paraphraser.
-- N'ajoute pas d'informations superflues ou hors sujet.
+- Ne pas citer l'élicitation de départ.
+- N'ajoute pas d'informations superflues, hors sujet ou qui ne sont pas mentionnées dans l'élicitation de départ.
 - Soit spécifique concernant les outils (ex. : chalumeau, lime, polisseuse), les mouvements (ex. : soudure, sertissage, gravure) et les matériaux (ex. : or, argent, pierres précieuses).
-- Mentionne la position du corps (ex. : stabilité des poignets pour la gravure), l’application de la force (ex. : pression sur la scie à métaux) et la précision (ex. : alignement des sertis) quand c'est pertinent.
+- Mentionne la position du corps (ex. : stabilité des poignets pour la gravure), l'application de la force (ex. : pression sur la scie à métaux) et la précision (ex. : alignement des sertis) quand c'est pertinent.
 - Garde le texte concise et ciblé, sans répétitions inutiles.
 - Le texte doit être en français.
 - Utilise uniquement du texte brut, sans markdown ni balises HTML. Utilise des paragraphes pour structurer le texte si nécessaire.
@@ -117,12 +119,11 @@ async def generate_extended_transcript(
 Transcription originale:
 "{transcription}"
 Pour la description étendue tu feras attention à ces points là : il y a 3 niveaux de commentaires à faire.
-1. Ce qui se passe à l'écran (description du geste, position des mains, mouvements du corps).
-2. Les commentaires sur la qualité de l'exécution du geste.
-3. Les conseils d'experts pour mieux guider l'apprentissage.
+1. Comment est exécuté le geste (position du corps, des parties du corps et des membres les plus précis)
+2. Les commentaires sur la qualité de l'exécution du geste. Il s'agit d'une évaluation du geste sur sa manière dont on sait qu'il est bien exécuté.
+3. Les conseils d'experts pour mieux guider l'apprentissage. Il s'agit de l'ensemble des données pertinentes pour repérer ses erreurs.
 La transcription étendue doit être en 3 paragraphes distincts, un pour chaque point mentionné ci-dessus.
-Les paragraphes doivent impérativement citer les phrases clés de la transcription originale pour rester alignés avec le contexte. 
-Il faut 2 sauts de ligne entre chaque paragraphe. Utilise le Markdown pour formater les paragraphes.
+Il faut 1 saut de ligne entre chaque paragraphe.
 Transcription étendue :
 """
 
@@ -236,8 +237,8 @@ IMPORTANT : Répondez UNIQUEMENT avec du JSON valide, sans texte avant ou après
 async def tag_transcript(
     transcription: str,
     extended_transcript: str,
-    existing_tags: List[Dict[str, str]],
-    craft: Optional[str] = None,
+    existing_tags: List[Dict[str, Any]],
+    craft: Optional[Any] = None,
 ) -> Optional[List[Dict[str, str]]]:
     """
     Generate tags for a transcript using Fireworks.ai LLM API
@@ -313,7 +314,7 @@ Générez les tags au format JSON :
 
         payload = {
             "model": FIREWORKS_LLM_MODEL,
-            "prompt": prompt + "\n\nRéponse attendue: du JSON valide uniquement.",
+            "prompt": prompt + "\n\nFormat de réponse attendu: JSON uniquement.",
             "max_tokens": 300,
             "temperature": 0.2,  # more deterministic for schema adherence
             "top_p": 0.9,
@@ -340,6 +341,7 @@ Générez les tags au format JSON :
                 # Extract the generated text
                 if "choices" in result and len(result["choices"]) > 0:
                     generated_text = result["choices"][0].get("text", "").strip()
+                    logger.info(f"LLM raw response for tagging: {generated_text[:500]}")
 
                     if not generated_text:
                         logger.warning("LLM returned empty text for tagging")
@@ -348,24 +350,37 @@ Générez les tags au format JSON :
                     # Parse JSON response robustly
                     try:
                         text = generated_text.strip()
-                        # Remove common code fences if present
-                        if text.startswith("```"):
-                            # strip opening fence
-                            first_newline = text.find("\n")
-                            if first_newline != -1:
-                                text = text[first_newline + 1 :]
-                            # strip trailing fence
-                            if text.endswith("```"):
-                                text = text[:-3]
-                        # Extract first JSON object heuristically
+
+                        # Remove all markdown code fences
+                        # Replace ```json\n...``` blocks
+                        import re
+                        text = re.sub(r'```json\s*', '', text)
+                        text = re.sub(r'```\s*', '', text)
+                        text = text.strip()
+
+                        # Extract first complete JSON object
                         json_start = text.find("{")
-                        json_end = text.rfind("}") + 1
-                        json_candidate = (
-                            text[json_start:json_end]
-                            if json_start >= 0 and json_end > json_start
-                            else text
-                        )
+                        if json_start == -1:
+                            raise ValueError("No JSON object found in response")
+
+                        # Find the matching closing brace for the first opening brace
+                        brace_count = 0
+                        json_end = json_start
+                        for i in range(json_start, len(text)):
+                            if text[i] == '{':
+                                brace_count += 1
+                            elif text[i] == '}':
+                                brace_count -= 1
+                                if brace_count == 0:
+                                    json_end = i + 1
+                                    break
+
+                        if brace_count != 0:
+                            raise ValueError("Unmatched braces in JSON")
+
+                        json_candidate = text[json_start:json_end]
                         parsed = json.loads(json_candidate)
+                        logger.info(f"Parsed JSON structure: {parsed}")
 
                         # Validate structure
                         if "tags" in parsed and isinstance(parsed["tags"], list):
@@ -400,6 +415,13 @@ Générez les tags au format JSON :
                                         valid_tags.append(
                                             {"name": tag_name, "category": tag_category}
                                         )
+                                    else:
+                                        logger.warning(
+                                            f"Filtered out invalid tag: name='{tag_name}', category='{tag_category}' "
+                                            f"(valid categories: {valid_categories})"
+                                        )
+                                else:
+                                    logger.warning(f"Skipping malformed tag: {tag}")
 
                             if valid_tags:
                                 logger.info(
