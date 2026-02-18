@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<XMLDB PATH="local/videoelicit/db" VERSION="20260216" COMMENT="XMLDB file for local_videoelicit plugin">
+  <TABLES>
+    
+    <!-- Videos table: maps Moodle files to FastAPI video records -->
+    <TABLE NAME="local_videoelicit_videos" COMMENT="Video metadata and Moodle integration">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="contextid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="Moodle context ID"/>
+        <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="User who uploaded"/>
+        <FIELD NAME="filename" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="fileitemid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="Moodle file itemid"/>
+        <FIELD NAME="filearea" TYPE="char" LENGTH="50" NOTNULL="true" SEQUENCE="false" COMMENT="Moodle filearea"/>
+        <FIELD NAME="filepath" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="filesize" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="mimetype" TYPE="char" LENGTH="100" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="duration" TYPE="number" LENGTH="10" NOTNULL="false" SEQUENCE="false" DECIMALS="2" COMMENT="Video duration in seconds"/>
+        <FIELD NAME="fastapi_video_id" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Corresponding FastAPI video ID"/>
+        <FIELD NAME="source_type" TYPE="char" LENGTH="20" NOTNULL="true" SEQUENCE="false" DEFAULT="local" COMMENT="Video source: local or webdav"/>
+        <FIELD NAME="external_url" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Full WebDAV URL for external videos"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="contextid" TYPE="foreign" FIELDS="contextid" REFTABLE="context" REFFIELDS="id"/>
+        <KEY NAME="userid" TYPE="foreign" FIELDS="userid" REFTABLE="user" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="contextid_idx" UNIQUE="false" FIELDS="contextid"/>
+        <INDEX NAME="userid_idx" UNIQUE="false" FIELDS="userid"/>
+      </INDEXES>
+    </TABLE>
+    
+    <!-- Annotations table: stores annotation metadata -->
+    <TABLE NAME="local_videoelicit_annotations" COMMENT="Video annotations with audio">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="videoid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="FK to local_videoelicit_videos"/>
+        <FIELD NAME="contextid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="User who created annotation"/>
+        <FIELD NAME="starttime" TYPE="number" LENGTH="10" NOTNULL="true" SEQUENCE="false" DECIMALS="3" COMMENT="Start time in seconds"/>
+        <FIELD NAME="endtime" TYPE="number" LENGTH="10" NOTNULL="true" SEQUENCE="false" DECIMALS="3" COMMENT="End time in seconds"/>
+        <FIELD NAME="audiofileitemid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="Moodle file itemid for audio"/>
+        <FIELD NAME="audiofilepath" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="transcription" TYPE="text" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="transcriptionstatus" TYPE="char" LENGTH="50" NOTNULL="true" SEQUENCE="false" DEFAULT="pending"/>
+        <FIELD NAME="tags" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="JSON array of tags"/>
+        <FIELD NAME="craft" TYPE="char" LENGTH="100" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="task" TYPE="char" LENGTH="255" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="fastapi_annotation_id" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="videoid" TYPE="foreign" FIELDS="videoid" REFTABLE="local_videoelicit_videos" REFFIELDS="id"/>
+        <KEY NAME="contextid" TYPE="foreign" FIELDS="contextid" REFTABLE="context" REFFIELDS="id"/>
+        <KEY NAME="userid" TYPE="foreign" FIELDS="userid" REFTABLE="user" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="videoid_idx" UNIQUE="false" FIELDS="videoid"/>
+        <INDEX NAME="contextid_idx" UNIQUE="false" FIELDS="contextid"/>
+        <INDEX NAME="userid_idx" UNIQUE="false" FIELDS="userid"/>
+      </INDEXES>
+    </TABLE>
+    
+    <!-- Token usage tracking table -->
+    <TABLE NAME="local_videoelicit_usage" COMMENT="LLM token usage tracking per user">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="tokensused" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" DEFAULT="0"/>
+        <FIELD NAME="annotationcount" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" DEFAULT="0"/>
+        <FIELD NAME="lastupdate" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="userid" TYPE="foreign-unique" FIELDS="userid" REFTABLE="user" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="userid_idx" UNIQUE="true" FIELDS="userid"/>
+      </INDEXES>
+    </TABLE>
+    
+  </TABLES>
+</XMLDB>
