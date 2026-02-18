@@ -6,7 +6,7 @@ This script auto-detects schema from models.py and applies migrations.
 
 HOW TO USE:
 1. Add new columns to your models in models.py
-2. Run this script (or restart server via start.bat)
+2. Run this script (or include it in your deployment pipeline)
 3. Script auto-detects and adds missing columns
 
 Example:

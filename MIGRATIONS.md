@@ -8,16 +8,19 @@ This project uses an **auto-detecting migration script** that reads your SQLAlch
 ## How It Works
 
 ### Automatic Migration on Startup
-The `start.bat` script automatically runs `backend/migrate_db.py` before starting the server. This ensures the database schema is always up-to-date with the code.
+During development the migration script `backend/migrate_db.py` should be run before starting the server to ensure the database schema is up-to-date.
 
-```batch
-start.bat
-  ├── Creates virtual environment (if needed)
-  ├── Installs dependencies (if needed)
-  ├── Runs database migration ✓
-  └── Starts FastAPI server
+Development example (manual):
+
+```bash
+# Run migrations
+python backend/migrate_db.py
+
+# Start development server
+uvicorn backend.main:app --reload --host 0.0.0.0 --port 8006
 ```
 
+For production, run the migration as part of your deployment process (systemd, CI/CD pipeline, or container entrypoint).
 ### Migration Script (`backend/migrate_db.py`)
 The migration script:
 1. **Reads expected schema** from `models.py` using SQLAlchemy's metadata
@@ -38,11 +41,18 @@ class Annotation(Base):
     new_field = Column(String, default="default_value")
 ```
 
-2. **Restart the server** - Run `start.bat` or manually run:
+2. **Run migration** (development):
 ```bash
 cd backend
 python migrate_db.py
 ```
+
+3. **Restart the server** (development):
+```bash
+uvicorn backend.main:app --reload --host 0.0.0.0 --port 8006
+```
+
+For production, include `python migrate_db.py` in your deployment workflow or container entrypoint.
 
 3. **Migration happens automatically** - You'll see:
 ```
