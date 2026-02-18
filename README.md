@@ -16,9 +16,9 @@ A localhost web application for annotating expert craftsmen videos with synchron
 
 ## System Requirements
 
-- Windows 11 (primary target)
+- Linux (development and production) or Windows for development
 - Python 3.9 or higher
-- Modern web browser (Chrome/Edge recommended)
+- Modern web browser (Chrome/Edge/Firefox recommended)
 - Microphone for audio recording
 - 4GB RAM minimum (8GB recommended)
 - Internet connection (for Fireworks.ai API calls)
@@ -51,15 +51,18 @@ This application uses Fireworks.ai for fast, cloud-based Whisper transcription.
 
 ### 3. Launch Application
 
-```powershell
-# Option 1: Use the startup script
-.\start.bat
+Development (recommended):
 
-# Option 2: Manual start
-python backend/main.py
+```bash
+# Run with Uvicorn (auto-reload for development)
+uvicorn backend.main:app --reload --host 0.0.0.0 --port 8006
 ```
 
-The application will automatically open in your default browser at `http://localhost:8000`
+Production / service:
+
+- Create a systemd unit (example provided in `MIGRATIONS.md`) or run behind a process manager.
+
+The application will be available at the configured host/port (default: `http://localhost:8006`).
 
 ### 3. Basic Workflow
 
@@ -95,7 +98,7 @@ video-elicitation/
 │   ├── exports/             # Exported annotation files
 │   └── annotations.db       # SQLite database
 ├── requirements.txt         # Python dependencies
-├── start.bat               # Windows startup script
+
 └── README.md               # This file
 ```
 
