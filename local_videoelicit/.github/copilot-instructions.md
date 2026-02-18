@@ -146,14 +146,13 @@ define(['jquery', 'core/ajax', 'core/notification'], function($, Ajax, Notificat
 });
 ```
 
-### Template Changes
+### Template & UI changes
 
-1. Edit [../templates/main.mustache](../templates/main.mustache) following Mustache syntax
-2. Pass context variables from PHP's `$OUTPUT->render_from_template()`
-3. Use `{{#str}}stringkey, component{{/str}}` for language strings
-4. Purge theme cache after changes (included in `purge_caches.php`)
+1. Edit `index.php` to adjust how the UI is embedded (it currently renders the external UI in an iframe).
+2. To change the Moodle-side frontend, update `amd/src/app.js` (AMD module) or the external UI served at `/videoelicit-ui/`.
+3. Use `{{#str}}stringkey, component{{/str}}` for language strings and purge caches after changes with `php admin/cli/purge_caches.php`.
 
-**Note**: Current implementation renders inline in [../index.php](../index.php#L48-L55) using `html_writer::tag()` for iframe, not template-based.
+**Note**: The template `templates/main.mustache` was removed — the plugin uses `index.php` with an iframe to host the external UI.
 
 ## Testing & Debugging
 
