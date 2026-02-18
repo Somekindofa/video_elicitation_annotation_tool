@@ -1,0 +1,17 @@
+{
+	"folders": [
+		{
+			"path": ".."
+		},
+		{
+			"path": "../../../../../../../opt/craftpilot_backend"
+		},
+		{
+			"path": "../../../../../../../opt/video_elicitation_annotation_tool"
+		},
+		{
+			"path": "../../.."
+		}
+	],
+	"settings": {}
+}
