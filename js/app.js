@@ -23,19 +23,60 @@ const state = {
     tasks: [],
     task: '',
     sortBy: 'newest',
-    showReviewPanels: {},  // Track which annotation review panels are visible (defaults to hidden)
-    // Segmentation state
-    segmentVideoId: null,
-    segmentVideoElement: null,
-    segments: [],
+    storageMode: 'server',
+    // Segment-specific state
     segmentStartTime: null,
-    segmentEndTime: null
+    segmentEndTime: null,
+    segments: [],
+    // Cached list of files found in the user's OwnCloud personal folder (populated on select)
+    ownCloudFiles: []
 };
 
-// API Base URL
-const API_BASE = window.location.origin === 'null'
-    ? 'http://localhost:8005'
-    : window.location.origin;
+// API Base URL and JWT token from iframe query
+const TOKEN_PARAM = new URLSearchParams(window.location.search).get('token');
+const MOODLE_JWT = TOKEN_PARAM || '';
+
+// Decode JWT payload (lightweight) so we can access `userid` for OwnCloud discovery fallbacks
+function parseJwtPayload(token) {
+    try {
+        const payload = token.split('.')[1];
+        const json = decodeURIComponent(atob(payload).split('').map(function(c) {
+            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
+        return JSON.parse(json);
+    } catch (e) {
+        return null;
+    }
+}
+const _JWT_PAYLOAD = parseJwtPayload(MOODLE_JWT) || {};
+window.USER_ID = _JWT_PAYLOAD.userid || _JWT_PAYLOAD.user_id || null;
+
+const APP_BASE_PATH = (() => {
+    let path = window.location.pathname || '';
+    if (path.endsWith('/index.html')) {
+        path = path.slice(0, -'/index.html'.length);
+    }
+    if (path.endsWith('/')) {
+        path = path.slice(0, -1);
+    }
+    return path;
+})();
+
+const API_BASE = window.location.origin + APP_BASE_PATH;
+
+// Inject Authorization header for same-origin API requests
+const originalFetch = window.fetch.bind(window);
+window.fetch = (input, init = {}) => {
+    const headers = new Headers(init.headers || {});
+    const url = typeof input === 'string' ? input : input.url;
+    const isSameOrigin = url.startsWith('/') || url.startsWith(window.location.origin);
+
+    if (MOODLE_JWT && isSameOrigin) {
+        headers.set('Authorization', `Bearer ${MOODLE_JWT}`);
+    }
+
+    return originalFetch(input, { ...init, headers });
+};
 
 // Initialize Application
 document.addEventListener('DOMContentLoaded', () => {
@@ -115,6 +156,29 @@ function mdToHtml(text) {
     }
 }
 
+async function loadStorageMode() {
+    if (!MOODLE_JWT) {
+        state.storageMode = 'server';
+        // updateTestModeBanner();
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE}/api/storage-mode`);
+        if (!response.ok) {
+            throw new Error(`Storage mode check failed: ${response.status}`);
+        }
+        const data = await response.json();
+        state.storageMode = data.mode === 'webdav' ? 'webdav' : 'server';
+    } catch (error) {
+        console.warn('Falling back to server storage mode:', error);
+        state.storageMode = 'server';
+    }
+
+    // updateTestModeBanner();
+}
+
+
 async function initializeApp() {
     console.log('Initializing Video Elicitation Tool...');
 
@@ -135,10 +199,30 @@ async function initializeApp() {
     // Check microphone permissions
     checkMicrophonePermission();
 
+    // Load storage mode and update banner
+    await loadStorageMode();
+
     // Load craft selection from localStorage (default to glassblowing)
     state.craft = localStorage.getItem('craft') || 'glassblowing';
+    // Load task selection from localStorage (optional)
+    state.task = localStorage.getItem('task') || '';
     // Create selectors UI
     createCraftSelectorUI();
+    await initializeTaskSelector();
+
+    // Reload tasks when craft changes
+    const craftSelect = document.getElementById('craftSelector');
+    if (craftSelect) {
+        craftSelect.addEventListener('change', async () => {
+            state.craft = craftSelect.value;
+            try { localStorage.setItem('craft', state.craft); } catch (_) { }
+            // Reload tasks for the new craft domain
+            const taskSelect = document.getElementById('taskSelect');
+            if (taskSelect) {
+                await loadTasks(taskSelect, state.craft);
+            }
+        });
+    }
 
     // Load existing videos
     await loadVideos();
@@ -215,24 +299,183 @@ function createCraftSelectorUI() {
     }
 }
 
+// Task selector with select + add-new input
+async function initializeTaskSelector() {
+    const controls = document.getElementById('recordingControls');
+    if (!controls) return;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'task-selector';
+    wrapper.style.margin = '10px 0';
+
+    const label = document.createElement('div');
+    label.textContent = 'Task (choose or add)';
+    label.style.fontSize = '0.9rem';
+    label.style.marginBottom = '6px';
+
+    const select = document.createElement('select');
+    select.id = 'taskSelect';
+    select.style.padding = '6px 8px';
+    select.style.borderRadius = '4px';
+    select.style.border = '1px solid #ccc';
+    select.style.minWidth = '240px';
+
+    const addInput = document.createElement('input');
+    addInput.id = 'taskAddInput';
+    addInput.placeholder = 'Type task name';
+    addInput.style.padding = '6px 8px';
+    addInput.style.borderRadius = '4px';
+    addInput.style.border = '1px solid #ccc';
+    addInput.style.marginLeft = '8px';
+    addInput.style.minWidth = '200px';
+
+    const addBtn = document.createElement('button');
+    addBtn.textContent = 'Add Task';
+    addBtn.style.marginLeft = '8px';
+    addBtn.style.padding = '6px 12px';
+    addBtn.style.borderRadius = '4px';
+    addBtn.style.border = '1px solid #ccc';
+    addBtn.style.background = '#f0f0f0';
+    addBtn.style.cursor = 'pointer';
+
+    select.addEventListener('change', (e) => {
+        state.task = e.target.value || '';
+        try { localStorage.setItem('task', state.task); } catch (_) { }
+    });
+
+    addBtn.addEventListener('click', async () => {
+        const value = addInput.value.trim();
+        if (!value) return;
+        try {
+            await createOrSelectTask(value);
+            addInput.value = '';
+        } catch (err) {
+            console.error('Failed to add task', err);
+        }
+    });
+
+    const row = document.createElement('div');
+    row.style.display = 'flex';
+    row.style.alignItems = 'center';
+    row.appendChild(select);
+    row.appendChild(addInput);
+    row.appendChild(addBtn);
+
+    wrapper.appendChild(label);
+    wrapper.appendChild(row);
+
+    const existingCraft = controls.querySelector('.craft-selector');
+    if (existingCraft && existingCraft.nextSibling) {
+        controls.insertBefore(wrapper, existingCraft.nextSibling);
+    } else {
+        controls.insertBefore(wrapper, controls.firstChild);
+    }
+
+    await loadTasks(select, state.craft);
+    renderTaskOptions(select);
+}
+
+async function loadTasks(selectEl, craft) {
+    try {
+        const craftQuery = craft ? `&craft=${encodeURIComponent(craft)}` : '';
+        const resp = await fetch(`${API_BASE}/api/tasks?published=1${craftQuery}`);
+        if (!resp.ok) throw new Error('Failed to fetch tasks');
+        const tasks = await resp.json();
+        state.tasks = tasks || [];
+    } catch (err) {
+        console.warn('Failed to fetch tasks', err);
+        state.tasks = [];
+    }
+    if (selectEl) {
+        renderTaskOptions(selectEl);
+    }
+}
+
+function renderTaskOptions(selectEl) {
+    if (!selectEl) return;
+    selectEl.innerHTML = '';
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = '-- Select a task --';
+    selectEl.appendChild(placeholder);
+    state.tasks.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.name;
+        opt.textContent = t.name;
+        selectEl.appendChild(opt);
+    });
+    // Reselect previous task if present
+    if (state.task) {
+        selectEl.value = state.task;
+    }
+}
+
+async function createOrSelectTask(taskName) {
+    // If task already in list for this craft, just select it
+    const existing = state.tasks.find(t => t.name === taskName && t.craft === state.craft);
+    if (existing) {
+        state.task = existing.name;
+        try { localStorage.setItem('task', state.task); } catch (_) { }
+        const selectEl = document.getElementById('taskSelect');
+        if (selectEl) {
+            selectEl.value = state.task;
+        }
+        return;
+    }
+
+    // Otherwise create and publish for this craft
+    const resp = await fetch(`${API_BASE}/api/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: taskName, craft: state.craft, description: null, is_published: 1 })
+    });
+    if (!resp.ok) {
+        throw new Error(`Failed to create task: ${resp.status}`);
+    }
+    const created = await resp.json();
+    state.tasks.push(created);
+    state.task = created.name;
+    try { localStorage.setItem('task', state.task); } catch (_) { }
+    const selectEl = document.getElementById('taskSelect');
+    if (selectEl) {
+        renderTaskOptions(selectEl);
+        selectEl.value = created.name;
+    }
+}
 
 // Event Listeners Setup
 function setupEventListeners() {
     console.log('=== Setting up event listeners ===');
 
     // Video selection
-    document.getElementById('selectVideoBtn').addEventListener('click', () => {
-        if (state.videos.length > 0) {
+    document.getElementById('selectVideoBtn').addEventListener('click', async () => {
+        // When user opens the video selector, proactively PROPFIND the user's OwnCloud personal folder
+        // so the UI can offer remote files without additional browsing steps.
+        if (_webdavApiUrl) {
+            try {
+                showLoading('Scanning OwnCloud user folder...');
+                await scanUserOwnCloudFolder();
+                hideLoading();
+                showToast('OwnCloud', `Found ${state.ownCloudFiles.length} files in your personal folder`, 'success');
+            } catch (err) {
+                hideLoading();
+                console.error('OwnCloud scan failed:', err);
+                showToast('OwnCloud', `Scan failed: ${err.message}`, 'error');
+            }
+        }
+
+        // Open the normal video modal if we have any videos (local or linked) or remote OwnCloud files
+        if (state.videos.length > 0 || (state.ownCloudFiles && state.ownCloudFiles.length > 0)) {
             showVideoModal();
         } else {
             showToast('No Videos', 'Please upload videos first', 'info');
         }
     });
 
-    // Add Local Videos - opens file picker for local video registration
+    // Add Videos - opens file picker for upload
     document.getElementById('addVideosBtn').addEventListener('click', handleAddLocalVideos);
 
-    // Handle video file selection for local registration (not upload)
+    // Handle video file selection for upload
     document.getElementById('videoFileInput').addEventListener('change', handleLocalVideoSelection);
 
     // Recording
@@ -272,8 +515,6 @@ function setupEventListeners() {
     document.querySelectorAll('.sort-option').forEach(option => {
         option.addEventListener('click', handleSortChange);
     });
-    // Reload all analyses
-    document.getElementById('reloadAllBtn').addEventListener('click', reloadAllAnalyses);
     // Close sort dropdown when clicking outside
     document.addEventListener('click', (e) => {
         const dropdown = document.getElementById('sortDropdownMenu');
@@ -299,24 +540,16 @@ function setupEventListeners() {
     document.getElementById('closeAssignVideosModalBtn').addEventListener('click', closeAssignVideosModal);
     document.getElementById('closeAssignVideosBtn').addEventListener('click', closeAssignVideosModal);
 
-    // Local Folder Browser
-    document.getElementById('browseLocalFolderBtn').addEventListener('click', handleBrowseLocalFolder);
-    document.getElementById('closeLocalFolderModalBtn').addEventListener('click', closeLocalFolderModal);
-    document.getElementById('cancelLocalBtn').addEventListener('click', closeLocalFolderModal);
-
-    // Allow Enter key in folder path input to trigger browse
-    document.getElementById('localFolderPath').addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            handleBrowseLocalFolder();
-        }
-    });
+    // OwnCloud Video Browser
+    document.getElementById('linkOwnCloudBtn').addEventListener('click', openOwnCloudModal);
+    document.getElementById('closeOwnCloudModalBtn').addEventListener('click', closeOwnCloudModal);
+    document.getElementById('closeOwnCloudBtn').addEventListener('click', closeOwnCloudModal);
 }
 
 // WebSocket Connection
 function connectWebSocket() {
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${wsProtocol}//${window.location.host}/ws`;
+    const wsUrl = `${wsProtocol}//${window.location.host}${APP_BASE_PATH}/ws`;
 
     state.websocket = new WebSocket(wsUrl);
 
@@ -364,78 +597,37 @@ function handleWebSocketMessage(message) {
             updateAnnotationStatus(message.annotation_id, 'failed');
             break;
 
-        case 'review_status':
-            updateReviewStatus(message.annotation_id, message.status);
+        case 'extended_transcript_status':
+            updateExtendedTranscriptStatus(message.annotation_id, message.status);
             break;
 
-        case 'review_complete':
-            updateReviewResults(message.annotation_id, message.review_results, message.is_salient);
+        case 'extended_transcript_complete':
+            updateExtendedTranscript(message.annotation_id, message.extended_transcript);
             if (state.currentVideoId) {
                 loadAnnotations(state.currentVideoId);
             }
             break;
 
-        case 'review_error':
-            showToast('AI Review Error', message.error, 'error');
-            updateReviewStatus(message.annotation_id, 'failed');
+        case 'extended_transcript_error':
+            showToast('Extended Transcript Error', message.error, 'error');
+            updateExtendedTranscriptStatus(message.annotation_id, 'failed');
             break;
 
-        case 'judge_status':
-            updateJudgeStatus(message.annotation_id, message.status);
-            break;
+        // case 'tagging_status':
+        //     updateTaggingStatus(message.annotation_id, message.status);
+        //     break;
 
-        case 'judge_complete':
-            updateJudgeDecision(message.annotation_id, message.judge_decision);
-            if (state.currentVideoId) {
-                loadAnnotations(state.currentVideoId);
-            }
-            break;
+        // case 'tagging_complete':
+        //     updateTags(message.annotation_id, message.tags);
+        //     if (state.currentVideoId) {
+        //         loadAnnotations(state.currentVideoId);
+        //     }
+        //     break;
 
-        case 'judge_error':
-            showToast('Judge Error', message.error, 'error');
-            updateJudgeStatus(message.annotation_id, 'failed');
-            break;
-
-        case 'tagging_status':
-            updateTaggingStatus(message.annotation_id, message.status);
-            break;
-
-        case 'tagging_complete':
-            updateTags(message.annotation_id, message.tags);
-            if (state.currentVideoId) {
-                loadAnnotations(state.currentVideoId);
-            }
-            break;
-
-        case 'tagging_error':
-            showToast('Tagging Error', message.error, 'error');
-            updateTaggingStatus(message.annotation_id, 'failed');
-            break;
-
-        case 'tagging_debug':
-            console.error('[TAGGING DEBUG]', message);
-            break;
-
-        case 'task_detection_status':
-            // Handle task detection status updates
-            console.log('[TASK_DETECTION]', message.status);
-            break;
-
-        case 'task_detection_complete':
-            // Update annotation with detected task
-            const annotation = state.annotations.find(a => a.id === message.annotation_id);
-            if (annotation) {
-                annotation.detected_task = message.detected_task;
-                annotation.detected_task_confidence = message.confidence;
-            }
-            if (state.currentVideoId) {
-                loadAnnotations(state.currentVideoId);
-            }
-            break;
-
-        case 'task_detection_error':
-            showToast('Task Detection Error', message.error, 'error');
-            break;
+        // case 'tagging_error':
+        //     showToast('Tagging Error', message.error, 'error');
+        //     updateTaggingStatus(message.annotation_id, 'failed');
+        //     break;
 
         case 'annotation_deleted':
             if (state.currentVideoId) {
@@ -461,102 +653,10 @@ async function checkMicrophonePermission() {
 
 // Handle Add Local Videos button click
 async function handleAddLocalVideos() {
-    // Check if File System Access API is available (for directory picking)
-    if (typeof window.showDirectoryPicker === 'function') {
-        try {
-            // Use modern File System Access API to let user pick a directory
-            const directoryHandle = await window.showDirectoryPicker();
-
-            // Get the directory path - we'll need to reconstruct it
-            // Note: The API doesn't directly give us the full path for security,
-            // but we can prompt the user to confirm/provide it
-            const dirName = directoryHandle.name;
-
-            // Prompt user to provide or confirm the full path
-            const folderPath = prompt(
-                `Selected folder: "${dirName}"\n\n` +
-                `Please enter the complete path to this folder:\n` +
-                `(The browser doesn't expose full paths for security)`,
-                `C:\\Users\\dupon\\Documents\\${dirName}`
-            );
-
-            if (!folderPath) {
-                console.log('Folder selection cancelled');
-                return;
-            }
-
-            // Now browse and register all videos in that folder
-            await handleBrowseFolder(folderPath);
-
-        } catch (error) {
-            if (error.name === 'AbortError') {
-                // User cancelled the picker
-                console.log('Folder selection cancelled');
-            } else {
-                console.error('Error selecting folder:', error);
-                showToast('Error', 'Failed to select folder: ' + error.message, 'error');
-            }
-        }
-    } else {
-        // Fallback: Open the manual folder path modal
-        // Brave and some browsers disable folder picker for privacy
-        openLocalFolderModal();
-    }
-}
-
-// Browse folder and register all videos
-async function handleBrowseFolder(folderPath) {
-    try {
-        showLoading('Browsing folder...');
-
-        const response = await fetch(`${API_BASE}/api/videos/local/browse?directory=${encodeURIComponent(folderPath)}`);
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Failed to browse folder');
-        }
-
-        const data = await response.json();
-
-        if (data.videos.length === 0) {
-            showToast('No Videos', 'No video files found in this folder', 'info');
-            hideLoading();
-            return;
-        }
-
-        // Register all found videos
-        let successCount = 0;
-        let duplicateCount = 0;
-
-        for (const video of data.videos) {
-            try {
-                const result = await registerLocalVideo(video.filepath, video.filename);
-                if (result) {
-                    successCount++;
-                } else {
-                    duplicateCount++;
-                }
-            } catch (error) {
-                if (error.message.includes('Already Registered') || error.message.includes('UNIQUE constraint')) {
-                    duplicateCount++;
-                } else {
-                    console.error(`Failed to register ${video.filename}:`, error);
-                }
-            }
-        }
-
-        await loadVideos();
-
-        const message = duplicateCount > 0
-            ? `${successCount} video(s) registered, ${duplicateCount} already existed`
-            : `${successCount} video(s) registered successfully`;
-        showToast('Registration Complete', message, 'success');
-
-    } catch (error) {
-        console.error('Error browsing folder:', error);
-        showToast('Error', error.message, 'error');
-    } finally {
-        hideLoading();
+    const input = document.getElementById('videoFileInput');
+    if (input) {
+        input.value = '';
+        input.click();
     }
 }
 
@@ -566,82 +666,140 @@ async function handleLocalVideoSelection(event) {
 
     if (files.length === 0) return;
 
-    showLoading(`Registering ${files.length} video(s)...`);
-
     try {
-        let successCount = 0;
-        let duplicateCount = 0;
-        let skippedCount = 0;
-        let lastRegisteredVideoId = null;
-
-        for (const file of files) {
-            try {
-                // Browsers don't expose full file paths for security reasons
-                // Try to get path from file object (works in some environments)
-                let filepath = file.path;
-
-                if (!filepath) {
-                    // Prompt user to provide the full path
-                    hideLoading(); // Hide loading while prompting
-                    filepath = prompt(
-                        `Please enter the full path for "${file.name}":\n\n` +
-                        `Example: C:\\Videos\\${file.name}`,
-                        `C:\\Videos\\${file.name}`
-                    );
-                    showLoading(`Registering ${files.length} video(s)...`); // Show loading again
-
-                    if (!filepath) {
-                        console.log(`Skipped ${file.name} - no path provided`);
-                        skippedCount++;
-                        continue;
-                    }
-                }
-
-                const video = await registerLocalVideo(filepath, file.name);
-
-                if (video) {
-                    successCount++;
-                    lastRegisteredVideoId = video.id;
-                } else {
-                    duplicateCount++;
-                }
-            } catch (error) {
-                if (error.message.includes('Already Registered') || error.message.includes('UNIQUE constraint')) {
-                    duplicateCount++;
-                } else {
-                    console.error(`Failed to register ${file.name}:`, error);
-                    showToast('Registration Error', `Failed to register ${file.name}: ${error.message}`, 'error');
-                }
-            }
-        }
-
-        // Reload video list
+        await uploadVideos(files);
         await loadVideos();
+        showToast('Upload Complete', `${files.length} video(s) uploaded`, 'success');
+    } catch (error) {
+        console.error('Video upload error:', error);
+        showToast('Upload Error', error.message, 'error');
+    } finally {
+        event.target.value = '';
+    }
+}
 
-        // Show summary message
-        if (successCount > 0) {
-            let message = `${successCount} video(s) registered`;
-            if (duplicateCount > 0) message += `, ${duplicateCount} already existed`;
-            if (skippedCount > 0) message += `, ${skippedCount} skipped`;
-            showToast('Registration Complete', message, 'success');
+function ensureUploadPanel() {
+    let panel = document.getElementById('uploadProgressPanel');
+    if (panel) return panel;
 
-            // Auto-load the last registered video if only one was added
-            if (successCount === 1 && lastRegisteredVideoId) {
-                await loadVideo(lastRegisteredVideoId);
-            }
-        } else if (duplicateCount > 0) {
-            showToast('Already Registered', `All ${duplicateCount} video(s) were already in your library`, 'info');
-        } else if (skippedCount > 0) {
-            showToast('No Videos Added', 'No videos were registered', 'info');
+    panel = document.createElement('div');
+    panel.id = 'uploadProgressPanel';
+    panel.style.position = 'fixed';
+    panel.style.right = '24px';
+    panel.style.bottom = '24px';
+    panel.style.width = '360px';
+    panel.style.maxHeight = '50vh';
+    panel.style.overflowY = 'auto';
+    panel.style.background = '#ffffff';
+    panel.style.border = '1px solid #d5d5d5';
+    panel.style.boxShadow = '0 12px 24px rgba(0,0,0,0.12)';
+    panel.style.borderRadius = '8px';
+    panel.style.padding = '12px 14px';
+    panel.style.zIndex = '9999';
+
+    const title = document.createElement('div');
+    title.textContent = 'Uploading videos';
+    title.style.fontWeight = '600';
+    title.style.marginBottom = '8px';
+    panel.appendChild(title);
+
+    const list = document.createElement('div');
+    list.id = 'uploadProgressList';
+    panel.appendChild(list);
+
+    document.body.appendChild(panel);
+    return panel;
+}
+
+function updateUploadRow(fileName, percent) {
+    const list = document.getElementById('uploadProgressList');
+    if (!list) return;
+
+    let row = list.querySelector(`[data-file="${CSS.escape(fileName)}"]`);
+    if (!row) {
+        row = document.createElement('div');
+        row.dataset.file = fileName;
+        row.style.marginBottom = '10px';
+
+        const label = document.createElement('div');
+        label.textContent = fileName;
+        label.style.fontSize = '12px';
+        label.style.marginBottom = '4px';
+        row.appendChild(label);
+
+        const bar = document.createElement('div');
+        bar.className = 'upload-progress-bar';
+        bar.style.height = '6px';
+        bar.style.background = '#e0e0e0';
+        bar.style.borderRadius = '999px';
+        bar.style.overflow = 'hidden';
+
+        const fill = document.createElement('div');
+        fill.className = 'upload-progress-fill';
+        fill.style.height = '100%';
+        fill.style.width = '0%';
+        fill.style.background = '#2a7ae2';
+        bar.appendChild(fill);
+
+        row.appendChild(bar);
+        list.appendChild(row);
+    }
+
+    const fill = row.querySelector('.upload-progress-fill');
+    if (fill) {
+        fill.style.width = `${percent}%`;
+    }
+}
+
+async function uploadVideos(files) {
+    ensureUploadPanel();
+
+    for (const file of files) {
+        await uploadSingleFile(file);
+    }
+
+    const panel = document.getElementById('uploadProgressPanel');
+    if (panel) {
+        setTimeout(() => panel.remove(), 2000);
+    }
+}
+
+function uploadSingleFile(file) {
+    return new Promise((resolve, reject) => {
+        const isWebDav = state.storageMode === 'webdav';
+        const endpoint = isWebDav ? '/api/uploads' : '/api/videos/upload';
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `${API_BASE}${endpoint}`);
+
+        if (MOODLE_JWT) {
+            xhr.setRequestHeader('Authorization', `Bearer ${MOODLE_JWT}`);
         }
 
-    } catch (error) {
-        console.error('Local video registration error:', error);
-        showToast('Registration Error', error.message, 'error');
-    } finally {
-        hideLoading();
-        event.target.value = ''; // Reset input
-    }
+        xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable) {
+                const percent = Math.round((event.loaded / event.total) * 100);
+                updateUploadRow(file.name, percent);
+            }
+        };
+
+        xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+                updateUploadRow(file.name, 100);
+                resolve();
+            } else {
+                reject(new Error(xhr.responseText || 'Upload failed'));
+            }
+        };
+
+        xhr.onerror = () => {
+            reject(new Error('Upload failed'));
+        };
+
+        const formData = new FormData();
+        const fieldName = isWebDav ? 'files' : 'file';
+        formData.append(fieldName, file, file.name);
+        xhr.send(formData);
+    });
 }
 
 // Load Videos
@@ -652,6 +810,9 @@ async function loadVideos() {
 
         state.videos = await response.json();
 
+        // If Segment tab is initialized, update its selector immediately
+        if (_segmentTabInitialized) renderSegmentVideoSelector();
+
     } catch (error) {
         console.error('Error loading videos:', error);
         showToast('Error', 'Failed to load videos', 'error');
@@ -659,7 +820,7 @@ async function loadVideos() {
 }
 
 // Video Modal
-async function showVideoModal() {
+function showVideoModal() {
     const modal = document.getElementById('videoListModal');
     const container = document.getElementById('videoListContainer');
 
@@ -668,44 +829,24 @@ async function showVideoModal() {
     if (state.videos.length === 0) {
         container.innerHTML = '<p class="empty-state">No videos available</p>';
     } else {
-        // Fetch segments for all videos
-        const segmentsMap = {};
-        for (const video of state.videos) {
-            try {
-                const response = await fetch(`${API_BASE}/api/segments/video/${video.id}`);
-                if (response.ok) {
-                    segmentsMap[video.id] = await response.json();
-                }
-            } catch (error) {
-                console.error(`Failed to load segments for video ${video.id}:`, error);
-                segmentsMap[video.id] = [];
-            }
-        }
-
-        // Render videos with hierarchical segments
         state.videos.forEach(video => {
-            const videoSegments = segmentsMap[video.id] || [];
-            
-            // Parent video item
             const item = document.createElement('div');
-            item.className = 'video-list-item video-parent';
+            item.className = 'video-list-item';
             if (state.currentVideoId === video.id) {
                 item.classList.add('active');
             }
 
             item.innerHTML = `
-                <div class="video-list-name">
-                    <i class="fas fa-video"></i> ${video.filename}
-                </div>
+                <div class="video-list-name">${video.filename}</div>
                 <div class="video-list-meta">
                     ${formatFileSize(video.file_size)} • ${video.annotation_count} elicitations
-                    ${videoSegments.length > 0 ? ` • ${videoSegments.length} segments` : ''}
                 </div>
                 <div class="video-list-actions">
                     <button class="btn btn-icon btn-small btn-danger video-delete-btn" title="Delete video" onclick="event.stopPropagation(); deleteVideo(${video.id})">
                         <i class="fas fa-trash"></i>
                     </button>
                 </div>
+                <div id="videoSegments-${video.id}" class="video-segments-placeholder"></div>
             `;
 
             item.addEventListener('click', () => {
@@ -715,33 +856,39 @@ async function showVideoModal() {
 
             container.appendChild(item);
 
-            // Render segments under parent video
-            if (videoSegments.length > 0) {
-                videoSegments.forEach(segment => {
-                    const segmentItem = document.createElement('div');
-                    segmentItem.className = 'video-list-item video-segment';
-                    
-                    const segmentName = segment.name || 'Unnamed Segment';
-                    const duration = segment.end_time - segment.start_time;
-                    
-                    segmentItem.innerHTML = `
-                        <div class="video-list-name segment-name">
-                            <i class="fas fa-cut"></i> ${segmentName}
+            // Load and render segments for this video (show nested under the video entry)
+            (async () => {
+                try {
+                    const resp = await fetch(`${API_BASE}/api/segments/video/${video.id}`);
+                    if (!resp.ok) return;
+                    const segs = await resp.json();
+                    if (!segs || segs.length === 0) return;
+                    const segContainer = document.getElementById(`videoSegments-${video.id}`);
+                    if (!segContainer) return;
+                    segContainer.className = 'video-segments-list';
+                    segContainer.innerHTML = segs.map(seg => `
+                        <div class="video-segment-item">
+                            <button class="btn btn-small" onclick="loadVideoAndSegment(${video.id}, ${seg.start_time})"><i class="fas fa-play"></i> ${formatTime(seg.start_time)} → ${formatTime(seg.end_time)}</button>
+                            <span class="segment-name">${escapeHtml(seg.name || '')}</span>
                         </div>
-                        <div class="video-list-meta">
-                            ${formatTime(segment.start_time)} - ${formatTime(segment.end_time)} (${formatTime(duration)})
-                        </div>
-                    `;
-
-                    segmentItem.addEventListener('click', () => {
-                        loadVideoSegment(video.id, segment);
-                        closeVideoModal();
-                    });
-
-                    container.appendChild(segmentItem);
-                });
-            }
+                    `).join('');
+                } catch (err) {
+                    console.warn('Failed to load segments for video', video.id, err);
+                }
+            })();
         });
+    }
+
+    // If OwnCloud scanning was performed, render its files inside this modal for selection
+    const ownCloudArea = document.getElementById('videoModalOwnCloudArea');
+    if (ownCloudArea) {
+        if (state.ownCloudFiles && state.ownCloudFiles.length > 0) {
+            ownCloudArea.style.display = 'block';
+            // Reuse existing renderer but target the video-modal container
+            renderOwnCloudItems(state.ownCloudFiles, '/', 'videoModalOwnCloudFilesList');
+        } else {
+            ownCloudArea.style.display = 'none';
+        }
     }
 
     modal.classList.add('active');
@@ -749,6 +896,502 @@ async function showVideoModal() {
 
 function closeVideoModal() {
     document.getElementById('videoListModal').classList.remove('active');
+}
+
+// OwnCloud Video Browser Functions
+// Resolved once per page load
+const _webdavApiUrl = new URLSearchParams(window.location.search).get('webdav_api_url') || '';
+const _moodleWwwRoot = (() => {
+    // Derive from webdav_api_url: strip path after /local/
+    const u = _webdavApiUrl;
+    const idx = u.indexOf('/local/');
+    return idx !== -1 ? u.slice(0, idx) : window.location.origin;
+})();
+
+async function openOwnCloudModal() {
+    const modal = document.getElementById('ownCloudModal');
+
+    // Clear previous state (upload-only modal — do not show file browser here)
+    const cfgWarn = document.getElementById('ownCloudConfigWarning'); if (cfgWarn) cfgWarn.style.display = 'none';
+    const uploadArea = document.getElementById('ownCloudUploadArea'); if (uploadArea) uploadArea.style.display = 'none';
+    const loadingEl = document.getElementById('ownCloudLoading'); if (loadingEl) loadingEl.style.display = 'block';
+
+    modal.classList.add('active');
+
+    // Check if OwnCloud is configured
+    try {
+        if (!_webdavApiUrl) throw new Error('WebDAV API URL not configured');
+
+        const response = await fetch(`${_webdavApiUrl}?action=checkconfig`);
+        const data = await response.json();
+
+        if (!data.configured) {
+            document.getElementById('ownCloudLoading').style.display = 'none';
+            document.getElementById('ownCloudConfigWarning').style.display = 'block';
+            return;
+        }
+
+        // Show upload area and wire up file input
+        const uploadAreaEl = document.getElementById('ownCloudUploadArea');
+        if (uploadAreaEl) uploadAreaEl.style.display = 'block';
+        const fileInput = document.getElementById('ownCloudFileInput');
+        fileInput.onchange = null; // clear old listener
+        fileInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (file) await uploadToOwnCloud(file);
+            fileInput.value = '';
+        });
+
+        // ownCloudModal is upload-only: do not list/browse files here.
+        if (loadingEl) loadingEl.style.display = 'none';
+    } catch (error) {
+        console.error('Error checking OwnCloud config:', error);
+        document.getElementById('ownCloudLoading').style.display = 'none';
+        document.getElementById('ownCloudConfigWarning').style.display = 'block';
+        showToast('Error', 'Failed to access OwnCloud', 'error');
+    }
+}
+
+/**
+ * Upload a file to OwnCloud via the PHP proxy (HTTP/1.1, avoids ERR_HTTP2_PROTOCOL_ERROR).
+ * Shows inline progress in the OwnCloud modal.
+ */
+async function uploadToOwnCloud(file) {
+    if (!_webdavApiUrl) { showToast('Error', 'WebDAV API not configured', 'error'); return; }
+
+    const progressArea = document.getElementById('ownCloudUploadProgress');
+    const bar          = document.getElementById('ownCloudUploadBar');
+    const pctEl        = document.getElementById('ownCloudUploadPct');
+    const nameEl       = document.getElementById('ownCloudUploadFilename');
+    const statusEl     = document.getElementById('ownCloudUploadStatus');
+
+    const shortName = file.name.length > 40 ? file.name.slice(0, 37) + '…' : file.name;
+    nameEl.textContent  = shortName;
+    pctEl.textContent   = '0%';
+    bar.style.width     = '0%';
+    statusEl.textContent= '';
+    progressArea.style.display = 'block';
+    document.getElementById('ownCloudUploadBtn').disabled = true;
+
+    const setError = (msg) => {
+        statusEl.textContent = '✗ ' + msg;
+        statusEl.style.color = '#dc3545';
+        bar.style.background = '#dc3545';
+        document.getElementById('ownCloudUploadBtn').disabled = false;
+    };
+
+    try {
+        // Step 1: Ensure the user's upload folder exists
+        await fetch(`${_webdavApiUrl}?action=ensureuserfolder`, { method: 'GET' });
+
+        // Step 2: Send file to PHP proxy (multipart POST → curl PUT to OwnCloud over HTTP/1.1)
+        const formData = new FormData();
+        formData.append('file', file, file.name);
+
+        // Use XHR so we can track upload progress
+        const uploaded = await new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', `${_webdavApiUrl}?action=proxyupload&filename=${encodeURIComponent(file.name)}`);
+            xhr.upload.addEventListener('progress', (evt) => {
+                if (!evt.lengthComputable) return;
+                const pct = Math.round((evt.loaded / evt.total) * 100);
+                bar.style.width = pct + '%';
+                pctEl.textContent = pct + '%';
+                statusEl.textContent = `${(evt.loaded / 1048576).toFixed(1)} / ${(evt.total / 1048576).toFixed(1)} MB`;
+            });
+            xhr.addEventListener('load', () => {
+                try {
+                    const res = JSON.parse(xhr.responseText);
+                    if (xhr.status >= 200 && xhr.status < 300 && res.success) {
+                        resolve(res);
+                    } else {
+                        reject(new Error(res.error || `HTTP ${xhr.status}`));
+                    }
+                } catch (e) { reject(new Error('Invalid server response')); }
+            });
+            xhr.addEventListener('error', () => reject(new Error('Network error during upload')));
+            xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')));
+            xhr.send(formData);
+        });
+
+        bar.style.width = '100%';
+        pctEl.textContent = '100%';
+        statusEl.textContent = 'Registering…';
+
+        // Step 3: Register in Moodle DB (PHP verifies via PROPFIND)
+        const regParams = new URLSearchParams({
+            action:    'registerupload',
+            filename:  file.name,
+            file_path: uploaded.file_path,
+            filesize:  String(file.size),
+        });
+        const regRes  = await fetch(`${_webdavApiUrl}?${regParams}`, { method: 'POST' });
+        const regData = await regRes.json();
+        if (regData.error) throw new Error(regData.error);
+
+        const moodleVideoId = regData.moodle_id;
+
+        // Step 4: Register in FastAPI
+        if (moodleVideoId) {
+            const streamUrl = `${_moodleWwwRoot}/local/videoelicit/stream.php?videoid=${moodleVideoId}`;
+            await fetch(`${API_BASE}/api/videos/webdav/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    stream_url:      streamUrl,
+                    filename:        file.name,
+                    file_size:       file.size,
+                    moodle_video_id: moodleVideoId,
+                }),
+            });
+        }
+
+        statusEl.textContent = '✓ Upload complete!';
+        statusEl.style.color = '#28a745';
+
+        // Refresh browser listing
+        await browseOwnCloudDirectory('/');
+        await loadVideos();
+
+    } catch (err) {
+        console.error('OwnCloud upload error:', err);
+        setError(err.message || 'Upload failed');
+    } finally {
+        document.getElementById('ownCloudUploadBtn').disabled = false;
+    }
+}
+
+function closeOwnCloudModal() {
+    document.getElementById('ownCloudModal').classList.remove('active');
+}
+
+async function browseOwnCloudDirectory(path) {
+    try {
+        const loadingEl = document.getElementById('ownCloudLoading');
+        const browserEl = document.getElementById('ownCloudBrowser');
+        if (loadingEl) loadingEl.style.display = 'block';
+        if (browserEl) browserEl.style.display = 'none';
+        
+        const webdavApiUrl = new URLSearchParams(window.location.search).get('webdav_api_url');
+        if (!webdavApiUrl) {
+            throw new Error('WebDAV API URL not configured');
+        }
+        
+        const response = await fetch(`${webdavApiUrl}?action=browse&path=${encodeURIComponent(path)}`);
+        if (!response.ok) {
+            // Try to extract server-provided error text/json to show a more helpful message
+            let serverMessage = '';
+            try {
+                const text = await response.text();
+                const parsed = text ? JSON.parse(text) : null;
+                serverMessage = parsed && parsed.error ? parsed.error : (text || '');
+            } catch (e) {
+                /* ignore parse errors - fall back to status code */
+            }
+            throw new Error(`Failed to browse directory: ${response.status}${serverMessage ? ' — ' + serverMessage : ''}`);
+        }
+        
+        const data = await response.json();
+        
+        // Update breadcrumb
+        updateOwnCloudBreadcrumb(path);
+        
+        // Choose appropriate container (Select Video modal uses videoModalOwnCloudFilesList)
+        const targetContainer = document.getElementById('videoModalOwnCloudFilesList') ? 'videoModalOwnCloudFilesList' : 'ownCloudFilesList';
+        // Render files and folders into the chosen container
+        renderOwnCloudItems(data.items || [], path, targetContainer);
+        
+        if (loadingEl) loadingEl.style.display = 'none';
+        if (browserEl) browserEl.style.display = 'block';
+    } catch (error) {
+        console.error('Error browsing OwnCloud directory:', error);
+        showToast('Error', `Failed to browse OwnCloud directory: ${error.message}`, 'error');
+        const loadingEl = document.getElementById('ownCloudLoading');
+        if (loadingEl) loadingEl.style.display = 'none';
+    }
+}
+
+// Recursively PROPFIND an OwnCloud path and return all files found (depth-first)
+async function propfindOwnCloudRecursive(startPath = '/', maxDepth = 10, maxFiles = 5000) {
+    if (!_webdavApiUrl) throw new Error('WebDAV API URL not configured');
+
+    const collected = [];
+    let fileCount = 0;
+
+    async function walk(path, depth) {
+        if (depth > maxDepth) return;
+
+        const resp = await fetch(`${_webdavApiUrl}?action=browse&path=${encodeURIComponent(path)}`);
+        if (!resp.ok) {
+            // Try to surface server-provided error payload (JSON or plain text)
+            let body = await resp.text();
+            try { body = JSON.parse(body); } catch (e) { /* keep as text */ }
+            throw new Error(`Browse failed for ${path}: HTTP ${resp.status} - ${typeof body === 'string' ? body : JSON.stringify(body)}`);
+        }
+        const data = await resp.json();
+        const items = data.items || [];
+
+        for (const it of items) {
+            if (it.type === 'folder') {
+                const subpath = path.endsWith('/') ? path + it.name : path + '/' + it.name;
+                await walk(subpath, depth + 1);
+                if (fileCount >= maxFiles) return;
+            } else if (it.type === 'file') {
+                collected.push({ ...it, parentPath: path });
+                fileCount++;
+                if (fileCount >= maxFiles) return;
+            }
+        }
+    }
+
+    await walk(startPath, 0);
+    return collected;
+}
+
+// Ensure and scan the user's personal OwnCloud folder (uses ensureuserfolder endpoint)
+async function scanUserOwnCloudFolder() {
+    if (!_webdavApiUrl) throw new Error('WebDAV API URL not configured');
+
+    // Ensure folder exists and get the relative path
+    const ensureRes = await fetch(`${_webdavApiUrl}?action=ensureuserfolder`);
+    if (!ensureRes.ok) {
+        const txt = await ensureRes.text();
+        throw new Error(`ensureuserfolder failed: ${ensureRes.status} - ${txt}`);
+    }
+    const ensureJson = await ensureRes.json();
+    const folderPath = ensureJson.folder_path ? (`/` + ensureJson.folder_path.replace(/^\//, '')) : '/';
+
+    // Try recursive PROPFIND of the user's folder. If it fails (remote permission/PROPFIND error),
+    // fall back to a conservative scan from root with limited depth so we still discover some files.
+    try {
+        const files = await propfindOwnCloudRecursive(folderPath, 20, 5000);
+        state.ownCloudFiles = files;
+        return files;
+    } catch (err) {
+        console.warn('User-folder PROPFIND failed, attempting discovery fallbacks:', err.message);
+
+        // 1) Try to discover user's folder by scanning the base/root tree shallowly
+        try {
+            const discoveryItems = await propfindOwnCloudRecursive('/', 3, 2000);
+            const userid = (typeof window !== 'undefined' && window.USER_ID) ? window.USER_ID : null;
+
+            // Prefer paths that contain 'Users/{id}' or 'Moodle_OwnCloud_Storage'
+            let candidatePath = null;
+            if (userid) {
+                const match = discoveryItems.find(i => i.path && i.path.includes(`/Users/${userid}`));
+                if (match) candidatePath = match.parentPath || ('/' + match.path.replace(/^\//, ''));
+            }
+
+            if (!candidatePath) {
+                const mos = discoveryItems.find(i => i.name && i.name.toLowerCase().includes('moodle_owncloud_storage'));
+                if (mos) candidatePath = mos.parentPath || ('/' + mos.path.replace(/^\//, ''));
+            }
+
+            if (candidatePath) {
+                try {
+                    const files = await propfindOwnCloudRecursive(candidatePath, 10, 5000);
+                    state.ownCloudFiles = files;
+                    showToast('Warning', `User-folder discovery succeeded (scanned ${candidatePath})`, 'warning');
+                    return files;
+                } catch (e2) {
+                    console.warn('Discovery candidate scan failed:', e2.message);
+                }
+            }
+        } catch (discoveryErr) {
+            console.warn('Discovery scan failed:', discoveryErr.message);
+        }
+
+        // 2) Conservative fallback: scan '/' with small depth to avoid heavy operations
+        try {
+            const fallbackFiles = await propfindOwnCloudRecursive('/', 3, 500);
+            state.ownCloudFiles = fallbackFiles;
+            showToast('Warning', 'Full user-folder scan failed — used limited fallback (root) scan', 'warning');
+            return fallbackFiles;
+        } catch (err2) {
+            console.error('Fallback OwnCloud scan also failed:', err2);
+            throw err; // rethrow original error for caller visibility
+        }
+    }
+}
+
+function updateOwnCloudBreadcrumb(path) {
+    const breadcrumbBtn = document.querySelector('[data-path="/"]');
+    if (breadcrumbBtn) {
+        breadcrumbBtn.addEventListener('click', () => browseOwnCloudDirectory('/'));
+    }
+    
+    const breadcrumbPathEl = document.getElementById('breadcrumbPath');
+    if (breadcrumbPathEl) {
+        if (path !== '/') {
+            const parts = path.split('/').filter(p => p);
+            let html = ' / ';
+            let currentPath = '/';
+            
+            parts.forEach((part, index) => {
+                currentPath += part + (index === parts.length - 1 ? '' : '/');
+                const isLast = index === parts.length - 1;
+                if (isLast) {
+                    html += `<span style="color: #0066cc; font-weight: 600;">${part}</span>`;
+                } else {
+                    html += `<button class="breadcrumb-btn" data-path="${currentPath}" style="margin: 0 0.25rem;">${part}</button>`;
+                }
+            });
+            
+            breadcrumbPathEl.innerHTML = html;
+            
+            // Add click handlers to breadcrumb buttons
+            document.querySelectorAll('[data-path]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const p = btn.dataset.path;
+                    browseOwnCloudDirectory(p);
+                });
+            });
+        } else {
+            breadcrumbPathEl.innerHTML = '';
+        }
+    }
+    
+    const ownCloudBreadcrumbEl = document.getElementById('ownCloudBreadcrumb');
+    if (ownCloudBreadcrumbEl) ownCloudBreadcrumbEl.style.display = 'block';
+}
+
+function renderOwnCloudItems(items, currentPath, containerId) {
+    containerId = containerId || 'ownCloudFilesList';
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = '';
+    
+    if (!items || items.length === 0) {
+        container.innerHTML = '<div style="padding: 1rem; text-align: center; color: #999;">No files or folders found</div>';
+        return;
+    }
+    
+    // Separate folders and files
+    const folders = items.filter(item => item.type === 'folder');
+    const files = items.filter(item => item.type === 'file');
+    
+    // Render folders first
+    folders.forEach(folder => {
+        const item = document.createElement('div');
+        item.className = 'owncloud-item folder-item';
+        item.style.padding = '0.75rem';
+        item.style.borderBottom = '1px solid #eee';
+        item.style.cursor = 'pointer';
+        item.style.display = 'flex';
+        item.style.alignItems = 'center';
+        item.style.gap = '0.75rem';
+        
+        item.innerHTML = `
+            <i class="fas fa-folder" style="color: #ffb81c; font-size: 1.2rem;"></i>
+            <span style="flex-grow: 1; font-weight: 500;">${folder.name}</span>
+        `;
+        
+        item.addEventListener('click', () => {
+            const newPath = currentPath.endsWith('/') ? currentPath + folder.name : currentPath + '/' + folder.name;
+            browseOwnCloudDirectory(newPath);
+        });
+        
+        container.appendChild(item);
+    });
+    
+    // Render video files
+    files.forEach(file => {
+        // Defensive: trim trailing slashes from name provided by server
+        const safeName = (file.name || '').replace(/\/+$/g, '');
+        const isVideo = /\.(mp4|webm|ogg|avi|mov|mkv|flv|wmv|m4v)$/i.test(safeName);
+        
+        const item = document.createElement('div');
+        item.className = 'owncloud-item file-item';
+        item.style.padding = '0.75rem';
+        item.style.borderBottom = '1px solid #eee';
+        item.style.display = 'flex';
+        item.style.alignItems = 'center';
+        item.style.gap = '0.75rem';
+        
+        if (isVideo) {
+            item.style.cursor = 'pointer';
+            item.style.backgroundColor = '#f5f5f5';
+        } else {
+            item.style.opacity = '0.6';
+        }
+        
+        const fileSize = file.size ? formatFileSize(file.size) : 'Unknown';
+        item.innerHTML = `
+            <i class="fas ${isVideo ? 'fa-video' : 'fa-file'}" style="color: ${isVideo ? '#0066cc' : '#999'}; font-size: 1.1rem;"></i>
+            <div style="flex-grow: 1;">
+                <div style="font-weight: ${isVideo ? '500' : '400'}">${safeName}</div>
+                <div style="font-size: 0.85rem; color: #666;">${fileSize}</div>
+            </div>
+        `;
+        
+        if (isVideo) {
+            item.addEventListener('click', () => {
+                const videoUrl = file.url || `${currentPath}${currentPath.endsWith('/') ? '' : '/'}${safeName}`;
+                linkOwnCloudVideo(safeName, file.size, videoUrl);
+            });
+        }
+        
+        container.appendChild(item);
+    });
+}
+
+async function linkOwnCloudVideo(filename, fileSize, videoUrl) {
+    try {
+        showLoading('Linking video…');
+
+        if (!_webdavApiUrl) throw new Error('WebDAV API URL not configured');
+
+        // Step 1: Register in Moodle DB (idempotent)
+        // Send form-encoded POST so Moodle's required_param() picks up values reliably
+        const params = new URLSearchParams();
+        params.append('url', videoUrl);
+        params.append('filename', filename);
+        params.append('filesize', String(fileSize || 0));
+
+        const linkRes = await fetch(`${_webdavApiUrl}?action=link`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: params.toString(),
+        });
+        if (!linkRes.ok) {
+            // try to extract server message
+            let txt = await linkRes.text();
+            try { txt = JSON.parse(txt).error || txt; } catch (e) { /* keep as text */ }
+            throw new Error(`Link failed: HTTP ${linkRes.status} - ${txt}`);
+        }
+        const linkData = await linkRes.json();
+        if (!linkData.success) throw new Error(linkData.error || 'Link failed');
+
+        const moodleVideoId = linkData.video.id;
+
+        // Step 2: Register in FastAPI using stream.php as the filepath
+        const streamUrl = `${_moodleWwwRoot}/local/videoelicit/stream.php?videoid=${moodleVideoId}`;
+        const regRes = await fetch(`${API_BASE}/api/videos/webdav/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                stream_url:      streamUrl,
+                filename,
+                file_size:       fileSize || 0,
+                moodle_video_id: moodleVideoId,
+            }),
+        });
+        const regData = await regRes.json();
+
+        // Step 3: Load the video directly
+        await loadVideos();
+        // close whichever modal was used
+        closeOwnCloudModal();
+        closeVideoModal();
+        await loadVideo(regData.id);
+
+        showToast('Success', `Video "${filename}" linked successfully`, 'success');
+    } catch (error) {
+        console.error('Error linking OwnCloud video:', error);
+        showToast('Error', error.message || 'Failed to link video', 'error');
+    } finally {
+        hideLoading();
+    }
 }
 
 // Load and Play Video
@@ -782,12 +1425,6 @@ async function loadVideo(videoId) {
         videoSource.src = `${API_BASE}/api/videos/${videoId}/file`;
         videoPlayer.load();
 
-        // Remove segment end handler when loading full video
-        if (videoPlayer._segmentEndHandler) {
-            videoPlayer.removeEventListener('timeupdate', videoPlayer._segmentEndHandler);
-            videoPlayer._segmentEndHandler = null;
-        }
-
         // Update video info
         document.getElementById('videoName').textContent = video.filename;
         document.getElementById('annotationCount').textContent = video.annotation_count;
@@ -799,78 +1436,6 @@ async function loadVideo(videoId) {
     } catch (error) {
         console.error('Error loading video:', error);
         showToast('Error', 'Failed to load video', 'error');
-    } finally {
-        hideLoading();
-    }
-}
-
-async function loadVideoSegment(videoId, segment) {
-    try {
-        showLoading('Loading video segment...');
-
-        // First load the video
-        const response = await fetch(`${API_BASE}/api/videos/${videoId}`);
-        if (!response.ok) throw new Error('Failed to load video');
-
-        const video = await response.json();
-        state.currentVideo = video;
-        state.currentVideoId = videoId;
-
-        // Persist current video ID to localStorage
-        try {
-            localStorage.setItem('currentVideoId', videoId);
-        } catch (e) {
-            console.error('Failed to save video state:', e);
-        }
-
-        // Update UI
-        document.getElementById('videoSelector').style.display = 'none';
-        document.getElementById('videoPlayerContainer').style.display = 'block';
-        document.getElementById('recordingControls').style.display = 'block';
-        document.getElementById('videoInfo').style.display = 'flex';
-
-        // Set video source
-        const videoPlayer = document.getElementById('videoPlayer');
-        const videoSource = document.getElementById('videoSource');
-        videoSource.src = `${API_BASE}/api/videos/${videoId}/file`;
-        videoPlayer.load();
-
-        // Update video info
-        const segmentName = segment.name ? ` - ${segment.name}` : '';
-        document.getElementById('videoName').textContent = `${video.filename}${segmentName}`;
-        document.getElementById('annotationCount').textContent = video.annotation_count;
-
-        // Load annotations
-        await loadAnnotations(videoId);
-
-        // Seek to segment start time once video is loaded
-        videoPlayer.addEventListener('loadedmetadata', function seekToSegmentStart() {
-            videoPlayer.currentTime = segment.start_time;
-            videoPlayer.removeEventListener('loadedmetadata', seekToSegmentStart);
-        }, { once: true });
-
-        // Add timeupdate listener to pause at segment end time
-        const handleSegmentEnd = function() {
-            if (videoPlayer.currentTime >= segment.end_time) {
-                videoPlayer.pause();
-                videoPlayer.currentTime = segment.end_time;
-            }
-        };
-        
-        // Remove any existing segment end listener
-        if (videoPlayer._segmentEndHandler) {
-            videoPlayer.removeEventListener('timeupdate', videoPlayer._segmentEndHandler);
-        }
-        
-        // Store the handler reference and add the listener
-        videoPlayer._segmentEndHandler = handleSegmentEnd;
-        videoPlayer.addEventListener('timeupdate', handleSegmentEnd);
-
-        const duration = segment.end_time - segment.start_time;
-        showToast('Segment Loaded', `${segment.name || 'Segment'} (${formatTime(duration)})`, 'success');
-    } catch (error) {
-        console.error('Error loading video segment:', error);
-        showToast('Error', 'Failed to load video segment', 'error');
     } finally {
         hideLoading();
     }
@@ -986,7 +1551,14 @@ async function handleRecordingStop() {
         } catch (e) {
             console.warn('Could not append craft to FormData', e);
         }
-
+        // Attach task if provided
+        try {
+            if (state.task && state.task.trim().length > 0) {
+                formData.append('task', state.task.trim());
+            }
+        } catch (e) {
+            console.warn('Could not append task to FormData', e);
+        }
 
         const response = await fetch(`${API_BASE}/api/annotations?video_id=${state.currentVideoId}&start_time=${startTime}&end_time=${endTime}`, {
             method: 'POST',
@@ -1101,128 +1673,67 @@ function renderAnnotations() {
         const statusText = getStatusText(annotation.transcription_status);
         const statusClass = annotation.transcription_status;
 
-        // AI Review Panel UI logic
-        let reviewPanelHTML = '';
+        // Extended transcript UI logic
+        let extendedTranscriptHTML = '';
         if (annotation.transcription && annotation.transcription_status === 'completed') {
-            // First check if judge has run and decided review is NOT needed
-            if (annotation.judge_status === 'completed' && annotation.judge_decision) {
-                try {
-                    const judge = typeof annotation.judge_decision === 'string' 
-                        ? JSON.parse(annotation.judge_decision) 
-                        : annotation.judge_decision;
-                    
-                    if (judge.needs_review === false) {
-                        // Judge says review not needed - show manual button with hint
-                        const manualTriggerHtml = `
-                            <div class="judge-decision">
-                                <div class="judge-message">
-                                    <i class="fa-solid fa-check-circle"></i>
-                                    <span>AI found this elicitation complete</span>
-                                </div>
-                                <button class="btn btn-secondary btn-small" onclick="triggerManualReview(${annotation.id}, event)">
-                                    <i class="fa-solid fa-magnifying-glass"></i>
-                                    Force Review
-                                </button>
-                                <div class="judge-reasoning" style="display: none;">
-                                    <strong>Assessment:</strong> ${judge.reasoning}
-                                </div>
-                            </div>
-                        `;
-                        reviewPanelHTML = renderReviewContainer(annotation.id, manualTriggerHtml, 'Complet');
-                    } else if (judge.needs_review === true) {
-                        // Judge says review IS needed - will auto-trigger, so show processing or results
-                        if (annotation.review_status === 'processing') {
-                            const progressHtml = `
-                                <div class="review-progress">
-                                    <i class="fa-solid fa-magnifying-glass"></i>
-                                    <span>AI analyzing elicitation</span>
-                                    <span class="ellipsis">
-                                        <span></span>
-                                        <span></span>
-                                        <span></span>
-                                    </span>
-                                </div>
-                            `;
-                            reviewPanelHTML = renderReviewContainer(annotation.id, progressHtml, 'En cours');
-                        } else if (annotation.review_status === 'completed' && annotation.review_results) {
-                            try {
-                                const review = typeof annotation.review_results === 'string' 
-                                    ? JSON.parse(annotation.review_results) 
-                                    : annotation.review_results;
-                                reviewPanelHTML = renderReviewPanel(annotation.id, review);
-                            } catch (e) {
-                                console.error('Failed to parse review results:', e);
-                            }
-                        }
-                    }
-                } catch (e) {
-                    console.error('Failed to parse judge decision:', e);
-                }
-            } else if (annotation.judge_status === 'processing') {
-                // Judge is running
-                const judgeProgressHtml = `
-                    <div class="judge-progress">
-                        <i class="fa-solid fa-gavel"></i>
-                        <span>AI evaluating elicitation</span>
+            if (annotation.extended_transcript_status === 'processing') {
+                extendedTranscriptHTML = `
+                    <div class="extended-transcript-progress">
+                        <i class="fa-solid fa-hammer"></i>
+                        <span class="ellipsis">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                        </span>
                     </div>
                 `;
-                reviewPanelHTML = renderReviewContainer(annotation.id, judgeProgressHtml, 'Évaluation');
-            } else if (annotation.judge_status === 'pending' || annotation.judge_status === 'failed' || !annotation.judge_status) {
-                // Judge failed or hasn't run - fall back to direct review trigger
-                if (annotation.review_status === 'processing') {
-                    const progressHtml = `
-                        <div class="review-progress">
-                            <i class="fa-solid fa-magnifying-glass"></i>
-                            <span>AI analyzing elicitation</span>
-                            <span class="ellipsis">
-                                <span></span>
-                                <span></span>
-                                <span></span>
-                            </span>
+            } else if (annotation.extended_transcript_status === 'completed' && annotation.extended_transcript) {
+                const feedbackClass = annotation.feedback !== null ?
+                    (annotation.feedback === 1 ? 'thumbs-up' : 'thumbs-down') : '';
+                const extendedHtml = mdToHtml(annotation.extended_transcript);
+                extendedTranscriptHTML = `
+                    <div class="extended-transcript-container">
+                        <div class="extended-transcript-toggle" onclick="toggleExtendedTranscript(${annotation.id})">
+                            <i class="fa-solid fa-caret-down"></i>
+                            <span>See Extended Transcript</span>
                         </div>
-                    `;
-                    reviewPanelHTML = renderReviewContainer(annotation.id, progressHtml, 'En cours');
-                } else if (annotation.review_status === 'completed' && annotation.review_results) {
-                    try {
-                        const review = typeof annotation.review_results === 'string' 
-                            ? JSON.parse(annotation.review_results) 
-                            : annotation.review_results;
-                        reviewPanelHTML = renderReviewPanel(annotation.id, review);
-                    } catch (e) {
-                        console.error('Failed to parse review results:', e);
-                    }
-                } else if (annotation.review_status === 'pending' || annotation.review_status === 'failed') {
-                    const triggerHtml = `
-                        <div class="review-trigger">
-                            <button class="btn btn-review" onclick="triggerReview(${annotation.id})">
-                                <i class="fa-solid fa-magnifying-glass"></i>
-                                ${annotation.review_status === 'failed' ? 'Retry AI Review' : 'Trigger AI Review'}
-                            </button>
+                        <div class="extended-transcript-content" id="extended-${annotation.id}">
+                            <div class="md">${extendedHtml}</div>
+                            <div class="feedback-buttons">
+                                <button class="feedback-btn thumbs-up ${annotation.feedback === 1 ? 'active' : ''}" 
+                                    onclick="handleFeedback(${annotation.id}, 1, event)">
+                                    <i class="fa-solid fa-thumbs-up"></i>
+                                    <span>Utile</span>
+                                </button>
+                                <button class="feedback-btn thumbs-down ${annotation.feedback === 0 ? 'active' : ''}" 
+                                    onclick="handleFeedback(${annotation.id}, 0, event)">
+                                    <i class="fa-solid fa-thumbs-down"></i>
+                                    <span>Pas utile</span>
+                                </button>
+                            </div>
                         </div>
-                    `;
-                    const statusLabel = annotation.review_status === 'failed' ? 'Échec' : 'En attente';
-                    reviewPanelHTML = renderReviewContainer(annotation.id, triggerHtml, statusLabel);
-                }
+                    </div>
+                `;
             }
         }
 
         // Tags UI logic
         let tagsHTML = '';
-        if (annotation.review_status === 'completed') {
+        if (annotation.extended_transcript_status === 'completed') {
             if (annotation.tagging_status === 'processing') {
                 tagsHTML = `
                     <div class="tagging-progress">
                         <i class="fa-solid fa-tag"></i>
-                        <span>Tagging in progress...</span>
+                        <span>Generating tags...</span>
                     </div>
                 `;
             } else if (annotation.tagging_status === 'completed' && annotation.tags && annotation.tags.length > 0) {
                 tagsHTML = `<div class="annotation-tags">`;
 
-                annotation.tags.forEach((tag, index) => {
+                annotation.tags.forEach(tag => {
                     const categoryClass = tag.category ? `category-${tag.category}` : '';
                     tagsHTML += `
-                        <span class="annotation-tag ${categoryClass}" title="${tag.category || 'tag'} - Click to delete" onclick="deleteTag(event, ${annotation.id}, ${index})">
+                        <span class="annotation-tag ${categoryClass}" title="${tag.category || 'tag'}">
                             ${tag.name}
                         </span>
                     `;
@@ -1234,22 +1745,12 @@ function renderAnnotations() {
 
         item.innerHTML = `
             <div class="annotation-header">
-                <div class="annotation-time-wrapper">
-                    <span class="annotation-time">
-                        ${formatTime(annotation.start_time)} - ${formatTime(annotation.end_time)}
-                        (${duration.toFixed(1)}s)
-                    </span>
-                    ${annotation.task || annotation.detected_task ? `
-                        <span class="detected-task-badge editable" 
-                              onclick="startEditTask(${annotation.id})"
-                              title="Click to edit task">
-                            <strong id="task-display-${annotation.id}">${annotation.task || annotation.detected_task}</strong>
-                            <i class="fas fa-pencil-alt task-edit-icon"></i>
-                        </span>
-                    ` : ''}
-                </div>
+                <span class="annotation-time">
+                    ${formatTime(annotation.start_time)} - ${formatTime(annotation.end_time)}
+                    (${duration.toFixed(1)}s)
+                </span>
                 <div class="annotation-actions">
-                    <button class="btn btn-icon btn-small play-btn" onclick="seekToAnnotation(${annotation.start_time})" title="Jump to time">
+                    <button class="btn btn-icon btn-small" onclick="seekToAnnotation(${annotation.start_time})" title="Jump to time">
                         <i class="fas fa-play"></i>
                     </button>
                     <button class="btn btn-icon btn-small" onclick="startEditTranscription(${annotation.id})" title="Edit transcription">
@@ -1263,39 +1764,21 @@ function renderAnnotations() {
             <div class="annotation-transcription">
                 ${annotation.transcription || '<em>Transcription pending...</em>'}
             </div>
-            <div class="annotation-status-row">
-                <div class="annotation-status ${statusClass}">
-                    ${statusText}
-                </div>
-                ${annotation.transcription_status === 'completed' ? `
-                    <button class="btn btn-icon btn-tiny" onclick="event.stopPropagation(); triggerTagging(${annotation.id});" title="Relaunch tagging">
-                        <i class="fa-solid fa-tags"></i>
-                    </button>
-                ` : ''}
+            <div class="annotation-status ${statusClass}">
+                ${statusText}
             </div>
             ${tagsHTML}
-            ${reviewPanelHTML}
+            ${extendedTranscriptHTML}
         `;
+
+        item.addEventListener('click', (e) => {
+            if (!e.target.closest('button') && !e.target.closest('.extended-transcript-toggle') && !e.target.closest('.feedback-btn')) {
+                seekToAnnotation(annotation.start_time);
+            }
+        });
 
         container.appendChild(item);
     });
-}
-
-function getFirstTagByCategory(tags, categories) {
-    if (!Array.isArray(tags)) return null;
-    return tags.find(tag => tag && categories.includes(tag.category)) || null;
-}
-
-function getSalientMetadata(tags) {
-    const gestureTag = getFirstTagByCategory(tags, ['technique', 'handling']);
-    const toolTag = getFirstTagByCategory(tags, ['tool']);
-    const materialTag = getFirstTagByCategory(tags, ['material']);
-
-    return {
-        gesture: gestureTag ? gestureTag.name : null,
-        tool: toolTag ? toolTag.name : null,
-        material: materialTag ? materialTag.name : null
-    };
 }
 
 function renderTimeline() {
@@ -1321,19 +1804,10 @@ function renderTimeline() {
         if (annotation.transcription_status === 'processing') {
             bar.classList.add('processing');
         }
-        if (annotation.is_salient) {
-            bar.classList.add('salient');
-        }
 
         // Position bar at start_time (vertical bar, not segment)
         const startPercent = (annotation.start_time / duration) * 100;
         bar.style.left = `${startPercent}%`;
-
-        // Add persistent timestamp label
-        const timeLabel = document.createElement('div');
-        timeLabel.className = 'timeline-segment-label';
-        timeLabel.textContent = formatTime(annotation.start_time);
-        bar.appendChild(timeLabel);
 
         // Build tooltip content
         const tooltip = document.createElement('div');
@@ -1356,69 +1830,35 @@ function renderTimeline() {
             tooltip.appendChild(transcriptDiv);
         }
 
-        if (annotation.is_salient) {
-            const salientMeta = getSalientMetadata(annotation.tags);
-            const salientBlock = document.createElement('div');
-            salientBlock.className = 'timeline-tooltip-salient';
+        // // Tags section
+        // if (annotation.tags && annotation.tags.length > 0) {
+        //     const tagsContainer = document.createElement('div');
+        //     tagsContainer.className = 'timeline-tooltip-tags';
 
-            const salientTitle = document.createElement('div');
-            salientTitle.className = 'timeline-tooltip-salient-title';
-            salientTitle.textContent = 'Salient moment';
-            salientBlock.appendChild(salientTitle);
+        //     annotation.tags.forEach(tag => {
+        //         const tagSpan = document.createElement('span');
+        //         tagSpan.className = 'timeline-tooltip-tag';
+        //         if (tag.category) {
+        //             tagSpan.classList.add(`category-${tag.category}`);
+        //         }
+        //         tagSpan.textContent = tag.name;
+        //         tagsContainer.appendChild(tagSpan);
+        //     });
 
-            const addMetaRow = (label, value) => {
-                const row = document.createElement('div');
-                row.className = 'timeline-tooltip-salient-row';
-
-                const labelSpan = document.createElement('span');
-                labelSpan.className = 'timeline-tooltip-salient-label';
-                labelSpan.textContent = label;
-
-                const valueSpan = document.createElement('span');
-                valueSpan.className = 'timeline-tooltip-salient-value';
-                valueSpan.textContent = value || '—';
-
-                row.appendChild(labelSpan);
-                row.appendChild(valueSpan);
-                salientBlock.appendChild(row);
-            };
-
-            addMetaRow('Gesture', salientMeta.gesture);
-            addMetaRow('Tool', salientMeta.tool);
-            addMetaRow('Material', salientMeta.material);
-
-            tooltip.appendChild(salientBlock);
-        }
-
-        // Tags section
-        if (annotation.tags && annotation.tags.length > 0) {
-            const tagsContainer = document.createElement('div');
-            tagsContainer.className = 'timeline-tooltip-tags';
-
-            annotation.tags.forEach(tag => {
-                const tagSpan = document.createElement('span');
-                tagSpan.className = 'timeline-tooltip-tag';
-                if (tag.category) {
-                    tagSpan.classList.add(`category-${tag.category}`);
-                }
-                tagSpan.textContent = tag.name;
-                tagsContainer.appendChild(tagSpan);
-            });
-
-            tooltip.appendChild(tagsContainer);
-        } else if (annotation.tagging_status === 'completed') {
-            // No tags but tagging was completed
-            const noTags = document.createElement('div');
-            noTags.className = 'timeline-tooltip-no-tags';
-            noTags.textContent = 'No tags generated';
-            tooltip.appendChild(noTags);
-        } else if (annotation.tagging_status === 'processing') {
-            // Still processing tags
-            const processingTags = document.createElement('div');
-            processingTags.className = 'timeline-tooltip-no-tags';
-            processingTags.textContent = 'Generating tags...';
-            tooltip.appendChild(processingTags);
-        }
+        //     tooltip.appendChild(tagsContainer);
+        // } else if (annotation.tagging_status === 'completed') {
+        //     // No tags but tagging was completed
+        //     const noTags = document.createElement('div');
+        //     noTags.className = 'timeline-tooltip-no-tags';
+        //     noTags.textContent = 'No tags generated';
+        //     tooltip.appendChild(noTags);
+        // } else if (annotation.tagging_status === 'processing') {
+        //     // Still processing tags
+        //     const processingTags = document.createElement('div');
+        //     processingTags.className = 'timeline-tooltip-no-tags';
+        //     processingTags.textContent = 'Generating tags...';
+        //     tooltip.appendChild(processingTags);
+        // }
 
         bar.appendChild(tooltip);
 
@@ -1525,45 +1965,6 @@ async function deleteAnnotation(annotationId) {
     }
 }
 
-async function deleteTag(event, annotationId, tagIndex) {
-    event.stopPropagation();
-    
-    const annotation = state.annotations.find(a => a.id === annotationId);
-    if (!annotation || !annotation.tags) return;
-
-    const tag = annotation.tags[tagIndex];
-    if (!tag) return;
-
-    try {
-        // Remove tag from array
-        annotation.tags.splice(tagIndex, 1);
-
-        // Update annotation with new tags array
-        const response = await fetch(`${API_BASE}/api/annotations/${annotationId}`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                tags: JSON.stringify(annotation.tags, null, 2)
-            })
-        });
-
-        if (!response.ok) {
-            throw new Error('Failed to delete tag');
-        }
-
-        // Reload annotations to reflect changes
-        await loadAnnotations(state.currentVideoId);
-        showToast('Tag Deleted', `Removed tag: ${tag.name}`, 'success');
-    } catch (error) {
-        console.error('Error deleting tag:', error);
-        showToast('Error', 'Failed to delete tag', 'error');
-        // Reload to restore original state
-        await loadAnnotations(state.currentVideoId);
-    }
-}
-
 function updateAnnotationStatus(annotationId, status) {
     const annotation = state.annotations.find(a => a.id === annotationId);
     if (annotation) {
@@ -1580,153 +1981,6 @@ function updateAnnotationTranscription(annotationId, transcription) {
         annotation.transcription_status = 'completed';
         renderAnnotations();
         renderTimeline();
-    }
-}
-
-// Inline task editing
-function startEditTask(annotationId) {
-    const badge = document.querySelector(`#task-display-${annotationId}`);
-    if (!badge) {
-        // Empty state - create input in badge's parent
-        const emptyBadge = event.target.closest('.detected-task-badge');
-        if (!emptyBadge) return;
-        
-        const annotation = state.annotations.find(a => a.id === annotationId);
-        const currentTask = annotation?.task || annotation?.detected_task || '';
-        
-        createTaskEditor(emptyBadge, annotationId, currentTask);
-        return;
-    }
-
-    // Prevent multiple editors
-    if (document.querySelector(`.task-editor-${annotationId}`)) return;
-
-    const annotation = state.annotations.find(a => a.id === annotationId);
-    const currentTask = annotation?.task || annotation?.detected_task || '';
-
-    const badgeParent = badge.closest('.detected-task-badge');
-    createTaskEditor(badgeParent, annotationId, currentTask);
-}
-
-function createTaskEditor(badgeElement, annotationId, currentTask) {
-    // Hide the badge
-    badgeElement.style.display = 'none';
-
-    // Create editor
-    const editor = document.createElement('span');
-    editor.className = `detected-task-badge task-editor task-editor-${annotationId}`;
-    
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'task-edit-input';
-    input.value = currentTask;
-    input.placeholder = 'Enter task name';
-    
-    const saveBtn = document.createElement('button');
-    saveBtn.className = 'task-edit-save';
-    saveBtn.innerHTML = '<i class="fas fa-check"></i>';
-    saveBtn.title = 'Save';
-    
-    const clearBtn = document.createElement('button');
-    clearBtn.className = 'task-edit-clear';
-    clearBtn.innerHTML = '<i class="fas fa-trash"></i>';
-    clearBtn.title = 'Clear task';
-    
-    const cancelBtn = document.createElement('button');
-    cancelBtn.className = 'task-edit-cancel';
-    cancelBtn.innerHTML = '<i class="fas fa-times"></i>';
-    cancelBtn.title = 'Cancel';
-    
-    // Event handlers
-    saveBtn.onclick = (e) => {
-        e.stopPropagation();
-        saveTaskEdit(annotationId, input.value.trim());
-    };
-    
-    clearBtn.onclick = (e) => {
-        e.stopPropagation();
-        if (confirm('Clear this task?')) {
-            saveTaskEdit(annotationId, null);
-        }
-    };
-    
-    cancelBtn.onclick = (e) => {
-        e.stopPropagation();
-        cancelTaskEdit(annotationId);
-    };
-    
-    input.onkeydown = (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            saveTaskEdit(annotationId, input.value.trim());
-        } else if (e.key === 'Escape') {
-            e.preventDefault();
-            cancelTaskEdit(annotationId);
-        }
-    };
-    
-    editor.appendChild(input);
-    editor.appendChild(saveBtn);
-    editor.appendChild(clearBtn);
-    editor.appendChild(cancelBtn);
-    
-    badgeElement.parentNode.insertBefore(editor, badgeElement.nextSibling);
-    input.focus();
-    input.select();
-}
-
-async function saveTaskEdit(annotationId, newTask) {
-    try {
-        const payload = { task: newTask || null };
-
-        const response = await fetch(`${API_BASE}/api/annotations/${annotationId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-
-        if (!response.ok) {
-            const errText = await response.text();
-            throw new Error(errText || 'Failed to save task');
-        }
-
-        const updated = await response.json();
-
-        // Update local state
-        const annotation = state.annotations.find(a => a.id === annotationId);
-        if (annotation) {
-            annotation.task = updated.task;
-            annotation.updated_at = updated.updated_at;
-        }
-
-        // Remove editor and re-render
-        renderAnnotations();
-        renderTimeline();
-        showToast('Saved', 'Task updated', 'success');
-
-    } catch (error) {
-        console.error('Error saving task:', error);
-        showToast('Error', 'Failed to save task', 'error');
-        cancelTaskEdit(annotationId);
-    }
-}
-
-function cancelTaskEdit(annotationId) {
-    const editor = document.querySelector(`.task-editor-${annotationId}`);
-    if (editor) {
-        editor.remove();
-    }
-    
-    // Show the badge again
-    const badge = document.querySelector(`#task-display-${annotationId}`)?.closest('.detected-task-badge');
-    if (badge) {
-        badge.style.display = '';
-    } else {
-        // Empty state badge
-        const emptyBadge = document.querySelector(`.detected-task-badge.empty`);
-        if (emptyBadge) {
-            emptyBadge.style.display = '';
-        }
     }
 }
 
@@ -1808,6 +2062,8 @@ async function saveTranscriptionEdit(annotationId, newText, itemElement) {
         renderAnnotations();
         renderTimeline();
         showToast('Saved', 'Transcription updated', 'success');
+        // Trigger extended transcript regeneration
+        await regenerateExtendedTranscript(annotationId);
 
     } catch (error) {
         console.error('Error saving transcription edit:', error);
@@ -1817,441 +2073,31 @@ async function saveTranscriptionEdit(annotationId, newText, itemElement) {
     }
 }
 
-// AI Review Functions
-
-function renderReviewContainer(annotationId, innerHtml, statusLabel = null) {
-    const isVisible = state.showReviewPanels[annotationId] || false;
-    const statusBadge = statusLabel
-        ? `<span class="review-status-badge">${statusLabel}</span>`
-        : '';
-
-    return `
-        <div class="review-panel-container">
-            <div class="review-toggle-header" onclick="toggleReviewPanel(${annotationId})">
-                <span class="review-toggle-label">
-                    <i class="fa-solid fa-magnifying-glass"></i>
-                    AI Review
-                    ${statusBadge}
-                </span>
-                <span class="review-toggle-indicator">
-                    <i class="fa-solid fa-chevron-${isVisible ? 'up' : 'down'}"></i>
-                </span>
-            </div>
-            <div class="review-panel ${isVisible ? 'visible' : 'hidden'}" id="review-panel-${annotationId}">
-                ${innerHtml}
-            </div>
-        </div>
-    `;
-}
-
-function renderReviewPanel(annotationId, review) {
-    const coveredCount = Object.values(review.dimensions).filter(d => d.covered).length;
-    const completenessPercent = review.completeness_score || 0;
-    
-    let dimensionsHTML = '';
-    ['HOW', 'EVALUATION', 'FEEDBACK'].forEach(dimName => {
-        const dim = review.dimensions[dimName];
-        if (!dim) return;
-        
-        const covered = dim.covered;
-        const statusIcon = covered ? '✓' : '✗';
-        const statusClass = covered ? 'complete' : 'incomplete';
-        
-        // Show what's good (explainability)
-        const whatIsGoodHTML = dim.what_is_good && dim.what_is_good.length > 0
-            ? `<div class="what-is-good">
-                <strong>✓ Ce qui est bien :</strong>
-                <ul>
-                    ${dim.what_is_good.map(item => `<li>${item}</li>`).join('')}
-                </ul>
-            </div>`
-            : '';
-        
-        const promptsHTML = !covered && dim.prompts && dim.prompts.length > 0 
-            ? `<div class="prompts-list">
-                ${dim.prompts.map(prompt => `
-                    <div class="prompt-item">
-                        <span>${prompt}</span>
-                    </div>
-                `).join('')}
-            </div>`
-            : '';
-        
-        dimensionsHTML += `
-            <div class="dimension-card ${statusClass}" onclick="toggleDimension(${annotationId}, '${dimName}')">
-                <div class="dimension-header">
-                    <strong>${statusIcon} ${dimName}</strong>
-                    <span>${covered ? 'Complet' : 'Incomplet'}</span>
-                </div>
-                <div class="dimension-content" id="dim-${annotationId}-${dimName}" style="display: none;">
-                    ${whatIsGoodHTML}
-                    ${!covered && dim.missing_elements ? `
-                        <p class="missing-elements"><em>Manque: ${dim.missing_elements.join(', ')}</em></p>
-                    ` : ''}
-                    ${promptsHTML}
-                </div>
-            </div>
-        `;
-    });
-    
-    const readyToComplete = review.ready_to_proceed;
-    const isVisible = state.showReviewPanels[annotationId] || false;
-    const tier = review.completeness_tier || 'MINIMAL';
-    const tierLabels = {
-        'MINIMAL': 'Minimal',
-        'PARTIAL': 'Partiel',
-        'SUBSTANTIAL': 'Substantiel',
-        'COMPLETE': 'Complet'
-    };
-    const tierColors = {
-        'MINIMAL': '#dc3545',
-        'PARTIAL': '#ffc107',
-        'SUBSTANTIAL': '#17a2b8',
-        'COMPLETE': '#28a745'
-    };
-    
-    return `
-        <div class="review-panel-container">
-            <div class="review-toggle-header" onclick="toggleReviewPanel(${annotationId})">
-                <span class="review-toggle-label">
-                    <i class="fa-solid fa-magnifying-glass"></i>
-                    AI Review
-                    <span class="tier-badge" style="background-color: ${tierColors[tier]}">
-                        ${tierLabels[tier]}
-                    </span>
-                </span>
-                <span class="review-toggle-indicator">
-                    <i class="fa-solid fa-chevron-${isVisible ? 'up' : 'down'}"></i>
-                </span>
-            </div>
-            <div class="review-panel ${isVisible ? 'visible' : 'hidden'}" id="review-panel-${annotationId}">
-                <div class="review-header-row">
-                    <div class="review-header">
-                        ${review.sensations_analysis ? `
-                        <div class="sensations-badges">
-                            ${review.sensations_analysis.visual_mentioned ? '<span class="sensation-badge visual"><i class="fa-solid fa-eye"></i> Visuel</span>' : ''}
-                            ${review.sensations_analysis.tactile_mentioned ? '<span class="sensation-badge tactile"><i class="fa-solid fa-hand"></i> Tactile</span>' : ''}
-                            ${review.sensations_analysis.auditory_mentioned ? '<span class="sensation-badge auditory"><i class="fa-solid fa-ear"></i> Auditif</span>' : ''}
-                            ${review.sensations_analysis.proprioceptive_mentioned ? '<span class="sensation-badge proprioceptive"><i class="fa-solid fa-person"></i> Proprioceptif</span>' : ''}
-                        </div>
-                    ` : ''}
-                    </div>
-                    <button class="btn btn-icon btn-tiny" onclick="triggerReview(${annotationId})" title="Relaunch AI Review">
-                        <i class="fa-solid fa-arrow-rotate-right"></i>
-                    </button>
-                </div>
-                ${dimensionsHTML}
-                <div class="review-actions">
-                    <button class="btn edit-elicitation-btn" onclick="editElicitation(${annotationId})">
-                        <i class="fa-solid fa-pencil"></i>
-                        Modifier l'élicitation
-                    </button>
-                    <button class="btn mark-complete-btn ${readyToComplete ? '' : 'disabled'}" 
-                        onclick="markElicitationComplete(${annotationId})"
-                        ${readyToComplete ? '' : 'disabled'}>
-                        <i class="fa-solid fa-check"></i>
-                        Marquer comme complet
-                    </button>
-                </div>
-            </div>
-        </div>
-    `;
-}
-
-function toggleDimension(annotationId, dimName) {
-    const content = document.getElementById(`dim-${annotationId}-${dimName}`);
-    if (content) {
-        const isVisible = content.style.display !== 'none';
-        content.style.display = isVisible ? 'none' : 'block';
-    }
-}
-
-function toggleReviewPanel(annotationId) {
-    // Toggle state
-    state.showReviewPanels[annotationId] = !state.showReviewPanels[annotationId];
-    
-    // Re-render to update UI
-    renderAnnotations();
-}
-
-async function reloadAllAnalyses() {
-    if (!state.currentVideoId) {
-        showToast('Error', 'No video loaded', 'error');
-        return;
-    }
-
-    const annotations = Array.isArray(state.annotations) ? state.annotations : [];
-    if (annotations.length === 0) {
-        showToast('Info', 'No annotations to reload', 'info');
-        return;
-    }
-
-    const eligible = annotations.filter(a => a && a.transcription && a.transcription.trim());
-    const skipped = annotations.length - eligible.length;
-
-    if (eligible.length === 0) {
-        showToast('Info', 'No transcriptions available for reload', 'info');
-        return;
-    }
-
-    eligible.forEach(annotation => {
-        annotation.tagging_status = 'processing';
-        annotation.review_status = 'processing';
-    });
-    renderAnnotations();
-    renderTimeline();
-
+async function regenerateExtendedTranscript(annotationId) {
     try {
-        showLoading('Reloading tagging and AI reviews...');
-
-        const requests = eligible.map(async annotation => {
-            const [tagResponse, reviewResponse] = await Promise.all([
-                fetch(`/api/annotations/${annotation.id}/tags`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                }),
-                fetch(`/api/annotations/${annotation.id}/review`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                })
-            ]);
-
-            return {
-                annotationId: annotation.id,
-                tagOk: tagResponse.ok,
-                reviewOk: reviewResponse.ok
-            };
+        // Call the new endpoint to trigger regeneration
+        const response = await fetch(`/api/annotations/${annotationId}/regenerate-extended`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
         });
 
-        const results = await Promise.allSettled(requests);
-        let failures = 0;
+        if (!response.ok) {
+            throw new Error('Failed to trigger extended transcript regeneration');
+        }
 
-        results.forEach(result => {
-            if (result.status === 'fulfilled') {
-                if (!result.value.tagOk) failures += 1;
-                if (!result.value.reviewOk) failures += 1;
-            } else {
-                failures += 2;
+        // Update UI to show processing status
+        const item = document.querySelector(`.annotation-item[data-id="${annotationId}"]`);
+        if (item) {
+            const extendedDiv = item.querySelector('.annotation-extended');
+            if (extendedDiv) {
+                extendedDiv.innerHTML = '<em>Regenerating extended transcript...</em>';
             }
-        });
+        }
+        showToast('Extended Transcript', 'Regeneration triggered', 'info');
 
-        const summary = failures > 0
-            ? `Triggered ${eligible.length} reloads with ${failures} failures${skipped ? ` (${skipped} skipped)` : ''}`
-            : `Reloaded ${eligible.length} annotations${skipped ? ` (${skipped} skipped)` : ''}`;
-
-        showToast('Reload all', summary, failures > 0 ? 'warning' : 'success');
     } catch (error) {
-        console.error('Error reloading all analyses:', error);
-        showToast('Error', 'Failed to reload all analyses', 'error');
-    } finally {
-        hideLoading();
-    }
-}
-
-async function triggerTagging(annotationId) {
-    try {
-        console.error('[TAGGING UI] Relancer Tags clicked', annotationId);
-        showLoading('Relaunching tagging process...');
-        
-        console.error('[TAGGING UI] Sending request to /api/annotations/' + annotationId + '/tags');
-        const response = await fetch(`/api/annotations/${annotationId}/tags`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Failed to trigger tagging');
-        }
-
-        console.error('[TAGGING UI] Tagging request accepted', annotationId);
-
-        showToast('Tagging', 'Tagging process restarted', 'info');
-        
-    } catch (error) {
-        console.error('Error triggering tagging:', error);
-        showToast('Error', error.message, 'error');
-    } finally {
-        hideLoading();
-    }
-}
-
-async function triggerReview(annotationId) {
-    try {
-        showLoading('Triggering AI review...');
-        
-        const response = await fetch(`/api/annotations/${annotationId}/review`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Failed to trigger review');
-        }
-
-        showToast('AI Review', 'Review started', 'info');
-        
-    } catch (error) {
-        console.error('Error triggering review:', error);
-        showToast('Error', error.message, 'error');
-    } finally {
-        hideLoading();
-    }
-}
-
-async function editElicitation(annotationId) {
-    const annotation = state.annotations.find(a => a.id === annotationId);
-    if (!annotation) return;
-    
-    // Create modal
-    const modal = document.createElement('div');
-    modal.className = 'modal';
-    modal.id = 'editElicitationModal';
-    
-    const review = annotation.review_results 
-        ? (typeof annotation.review_results === 'string' ? JSON.parse(annotation.review_results) : annotation.review_results)
-        : null;
-    
-    const priorityPromptsHTML = review && review.priority_prompts 
-        ? `<div class="priority-prompts">
-            <strong>Points à adresser en priorité:</strong>
-            <ul>
-                ${review.priority_prompts.map(p => `<li>${p}</li>`).join('')}
-            </ul>
-        </div>`
-        : '';
-    
-    modal.innerHTML = `
-        <div class="modal-content">
-            <span class="close" onclick="closeEditElicitationModal()">&times;</span>
-            <h2>Modifier l'élicitation</h2>
-            ${priorityPromptsHTML}
-            <textarea id="elicitationTextEdit" rows="10">${annotation.transcription || ''}</textarea>
-            <div class="modal-actions">
-                <button class="btn btn-primary" onclick="saveElicitationEdit(${annotationId})">
-                    <i class="fa-solid fa-save"></i>
-                    Enregistrer et re-analyser
-                </button>
-                <button class="btn cancel-btn" onclick="closeEditElicitationModal()">Annuler</button>
-            </div>
-        </div>
-    `;
-    
-    document.body.appendChild(modal);
-    modal.style.display = 'block';
-    
-    // Focus on textarea
-    document.getElementById('elicitationTextEdit').focus();
-}
-
-function closeEditElicitationModal() {
-    const modal = document.getElementById('editElicitationModal');
-    if (modal) {
-        modal.remove();
-    }
-}
-
-async function saveElicitationEdit(annotationId) {
-    const textarea = document.getElementById('elicitationTextEdit');
-    const newTranscription = textarea.value.trim();
-    
-    if (!newTranscription) {
-        showToast('Error', 'Transcription cannot be empty', 'error');
-        return;
-    }
-    
-    try {
-        showLoading('Saving and re-analyzing...');
-        
-        // Update transcription
-        const updateResponse = await fetch(`/api/annotations/${annotationId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ transcription: newTranscription })
-        });
-        
-        if (!updateResponse.ok) {
-            throw new Error('Failed to update transcription');
-        }
-        
-        // Trigger re-review
-        const reviewResponse = await fetch(`/api/annotations/${annotationId}/review`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-        });
-        
-        if (!reviewResponse.ok) {
-            throw new Error('Failed to trigger re-review');
-        }
-        
-        closeEditElicitationModal();
-        showToast('Success', 'Élicitation mise à jour, re-analyse en cours', 'success');
-        
-        // Reload annotations to show updated content
-        if (state.currentVideoId) {
-            await loadAnnotations(state.currentVideoId);
-        }
-        
-    } catch (error) {
-        console.error('Error saving elicitation:', error);
-        showToast('Error', error.message, 'error');
-    } finally {
-        hideLoading();
-    }
-}
-
-async function markElicitationComplete(annotationId) {
-    const annotation = state.annotations.find(a => a.id === annotationId);
-    if (!annotation) return;
-    
-    // Update review status to 'skipped' to indicate manual completion
-    try {
-        const response = await fetch(`/api/annotations/${annotationId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ review_status: 'skipped' })
-        });
-        
-        if (!response.ok) {
-            throw new Error('Failed to mark as complete');
-        }
-        
-        showToast('Success', 'Élicitation marquée comme complète', 'success');
-        
-        if (state.currentVideoId) {
-            await loadAnnotations(state.currentVideoId);
-        }
-        
-    } catch (error) {
-        console.error('Error marking complete:', error);
-        showToast('Error', error.message, 'error');
-    }
-}
-
-function updateReviewStatus(annotationId, status) {
-    const annotation = state.annotations.find(a => a.id === annotationId);
-    if (annotation) {
-        annotation.review_status = status;
-        if (state.currentVideoId) {
-            renderAnnotations();
-            renderTimeline();
-        }
-    }
-}
-
-function updateReviewResults(annotationId, reviewResults, isSalient = null) {
-    const annotation = state.annotations.find(a => a.id === annotationId);
-    if (annotation) {
-        annotation.review_status = 'completed';
-        annotation.review_results = reviewResults;
-        if (isSalient !== null && typeof isSalient !== 'undefined') {
-            annotation.is_salient = isSalient;
-        }
-        if (state.currentVideoId) {
-            renderAnnotations();
-            renderTimeline();
-        }
+        console.error('Error regenerating extended transcript:', error);
+        showToast("Error", 'Failed to regenerate extended transcript', 'error');
     }
 }
 
@@ -2377,69 +2223,59 @@ function getStatusText(status) {
     return statusMap[status] || status;
 }
 
-function updateTaggingStatus(annotationId, status) {
+// Extended Transcript Functions
+function toggleExtendedTranscript(annotationId) {
+    const content = document.getElementById(`extended-${annotationId}`);
+    const toggle = content.previousElementSibling;
+    const icon = toggle.querySelector('i');
+
+    if (content.classList.contains('expanded')) {
+        content.classList.remove('expanded');
+        icon.classList.remove('fa-caret-up');
+        icon.classList.add('fa-caret-down');
+        toggle.querySelector('span').textContent = 'See Extended Transcript';
+    } else {
+        content.classList.add('expanded');
+        icon.classList.remove('fa-caret-down');
+        icon.classList.add('fa-caret-up');
+        toggle.querySelector('span').textContent = 'Hide Extended Transcript';
+    }
+}
+
+function updateExtendedTranscriptStatus(annotationId, status) {
     const annotation = state.annotations.find(a => a.id === annotationId);
     if (annotation) {
-        annotation.tagging_status = status;
+        annotation.extended_transcript_status = status;
+        renderAnnotations();
+        renderTimeline();
+    }
+}
+
+function updateExtendedTranscript(annotationId, extendedTranscript) {
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (annotation) {
+        annotation.extended_transcript = extendedTranscript;
+        annotation.extended_transcript_status = 'completed';
         renderAnnotations();
     }
 }
 
-function updateTags(annotationId, tags) {
-    const annotation = state.annotations.find(a => a.id === annotationId);
-    if (annotation) {
-        annotation.tags = tags;
-        annotation.tagging_status = 'completed';
-        renderAnnotations();
-    }
-}
+// function updateTaggingStatus(annotationId, status) {
+//     const annotation = state.annotations.find(a => a.id === annotationId);
+//     if (annotation) {
+//         annotation.tagging_status = status;
+//         renderAnnotations();
+//     }
+// }
 
-function updateJudgeStatus(annotationId, status) {
-    const annotation = state.annotations.find(a => a.id === annotationId);
-    if (annotation) {
-        annotation.judge_status = status;
-        renderAnnotations();
-    }
-}
-
-function updateJudgeDecision(annotationId, judge_decision) {
-    const annotation = state.annotations.find(a => a.id === annotationId);
-    if (annotation) {
-        annotation.judge_decision = judge_decision;
-        annotation.judge_status = 'completed';
-        
-        // If judge says review NOT needed and confidence is high, show manual trigger button with hint
-        // Otherwise, the auto-review will have been triggered by process_judge in backend
-        renderAnnotations();
-    }
-}
-
-async function triggerManualReview(annotationId, event) {
-    event.stopPropagation();
-    
-    const annotation = state.annotations.find(a => a.id === annotationId);
-    if (!annotation) return;
-    
-    try {
-        annotation.review_status = 'processing';
-        renderAnnotations();
-        
-        const response = await fetch(`/api/annotations/${annotationId}/review`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-        });
-        
-        if (!response.ok) {
-            throw new Error(await response.text());
-        }
-        
-        showToast('AI Review', 'Analysis in progress...', 'info');
-    } catch (error) {
-        showToast('Error', `Failed to trigger review: ${error.message}`, 'error');
-        annotation.review_status = 'failed';
-        renderAnnotations();
-    }
-}
+// function updateTags(annotationId, tags) {
+//     const annotation = state.annotations.find(a => a.id === annotationId);
+//     if (annotation) {
+//         annotation.tags = tags;
+//         annotation.tagging_status = 'completed';
+//         renderAnnotations();
+//     }
+// }
 
 function handleFeedback(annotationId, feedbackValue, event) {
     event.stopPropagation();
@@ -2637,10 +2473,10 @@ function showToast(title, message, type = 'info') {
         removeToast(toast);
     });
 
-    // Auto remove after 4.25 seconds (15% reduction from 5000ms)
+    // Auto remove after 5 seconds
     const autoRemoveTimeout = setTimeout(() => {
         removeToast(toast);
-    }, 4250);
+    }, 5000);
 
     // Store timeout ID so we can cancel it if user closes manually
     toast.dataset.timeoutId = autoRemoveTimeout;
@@ -2685,11 +2521,368 @@ function switchTab(tabName) {
     if (tabName === 'annotate') {
         if (annotateTab) annotateTab.style.display = '';
     } else if (tabName === 'segment') {
-        if (segmentTab) segmentTab.style.display = '';
+        if (segmentTab) segmentTab.style.display = 'block';
         initializeSegmentTab();
     } else if (tabName === 'projects') {
         if (projectsTab) projectsTab.style.display = 'block';
         loadProjects();
+    }
+}
+
+// ------------------ Segment tab helpers (minimal) ------------------
+let _segmentTabInitialized = false;
+
+function initializeSegmentTab() {
+    if (_segmentTabInitialized) return;
+    _segmentTabInitialized = true;
+
+    // Render video list for the Segment tab
+    renderSegmentVideoSelector();
+
+    const refreshBtn = document.getElementById('refreshSegmentsBtn');
+    if (refreshBtn) refreshBtn.addEventListener('click', () => loadSegments());
+
+    const createBtn = document.getElementById('createSegmentBtn');
+    if (createBtn) createBtn.addEventListener('click', createSegment);
+
+    const setStartBtn = document.getElementById('setSegmentStartBtn');
+    if (setStartBtn) setStartBtn.addEventListener('click', setSegmentStart);
+
+    const setEndBtn = document.getElementById('setSegmentEndBtn');
+    if (setEndBtn) setEndBtn.addEventListener('click', setSegmentEnd);
+
+    const loadIntoMainBtn = document.getElementById('loadIntoMainBtn');
+    if (loadIntoMainBtn) loadIntoMainBtn.addEventListener('click', () => {
+        if (state.currentVideoId) {
+            // open same video in the main (Elicit) player
+            switchTab('annotate');
+            loadVideo(state.currentVideoId).catch(() => {});
+        }
+    });
+
+    // If a segment player is present, forward play/pause to keep UX consistent
+    const segPlayer = document.getElementById('segmentPlayer');
+    if (segPlayer) {
+        segPlayer.addEventListener('ended', () => {
+            // nothing for now — placeholder for future UX
+        });
+    }
+
+    // Initialize the draggable two-ended slider UI
+    initializeSegmentSlider();
+
+    // Load segments for current video when tab first opened
+    loadSegments();
+}
+
+
+// ------------------ Segment slider helpers ------------------
+function initializeSegmentSlider() {
+    const track = document.getElementById('segmentTrack');
+    const handleStart = document.getElementById('segmentHandleStart');
+    const handleEnd = document.getElementById('segmentHandleEnd');
+    const rangeEl = document.getElementById('segmentRange');
+    if (!track || !handleStart || !handleEnd || !rangeEl) return;
+
+    // Utility: convert time <-> percent
+    const timeToPercent = (t) => {
+        const dur = (document.getElementById('segmentPlayer') || document.getElementById('videoPlayer')).duration || 1;
+        return Math.max(0, Math.min(100, (t / dur) * 100));
+    };
+    const percentToTime = (p) => {
+        const dur = (document.getElementById('segmentPlayer') || document.getElementById('videoPlayer')).duration || 1;
+        return Math.max(0, Math.min(dur, (p / 100) * dur));
+    };
+
+    // Update slider UI from state
+    function updateUI() {
+        const dur = (document.getElementById('segmentPlayer') || document.getElementById('videoPlayer')).duration || 1;
+        const s = (state.segmentStartTime != null) ? state.segmentStartTime : 0;
+        const e = (state.segmentEndTime != null) ? state.segmentEndTime : dur;
+        const sp = timeToPercent(s);
+        const ep = timeToPercent(e);
+        handleStart.style.left = `calc(${sp}% - ${handleStart.offsetWidth/2}px)`;
+        handleEnd.style.left = `calc(${ep}% - ${handleEnd.offsetWidth/2}px)`;
+        rangeEl.style.left = `${sp}%`;
+        rangeEl.style.width = `${Math.max(0, ep - sp)}%`;
+        const sdisp = document.getElementById('segmentStartDisplay');
+        const edisp = document.getElementById('segmentEndDisplay');
+        if (sdisp) sdisp.textContent = `Start: ${formatTime(s)}`;
+        if (edisp) edisp.textContent = `End: ${formatTime(e)}`;
+    }
+
+    // Pointer/drag handling
+    let activeHandle = null;
+    function onPointerMove(ev) {
+        if (!activeHandle) return;
+        ev.preventDefault();
+        const rect = track.getBoundingClientRect();
+        const clientX = ev.touches ? ev.touches[0].clientX : ev.clientX;
+        let pct = ((clientX - rect.left) / rect.width) * 100;
+        pct = Math.max(0, Math.min(100, pct));
+        const t = percentToTime(pct);
+        if (activeHandle === 'start') {
+            const maxStart = (state.segmentEndTime != null) ? state.segmentEndTime - 0.1 : (document.getElementById('segmentPlayer') || document.getElementById('videoPlayer')).duration - 0.1;
+            state.segmentStartTime = Math.min(maxStart, Math.max(0, t));
+        } else {
+            const minEnd = (state.segmentStartTime != null) ? state.segmentStartTime + 0.1 : 0.1;
+            const dur = (document.getElementById('segmentPlayer') || document.getElementById('videoPlayer')).duration || 1;
+            state.segmentEndTime = Math.max(minEnd, Math.min(dur, t));
+        }
+        updateUI();
+    }
+    function onPointerUp() {
+        activeHandle = null;
+        document.removeEventListener('mousemove', onPointerMove);
+        document.removeEventListener('mouseup', onPointerUp);
+        document.removeEventListener('touchmove', onPointerMove);
+        document.removeEventListener('touchend', onPointerUp);
+    }
+
+    handleStart.addEventListener('mousedown', (e) => { activeHandle = 'start'; document.addEventListener('mousemove', onPointerMove); document.addEventListener('mouseup', onPointerUp); });
+    handleEnd.addEventListener('mousedown', (e) => { activeHandle = 'end'; document.addEventListener('mousemove', onPointerMove); document.addEventListener('mouseup', onPointerUp); });
+    handleStart.addEventListener('touchstart', (e) => { activeHandle = 'start'; document.addEventListener('touchmove', onPointerMove, {passive:false}); document.addEventListener('touchend', onPointerUp); }, {passive:false});
+    handleEnd.addEventListener('touchstart', (e) => { activeHandle = 'end'; document.addEventListener('touchmove', onPointerMove, {passive:false}); document.addEventListener('touchend', onPointerUp); }, {passive:false});
+
+    // Click on track sets nearest handle
+    track.addEventListener('click', (e) => {
+        const rect = track.getBoundingClientRect();
+        const pct = ((e.clientX - rect.left) / rect.width) * 100;
+        const sPct = timeToPercent(state.segmentStartTime || 0);
+        const ePct = timeToPercent(state.segmentEndTime || (document.getElementById('segmentPlayer') || document.getElementById('videoPlayer')).duration || 1);
+        const distStart = Math.abs(pct - sPct);
+        const distEnd = Math.abs(pct - ePct);
+        const which = (distStart <= distEnd) ? 'start' : 'end';
+        activeHandle = which;
+        onPointerMove(e);
+        activeHandle = null;
+    });
+
+    // Keyboard accessibility: arrow keys adjust handles
+    [handleStart, handleEnd].forEach(h => {
+        h.addEventListener('keydown', (ev) => {
+            const step = 0.5; // seconds
+            if (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight') {
+                ev.preventDefault();
+                const sign = (ev.key === 'ArrowRight') ? 1 : -1;
+                const dur = (document.getElementById('segmentPlayer') || document.getElementById('videoPlayer')).duration || 1;
+                if (h === handleStart) {
+                    state.segmentStartTime = Math.max(0, Math.min((state.segmentEndTime || dur) - 0.1, (state.segmentStartTime || 0) + sign * step));
+                } else {
+                    state.segmentEndTime = Math.max((state.segmentStartTime || 0) + 0.1, Math.min(dur, (state.segmentEndTime || dur) + sign * step));
+                }
+                updateUI();
+            }
+        });
+    });
+
+    // Expose small updater used elsewhere
+    window.updateSegmentSliderUI = updateUI;
+
+    // Initial render
+    if (state.segmentStartTime == null || state.segmentEndTime == null) {
+        const dur = (document.getElementById('segmentPlayer') || document.getElementById('videoPlayer')).duration || 0;
+        state.segmentStartTime = state.segmentStartTime ?? 0;
+        state.segmentEndTime = state.segmentEndTime ?? dur || 0;
+    }
+    updateUI();
+}
+
+function loadVideoAndSegment(videoId, startTime) {
+    // helper used by Select Video modal: load video then seek to segment start
+    (async () => {
+        await loadVideo(videoId);
+        loadVideoSegment(startTime);
+        closeVideoModal();
+    })();
+}
+
+// Render the list of videos inside the Segment tab selector
+function renderSegmentVideoSelector() {
+    const container = document.getElementById('segmentVideoSelector');
+    if (!container) return;
+
+    if (!state.videos || state.videos.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-film empty-icon"></i>
+                <h3>No Video Loaded</h3>
+                <p>Use "Add Local Videos" or "Select Video" to add videos.</p>
+            </div>
+        `;
+        return;
+    }
+
+    // Render a compact list (reuse same visual style as modal items)
+    container.innerHTML = state.videos.map(v => `
+        <div class="video-list-item" style="display:flex;align-items:center;justify-content:space-between;padding:0.5rem;border-bottom:1px solid #eee;">
+            <div style="display:flex;gap:0.75rem;align-items:center;">
+                <i class="fas fa-video" style="color:#0066cc"></i>
+                <div style="font-weight:500">${escapeHtml(v.filename)}</div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;">
+                <button class="btn btn-small" onclick="loadSegmentPlayer(${v.id})">Open</button>
+                <button class="btn btn-small" onclick="loadSegmentPlayer(${v.id}); switchTab('annotate'); loadVideo(${v.id})">Open in main</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+// Load a video into the small Segment tab player
+function loadSegmentPlayer(videoId) {
+    const player = document.getElementById('segmentPlayer');
+    const src = document.getElementById('segmentSource');
+    if (!player || !src) return;
+
+    state.currentVideoId = videoId;
+    src.src = `${API_BASE}/api/videos/${videoId}/file`;
+    player.load();
+
+    // Show player container and reset any existing start/end markers
+    const container = document.getElementById('segmentVideoPlayerContainer');
+    if (container) container.style.display = 'block';
+    state.segmentStartTime = null;
+    state.segmentEndTime = null;
+    const sdisp = document.getElementById('segmentStartDisplay');
+    const edisp = document.getElementById('segmentEndDisplay');
+    if (sdisp) sdisp.textContent = 'Start: -';
+    if (edisp) edisp.textContent = 'End: -';
+
+    // Refresh segments list for the loaded video
+    loadSegments();
+}
+
+async function loadSegments() {
+    const list = document.getElementById('segmentsList');
+    if (!list) return;
+
+    list.innerHTML = '<div class="empty-state"><p>Loading segments…</p></div>';
+
+    if (!state.currentVideoId) {
+        list.innerHTML = '<div class="empty-state"><p>Load a video first to see segments.</p></div>';
+        return;
+    }
+
+    try {
+        const resp = await fetch(`${API_BASE}/api/segments/video/${state.currentVideoId}`);
+        if (!resp.ok) throw new Error('Failed to load segments');
+        const segments = await resp.json();
+        state.segments = segments || [];
+        renderSegments();
+    } catch (err) {
+        console.error('Failed to load segments', err);
+        list.innerHTML = '<div class="empty-state"><p>Failed to load segments</p></div>';
+    }
+}
+
+function renderSegments() {
+    const list = document.getElementById('segmentsList');
+    if (!list) return;
+
+    if (!state.segments || state.segments.length === 0) {
+        list.innerHTML = '<div class="empty-state"><p>No segments for this video</p></div>';
+        return;
+    }
+
+    list.innerHTML = '';
+    state.segments.forEach(seg => {
+        const item = document.createElement('div');
+        item.className = 'segment-item';
+        item.innerHTML = `
+            <div class="segment-meta">
+                <strong>${seg.name || `Segment ${seg.id}`}</strong>
+                <div class="segment-times">${formatTime(seg.start_time)} → ${formatTime(seg.end_time)}</div>
+            </div>
+            <div class="segment-actions">
+                <button class="btn btn-small btn-icon" data-start="${seg.start_time}" onclick="loadVideoSegment(${seg.start_time})"><i class="fas fa-play"></i> Load</button>
+                <button class="btn btn-small" onclick="editSegment(${seg.id})">Edit</button>
+                <button class="btn btn-small btn-danger" onclick="deleteSegment(${seg.id})"><i class="fas fa-trash"></i></button>
+            </div>
+        `;
+        list.appendChild(item);
+    });
+}
+
+function loadVideoSegment(startTime) {
+    // Switch to annotate tab and seek
+    switchTab('annotate');
+    const videoPlayer = document.getElementById('videoPlayer');
+    if (videoPlayer && !isNaN(startTime)) {
+        // ensure video loaded
+        videoPlayer.currentTime = Math.max(0, startTime);
+        videoPlayer.play();
+    }
+}
+
+function setSegmentStart() {
+    const segPlayer = document.getElementById('segmentPlayer');
+    const videoPlayer = (segPlayer && segPlayer.readyState > 0) ? segPlayer : document.getElementById('videoPlayer');
+    if (!videoPlayer || isNaN(videoPlayer.currentTime)) return;
+    state.segmentStartTime = videoPlayer.currentTime;
+    const disp = document.getElementById('segmentStartDisplay');
+    if (disp) disp.textContent = `Start: ${formatTime(state.segmentStartTime)}`;
+    if (window.updateSegmentSliderUI) window.updateSegmentSliderUI();
+}
+
+function setSegmentEnd() {
+    const segPlayer = document.getElementById('segmentPlayer');
+    const videoPlayer = (segPlayer && segPlayer.readyState > 0) ? segPlayer : document.getElementById('videoPlayer');
+    if (!videoPlayer || isNaN(videoPlayer.currentTime)) return;
+    state.segmentEndTime = videoPlayer.currentTime;
+    const disp = document.getElementById('segmentEndDisplay');
+    if (disp) disp.textContent = `End: ${formatTime(state.segmentEndTime)}`;
+    if (window.updateSegmentSliderUI) window.updateSegmentSliderUI();
+}
+
+async function createSegment() {
+    if (!state.currentVideoId) {
+        showToast('No video', 'Load a video before creating a segment', 'warning');
+        return;
+    }
+    const start = state.segmentStartTime;
+    const end = state.segmentEndTime;
+    if (start == null || end == null || end <= start) {
+        showToast('Invalid segment', 'Set a valid start and end time first', 'error');
+        return;
+    }
+    try {
+        const payload = { parent_video_id: state.currentVideoId, name: `Segment ${formatTime(start)}-${formatTime(end)}`, start_time: start, end_time: end };
+        const resp = await fetch(`${API_BASE}/api/segments`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        if (!resp.ok) throw new Error('Create failed');
+        showToast('Segment created', 'Segment saved', 'success');
+        await loadSegments();
+        // refresh video lists so Select-Video modal shows the new segment immediately
+        await loadVideos();
+    } catch (err) {
+        console.error(err);
+        showToast('Error', 'Failed to create segment', 'error');
+    }
+}
+
+async function deleteSegment(id) {
+    if (!confirm('Delete this segment?')) return;
+    try {
+        const resp = await fetch(`${API_BASE}/api/segments/${id}`, { method: 'DELETE' });
+        if (!resp.ok) throw new Error('Delete failed');
+        showToast('Deleted', 'Segment deleted', 'success');
+        await loadSegments();
+    } catch (err) {
+        console.error(err);
+        showToast('Error', 'Failed to delete segment', 'error');
+    }
+}
+
+async function editSegment(id) {
+    const newName = prompt('Segment name:');
+    if (newName === null) return;
+    try {
+        const resp = await fetch(`${API_BASE}/api/segments/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newName }) });
+        if (!resp.ok) throw new Error('Update failed');
+        await loadSegments();
+        showToast('Updated', 'Segment name updated', 'success');
+    } catch (err) {
+        console.error(err);
+        showToast('Error', 'Failed to update segment', 'error');
     }
 }
 
@@ -2860,12 +3053,77 @@ async function deleteVideo(videoId) {
     const video = state.videos.find(v => v.id === videoId);
     const name = video ? video.filename : `ID ${videoId}`;
 
-    if (!confirm(`Delete video "${name}" and ALL its elicitations?\n\nThis will remove the video file and all associated annotations. Continue?`)) {
+    const willDeleteRemote = video && video.source_type === 'webdav';
+    const confirmMsg = `Delete video "${name}" and ALL its elicitations?\n\nThis will remove the video file and all associated annotations.${willDeleteRemote ? '\n\nFor WebDAV videos the file in OwnCloud will also be deleted.' : ''} Continue?`;
+
+    if (!confirm(confirmMsg)) {
         return;
     }
 
     try {
         showLoading('Deleting video...');
+
+        // If this is a WebDAV-linked video, attempt to delete the remote OwnCloud file first
+        if (willDeleteRemote && _webdavApiUrl) {
+            // Try to extract Moodle video id from stream.php URL (pattern: stream.php?videoid=123)
+            const m = (video.filepath || '').match(/[?&]videoid=(\d+)/);
+            if (m && m[1]) {
+                const moodleId = m[1];
+                try {
+                    const delRes = await fetch(`${_webdavApiUrl}?action=delete`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ videoid: Number(moodleId) }),
+                    });
+                    if (!delRes.ok) {
+                        const txt = await delRes.text();
+                        throw new Error(txt || `HTTP ${delRes.status}`);
+                    }
+                    const delJson = await delRes.json();
+                    if (!delJson.success) {
+                        throw new Error(delJson.error || 'Unknown error');
+                    }
+                } catch (err) {
+                    hideLoading();
+                    showToast('Error', `Failed to delete remote OwnCloud file: ${err.message}`, 'error');
+                    return; // abort to avoid leaving remote file behind
+                }
+            } else {
+                // No Moodle ID in filepath — cannot delete remote file reliably
+                if (!confirm('Cannot determine Moodle video id for this WebDAV-linked video. The file on OwnCloud will NOT be deleted. Do you want to remove the local record anyway?')) {
+                    return; // abort
+                }
+                // Explicitly request a local-only delete (server will refuse unless force=true)
+                const response = await fetch(`${API_BASE}/api/videos/${videoId}?force=true`, {
+                    method: 'DELETE'
+                });
+
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(errText || 'Failed to delete video');
+                }
+
+                // Remove from local state (same as normal flow)
+                state.videos = state.videos.filter(v => v.id !== videoId);
+
+                // If the deleted video is currently loaded, clear the player
+                if (state.currentVideoId === videoId) {
+                    state.currentVideo = null;
+                    state.currentVideoId = null;
+                    try { localStorage.removeItem('currentVideoId'); } catch (e) { console.error('Failed to clear video state:', e); }
+                    document.getElementById('videoPlayerContainer').style.display = 'none';
+                    document.getElementById('recordingControls').style.display = 'none';
+                    document.getElementById('videoSelector').style.display = 'flex';
+                    document.getElementById('videoInfo').style.display = 'none';
+                }
+
+                await loadVideos();
+                showToast('Deleted', 'Video record removed (remote file NOT deleted)', 'success');
+                hideLoading();
+                closeVideoModal();
+                return;
+            }
+        }
 
         const response = await fetch(`${API_BASE}/api/videos/${videoId}`, {
             method: 'DELETE'
@@ -3111,27 +3369,6 @@ function openLocalFolderModal() {
         modal.style.display = 'flex';
         document.getElementById('localVideosContainer').style.display = 'none';
         document.getElementById('localFolderPath').value = '';
-
-        // Focus on the input field
-        setTimeout(() => {
-            document.getElementById('localFolderPath').focus();
-        }, 100);
-
-        // Close on Escape key
-        const escapeHandler = (e) => {
-            if (e.key === 'Escape') {
-                closeLocalFolderModal();
-                document.removeEventListener('keydown', escapeHandler);
-            }
-        };
-        document.addEventListener('keydown', escapeHandler);
-
-        // Close on background click
-        modal.onclick = (e) => {
-            if (e.target === modal) {
-                closeLocalFolderModal();
-            }
-        };
     } else {
         console.error('localFolderModal not found!');
     }
@@ -3149,9 +3386,36 @@ async function handleBrowseLocalFolder() {
         return;
     }
 
-    // Call the existing handleBrowseFolder function and close modal on success
-    await handleBrowseFolder(folderPath);
-    closeLocalFolderModal();
+    try {
+        showLoading('Browsing folder...');
+
+        const response = await fetch(`${API_BASE}/api/videos/local/browse?directory=${encodeURIComponent(folderPath)}`);
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to browse folder');
+        }
+
+        const data = await response.json();
+
+        if (data.videos.length === 0) {
+            showToast('No Videos', 'No video files found in this folder', 'info');
+            return;
+        }
+
+        // Display found videos
+        renderLocalVideos(data.videos);
+        document.getElementById('localVideosContainer').style.display = 'block';
+        document.getElementById('localVideoCount').textContent = data.videos.length;
+
+        showToast('Success', `Found ${data.videos.length} video(s)`, 'success');
+
+    } catch (error) {
+        console.error('Error browsing folder:', error);
+        showToast('Error', error.message, 'error');
+    } finally {
+        hideLoading();
+    }
 }
 
 function renderLocalVideos(videos) {
@@ -3221,708 +3485,7 @@ async function registerLocalVideo(filepath, filename) {
 // Make functions globally available
 window.seekToAnnotation = seekToAnnotation;
 window.deleteAnnotation = deleteAnnotation;
-window.toggleDimension = toggleDimension;
-window.triggerReview = triggerReview;
-window.editElicitation = editElicitation;
-window.closeEditElicitationModal = closeEditElicitationModal;
-
-// ============================================================================
-// SEGMENTATION TAB FUNCTIONS
-// ============================================================================
-
-function initializeSegmentTab() {
-    // Initialize event listeners for segmentation controls
-    const trimStartInput = document.getElementById('trimStartInput');
-    const trimEndInput = document.getElementById('trimEndInput');
-    const createSegmentBtn = document.getElementById('createSegmentBtn');
-    const clearSegmentBtn = document.getElementById('clearSegmentBtn');
-    const refreshSegmentsBtn = document.getElementById('refreshSegmentsBtn');
-    const segmentVideoPlayer = document.getElementById('segmentVideoPlayer');
-    
-    // CRITICAL FIX: Find timeline track WITHIN segmentation controls, not the whole page
-    const segmentationControls = document.getElementById('segmentationControls');
-    const timelineTrack = segmentationControls ? segmentationControls.querySelector('.timeline-track') : null;
-    
-    const trimHandleStart = document.getElementById('trimHandleStart');
-    const trimHandleEnd = document.getElementById('trimHandleEnd');
-    
-    console.log('initializeSegmentTab: Found elements:', {
-        trimStartInput: !!trimStartInput,
-        trimEndInput: !!trimEndInput,
-        createSegmentBtn: !!createSegmentBtn,
-        segmentationControls: !!segmentationControls,
-        timelineTrack: !!timelineTrack,
-        trimHandleStart: !!trimHandleStart,
-        trimHandleEnd: !!trimHandleEnd,
-        segmentVideoPlayer: !!segmentVideoPlayer
-    });
-
-    if (trimStartInput && !trimStartInput.dataset.initialized) {
-        trimStartInput.addEventListener('input', handleTimeInputChange);
-        trimStartInput.addEventListener('blur', validateTimeInput);
-        trimStartInput.dataset.initialized = 'true';
-    }
-
-    if (trimEndInput && !trimEndInput.dataset.initialized) {
-        trimEndInput.addEventListener('input', handleTimeInputChange);
-        trimEndInput.addEventListener('blur', validateTimeInput);
-        trimEndInput.dataset.initialized = 'true';
-    }
-
-    if (createSegmentBtn && !createSegmentBtn.dataset.initialized) {
-        createSegmentBtn.addEventListener('click', createSegment);
-        createSegmentBtn.dataset.initialized = 'true';
-    }
-
-    if (clearSegmentBtn && !clearSegmentBtn.dataset.initialized) {
-        clearSegmentBtn.addEventListener('click', clearSegmentMarkers);
-        clearSegmentBtn.dataset.initialized = 'true';
-    }
-
-    if (refreshSegmentsBtn && !refreshSegmentsBtn.dataset.initialized) {
-        refreshSegmentsBtn.addEventListener('click', () => {
-            if (state.segmentVideoId) {
-                loadSegments(state.segmentVideoId);
-            }
-        });
-        refreshSegmentsBtn.dataset.initialized = 'true';
-    }
-
-    // Timeline click to set position - ONLY if we found the correct one
-    if (timelineTrack && !timelineTrack.dataset.clickInitialized) {
-        console.log('Attaching click handler to segment timeline track');
-        timelineTrack.addEventListener('click', handleTimelineClick);
-        timelineTrack.dataset.clickInitialized = 'true';
-    }
-
-    // Draggable handles - use more robust event attachment
-    if (trimHandleStart && !trimHandleStart.dataset.initialized) {
-        console.log('Initializing start handle drag');
-        trimHandleStart.addEventListener('mousedown', (e) => {
-            console.log('Start handle mousedown event fired');
-            startDrag(e, 'start');
-        });
-        // Also add touch support
-        trimHandleStart.addEventListener('touchstart', (e) => {
-            console.log('Start handle touchstart event fired');
-            e.preventDefault();
-            const touch = e.touches[0];
-            const mouseEvent = new MouseEvent('mousedown', {
-                clientX: touch.clientX,
-                clientY: touch.clientY
-            });
-            startDrag(mouseEvent, 'start');
-        });
-        trimHandleStart.dataset.initialized = 'true';
-    }
-
-    if (trimHandleEnd && !trimHandleEnd.dataset.initialized) {
-        console.log('Initializing end handle drag');
-        trimHandleEnd.addEventListener('mousedown', (e) => {
-            console.log('End handle mousedown event fired');
-            startDrag(e, 'end');
-        });
-        // Also add touch support
-        trimHandleEnd.addEventListener('touchstart', (e) => {
-            console.log('End handle touchstart event fired');
-            e.preventDefault();
-            const touch = e.touches[0];
-            const mouseEvent = new MouseEvent('mousedown', {
-                clientX: touch.clientX,
-                clientY: touch.clientY
-            });
-            startDrag(mouseEvent, 'end');
-        });
-        trimHandleEnd.dataset.initialized = 'true';
-    }
-
-    // Update playhead position
-    if (segmentVideoPlayer && !segmentVideoPlayer.dataset.playheadInitialized) {
-        segmentVideoPlayer.addEventListener('timeupdate', updatePlayhead);
-        segmentVideoPlayer.dataset.playheadInitialized = 'true';
-    }
-
-    // If a video is already loaded in the elicitation tab, use it
-    if (state.currentVideoId && state.currentVideo) {
-        loadVideoForSegmentation(state.currentVideoId);
-    }
-}
-
-// Drag state
-let isDragging = false;
-let dragType = null;
-
-function startDrag(e, type) {
-    console.log('startDrag called with type:', type);
-    e.preventDefault();
-    e.stopPropagation();
-    isDragging = true;
-    dragType = type;
-    
-    // Debug: Check what element we clicked on
-    console.log('Event target:', e.target, 'Target classes:', e.target.className);
-    
-    // Debug: Find all timeline-track elements  
-    const allTracks = document.querySelectorAll('.timeline-track');
-    console.log('Total .timeline-track elements on page:', allTracks.length);
-    allTracks.forEach((track, idx) => {
-        const rect = track.getBoundingClientRect();
-        console.log(`Track ${idx}:`, {
-            width: rect.width,
-            height: rect.height,
-            display: window.getComputedStyle(track).display,
-            parentDisplay: window.getComputedStyle(track.parentElement).display,
-            grandparentDisplay: window.getComputedStyle(track.parentElement?.parentElement).display
-        });
-    });
-    
-    console.log('Drag started, isDragging:', isDragging, 'dragType:', dragType);
-    
-    document.addEventListener('mousemove', handleDrag);
-    document.addEventListener('mouseup', stopDrag);
-    document.addEventListener('touchmove', handleTouchDrag, { passive: false });
-    document.addEventListener('touchend', stopDrag);
-}
-
-function handleTouchDrag(e) {
-    e.preventDefault();
-    const touch = e.touches[0];
-    const mouseEvent = new MouseEvent('mousemove', {
-        clientX: touch.clientX,
-        clientY: touch.clientY
-    });
-    handleDrag(mouseEvent);
-}
-
-function previewSegmentFrame(time) {
-    const player = document.getElementById('segmentVideoPlayer');
-    if (!player || !player.duration) return;
-    const safeTime = Math.max(0, Math.min(time, player.duration));
-    player.currentTime = safeTime;
-}
-
-function handleDrag(e) {
-    if (!isDragging) {
-        console.log('handleDrag called but isDragging is false');
-        return;
-    }
-    
-    // Ensure we have valid mouse coordinates
-    if (typeof e.clientX === 'undefined' || typeof e.clientY === 'undefined') {
-        console.log('Invalid event object, missing clientX/clientY:', e);
-        return;
-    }
-    
-    // CRITICAL FIX: Find the timeline track in the SEGMENT tab, not the annotate tab
-    // Look within the segmentation controls container specifically
-    const segmentationControls = document.getElementById('segmentationControls');
-    if (!segmentationControls) {
-        console.log('Segmentation controls container not found');
-        return;
-    }
-    
-    const timelineTrack = segmentationControls.querySelector('.timeline-track');
-    if (!timelineTrack) {
-        console.log('Timeline track not found within segmentation controls');
-        return;
-    }
-    
-    const rect = timelineTrack.getBoundingClientRect();
-    console.log('Timeline rect:', {left: rect.left, width: rect.width, top: rect.top, bottom: rect.bottom}, 'clientX:', e.clientX);
-    console.log('Timeline track styles:', {
-        display: window.getComputedStyle(timelineTrack).display,
-        width: window.getComputedStyle(timelineTrack).width,
-        position: window.getComputedStyle(timelineTrack).position
-    });
-    
-    if (!rect.width || rect.width === 0) {
-        console.log('⚠️ Timeline track has no width! Rect:', rect);
-        console.log('Full debuginfo:');
-        console.log('- Segment tab display:', window.getComputedStyle(document.getElementById('segmentTab')).display);
-        console.log('- Segmentation controls display:', window.getComputedStyle(segmentationControls).display);
-        console.log('- Timeline scrubber display:', window.getComputedStyle(timelineTrack.parentElement).display);
-        return;
-    }
-    
-    const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
-    const percentage = x / rect.width;
-    
-    console.log('x:', x, 'rect.width:', rect.width, 'percentage:', percentage);
-    
-    const player = document.getElementById('segmentVideoPlayer');
-    if (!player || !player.duration || isNaN(player.duration) || player.duration === 0) {
-        console.log('Player not ready, duration:', player?.duration, 'isNaN:', isNaN(player?.duration));
-        return;
-    }
-    
-    const time = percentage * player.duration;
-    console.log('Calculated time:', time, 'from percentage:', percentage, 'duration:', player.duration);
-    previewSegmentFrame(time);
-
-    if (dragType === 'start') {
-        state.segmentStartTime = time;
-        if (state.segmentEndTime !== null && time >= state.segmentEndTime) {
-            state.segmentEndTime = Math.min(time + 1, player.duration);
-        }
-        console.log('✅ Updated start time to:', time, 'state.segmentStartTime:', state.segmentStartTime);
-    } else if (dragType === 'end') {
-        state.segmentEndTime = time;
-        if (state.segmentStartTime !== null && time <= state.segmentStartTime) {
-            state.segmentStartTime = Math.max(0, time - 1);
-        }
-        console.log('✅ Updated end time to:', time, 'state.segmentEndTime:', state.segmentEndTime);
-    }
-    
-    console.log('About to call updateTimelineUI, current state:', {
-        startTime: state.segmentStartTime,
-        endTime: state.segmentEndTime
-    });
-    updateTimelineUI();
-}
-
-function stopDrag() {
-    console.log('stopDrag called, was dragging:', isDragging);
-    isDragging = false;
-    dragType = null;
-    document.removeEventListener('mousemove', handleDrag);
-    document.removeEventListener('mouseup', stopDrag);
-    document.removeEventListener('touchmove', handleTouchDrag);
-    document.removeEventListener('touchend', stopDrag);
-}
-
-function handleTimelineClick(e) {
-    if (isDragging) return;
-    
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const percentage = x / rect.width;
-    
-    const player = document.getElementById('segmentVideoPlayer');
-    if (!player || !player.duration) return;
-    
-    const time = percentage * player.duration;
-    
-    // Set start if not set, otherwise set end
-    if (state.segmentStartTime === null) {
-        state.segmentStartTime = time;
-    } else if (state.segmentEndTime === null || time > state.segmentStartTime) {
-        state.segmentEndTime = time;
-    } else {
-        state.segmentStartTime = time;
-    }
-    
-    updateTimelineUI();
-}
-
-function handleTimeInputChange(e) {
-    const input = e.target;
-    const value = input.value;
-    
-    // Only allow digits and colon
-    const cleaned = value.replace(/[^0-9:]/g, '');
-    if (cleaned !== value) {
-        input.value = cleaned;
-        return;
-    }
-    
-    // Try to parse if it looks complete
-    if (value.match(/^\d{1,2}:\d{2}$/)) {
-        const time = parseTimeInput(value);
-        if (time !== null) {
-            if (input.id === 'trimStartInput') {
-                state.segmentStartTime = time;
-            } else {
-                state.segmentEndTime = time;
-            }
-            updateTimelineUI();
-        }
-    }
-}
-
-function validateTimeInput(e) {
-    const input = e.target;
-    const value = input.value;
-    
-    if (!value) return;
-    
-    const time = parseTimeInput(value);
-    if (time !== null) {
-        if (input.id === 'trimStartInput') {
-            state.segmentStartTime = time;
-        } else {
-            state.segmentEndTime = time;
-        }
-    }
-    
-    updateTimelineUI();
-}
-
-function parseTimeInput(timeStr) {
-    const match = timeStr.match(/^(\d{1,2}):(\d{2})$/);
-    if (!match) return null;
-    
-    const minutes = parseInt(match[1], 10);
-    const seconds = parseInt(match[2], 10);
-    
-    if (seconds >= 60) return null;
-    
-    const player = document.getElementById('segmentVideoPlayer');
-    const time = minutes * 60 + seconds;
-    
-    if (player && player.duration && time > player.duration) {
-        return player.duration;
-    }
-    
-    return time;
-}
-
-function updatePlayhead() {
-    const player = document.getElementById('segmentVideoPlayer');
-    const playhead = document.getElementById('timelinePlayhead');
-    
-    if (!player || !player.duration || !playhead) return;
-    
-    const percentage = (player.currentTime / player.duration) * 100;
-    playhead.style.left = percentage + '%';
-}
-
-function updateTimelineUI() {
-    const player = document.getElementById('segmentVideoPlayer');
-    if (!player || !player.duration || isNaN(player.duration) || player.duration === 0) {
-        console.log('updateTimelineUI: Player not ready, duration:', player?.duration);
-        return;
-    }
-    
-    const startTime = state.segmentStartTime !== null ? state.segmentStartTime : 0;
-    const endTime = state.segmentEndTime !== null ? state.segmentEndTime : player.duration;
-    
-    console.log('updateTimelineUI: startTime:', startTime, 'endTime:', endTime, 'duration:', player.duration);
-    
-    // Update timeline selection
-    const selection = document.getElementById('timelineSelection');
-    if (selection) {
-        const startPercent = (startTime / player.duration) * 100;
-        const endPercent = (endTime / player.duration) * 100;
-        selection.style.left = startPercent + '%';
-        selection.style.width = (endPercent - startPercent) + '%';
-        console.log('✅ Timeline selection updated: left:', startPercent + '%', 'width:', (endPercent - startPercent) + '%');
-        console.log('   Selection element style:', window.getComputedStyle(selection).left, window.getComputedStyle(selection).width);
-    } else {
-        console.warn('❌ timelineSelection element not found');
-    }
-    
-    // Update input fields
-    const trimStartInput = document.getElementById('trimStartInput');
-    const trimEndInput = document.getElementById('trimEndInput');
-    if (trimStartInput) {
-        trimStartInput.value = formatTimeInput(startTime);
-        console.log('✅ Updated trimStartInput to:', formatTimeInput(startTime));
-    } else {
-        console.warn('❌ trimStartInput not found');
-    }
-    
-    if (trimEndInput) {
-        trimEndInput.value = formatTimeInput(endTime);
-        console.log('✅ Updated trimEndInput to:', formatTimeInput(endTime));
-    } else {
-        console.warn('❌ trimEndInput not found');
-    }
-    
-    // Update duration display
-    const duration = endTime - startTime;
-    const trimDurationEl = document.getElementById('trimDuration');
-    if (trimDurationEl) {
-        trimDurationEl.textContent = formatTime(duration);
-        console.log('✅ Updated trimDuration to:', formatTime(duration));
-    } else {
-        console.warn('❌ trimDuration not found');
-    }
-    
-    // Enable/disable create button
-    const createBtn = document.getElementById('createSegmentBtn');
-    if (createBtn) {
-        createBtn.disabled = state.segmentStartTime === null || state.segmentEndTime === null || 
-                             state.segmentEndTime <= state.segmentStartTime;
-    }
-}
-
-function formatTimeInput(seconds) {
-    if (isNaN(seconds) || !isFinite(seconds)) return '0:00';
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-}
-
-async function loadVideoForSegmentation(videoId) {
-    try {
-        const response = await fetch(`${API_BASE}/api/videos/${videoId}`);
-        if (!response.ok) throw new Error('Failed to load video');
-
-        const video = await response.json();
-        state.segmentVideoId = videoId;
-
-        // Show video player
-        document.getElementById('segmentVideoSelector').style.display = 'none';
-        document.getElementById('segmentVideoPlayerContainer').style.display = 'block';
-        document.getElementById('segmentationControls').style.display = 'flex';
-        document.getElementById('segmentVideoInfo').style.display = 'flex';
-
-        // Load video
-        const videoPlayer = document.getElementById('segmentVideoPlayer');
-        const videoSource = document.getElementById('segmentVideoSource');
-        videoSource.src = `${API_BASE}/api/videos/${videoId}/file`;
-        videoPlayer.load();
-
-        state.segmentVideoElement = videoPlayer;
-
-        // Initialize timeline when video metadata is loaded
-        videoPlayer.addEventListener('loadedmetadata', function initTimeline() {
-            console.log('Video metadata loaded, duration:', videoPlayer.duration);
-            // Set default segment to full video
-            state.segmentStartTime = 0;
-            state.segmentEndTime = videoPlayer.duration;
-            console.log('Set initial segment range:', state.segmentStartTime, '-', state.segmentEndTime);
-            updateTimelineUI();
-        }, { once: true });
-
-        // Update info
-        document.getElementById('segmentVideoName').textContent = video.filename;
-
-        // Load existing segments
-        await loadSegments(videoId);
-
-    } catch (error) {
-        console.error('Error loading video for segmentation:', error);
-        showToast('Error', 'Failed to load video', 'error');
-    }
-}
-
-function clearSegmentMarkers() {
-    const player = document.getElementById('segmentVideoPlayer');
-    
-    // Reset to full video range if video is loaded
-    if (player && player.duration) {
-        state.segmentStartTime = 0;
-        state.segmentEndTime = player.duration;
-        updateTimelineUI();
-    } else {
-        // No video loaded, just clear
-        state.segmentStartTime = null;
-        state.segmentEndTime = null;
-        document.getElementById('trimStartInput').value = '';
-        document.getElementById('trimEndInput').value = '';
-        document.getElementById('trimDuration').textContent = '0:00';
-        
-        // Reset timeline UI to initial state
-        const selection = document.getElementById('timelineSelection');
-        if (selection) {
-            selection.style.left = '0%';
-            selection.style.width = '100%';
-        }
-    }
-    
-    document.getElementById('segmentNameInput').value = '';
-    
-    const createBtn = document.getElementById('createSegmentBtn');
-    if (createBtn) {
-        createBtn.disabled = false; // Enable since full video is valid
-    }
-}
-
-async function createSegment() {
-    if (!state.segmentVideoId) {
-        showToast('Error', 'No video loaded', 'error');
-        return;
-    }
-
-    if (state.segmentStartTime === null || state.segmentEndTime === null) {
-        showToast('Error', 'Please set start and end times', 'error');
-        return;
-    }
-
-    if (state.segmentEndTime <= state.segmentStartTime) {
-        showToast('Error', 'End time must be after start time', 'error');
-        return;
-    }
-
-    try {
-        showLoading('Creating segment...');
-
-        const segmentName = document.getElementById('segmentNameInput').value.trim() || null;
-
-        const segmentData = {
-            parent_video_id: state.segmentVideoId,
-            name: segmentName,
-            start_time: state.segmentStartTime,
-            end_time: state.segmentEndTime
-        };
-
-        const response = await fetch(`${API_BASE}/api/segments`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(segmentData)
-        });
-
-        if (!response.ok) {
-            const error = await response.text();
-            throw new Error(error || 'Failed to create segment');
-        }
-
-        const segment = await response.json();
-        showToast('Success', 'Segment created successfully', 'success');
-
-        // Reload segments
-        await loadSegments(state.segmentVideoId);
-
-        // Clear form
-        clearSegmentMarkers();
-
-    } catch (error) {
-        console.error('Error creating segment:', error);
-        showToast('Error', error.message || 'Failed to create segment', 'error');
-    } finally {
-        hideLoading();
-    }
-}
-
-async function loadSegments(videoId) {
-    try {
-        const response = await fetch(`${API_BASE}/api/segments/video/${videoId}`);
-        if (!response.ok) throw new Error('Failed to load segments');
-
-        state.segments = await response.json();
-        renderSegments();
-
-        // Update segment count
-        document.getElementById('segmentCount').textContent = state.segments.length;
-
-    } catch (error) {
-        console.error('Error loading segments:', error);
-        showToast('Error', 'Failed to load segments', 'error');
-    }
-}
-
-function renderSegments() {
-    const container = document.getElementById('segmentsList');
-
-    if (state.segments.length === 0) {
-        container.innerHTML = `
-            <div class="empty-state">
-                <i class="fas fa-scissors empty-icon"></i>
-                <p>No segments yet</p>
-                <p class="hint">Mark start and end times to create your first segment</p>
-            </div>
-        `;
-        return;
-    }
-
-    container.innerHTML = '';
-
-    state.segments.forEach(segment => {
-        const duration = segment.end_time - segment.start_time;
-        const segmentName = segment.name || 'Unnamed Segment';
-
-        const item = document.createElement('div');
-        item.className = 'segment-item';
-        item.innerHTML = `
-            <div class="segment-header">
-                <div class="segment-name ${segment.name ? '' : 'unnamed'}">
-                    <i class="fas fa-cut"></i> ${segmentName}
-                </div>
-                <div class="segment-actions-buttons">
-                    <button class="btn btn-icon btn-small" onclick="seekToSegment(${segment.id})" title="Play segment">
-                        <i class="fas fa-play"></i>
-                    </button>
-                    <button class="btn btn-icon btn-small" onclick="editSegment(${segment.id})" title="Edit segment">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                    <button class="btn btn-icon btn-small" onclick="deleteSegment(${segment.id})" title="Delete segment">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </div>
-            </div>
-            <div class="segment-info">
-                <div class="segment-time-range">
-                    <i class="fas fa-clock"></i>
-                    <span>${formatTime(segment.start_time)} - ${formatTime(segment.end_time)}</span>
-                    <span>(${formatTime(duration)})</span>
-                </div>
-            </div>
-        `;
-
-        container.appendChild(item);
-    });
-}
-
-function seekToSegment(segmentId) {
-    const segment = state.segments.find(s => s.id === segmentId);
-    if (!segment) return;
-
-    const player = document.getElementById('segmentVideoPlayer');
-    if (player) {
-        player.currentTime = segment.start_time;
-        player.play();
-    }
-}
-
-async function editSegment(segmentId) {
-    const segment = state.segments.find(s => s.id === segmentId);
-    if (!segment) return;
-
-    const newName = prompt('Edit segment name:', segment.name || '');
-    if (newName === null) return; // User cancelled
-
-    try {
-        showLoading('Updating segment...');
-
-        const response = await fetch(`${API_BASE}/api/segments/${segmentId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: newName.trim() || null })
-        });
-
-        if (!response.ok) throw new Error('Failed to update segment');
-
-        showToast('Success', 'Segment updated', 'success');
-        await loadSegments(state.segmentVideoId);
-
-    } catch (error) {
-        console.error('Error updating segment:', error);
-        showToast('Error', 'Failed to update segment', 'error');
-    } finally {
-        hideLoading();
-    }
-}
-
-async function deleteSegment(segmentId) {
-    if (!confirm('Delete this segment?')) return;
-
-    try {
-        showLoading('Deleting segment...');
-
-        const response = await fetch(`${API_BASE}/api/segments/${segmentId}`, {
-            method: 'DELETE'
-        });
-
-        if (!response.ok) throw new Error('Failed to delete segment');
-
-        showToast('Success', 'Segment deleted', 'success');
-        await loadSegments(state.segmentVideoId);
-
-    } catch (error) {
-        console.error('Error deleting segment:', error);
-        showToast('Error', 'Failed to delete segment', 'error');
-    } finally {
-        hideLoading();
-    }
-}
-
-// Make segmentation functions globally available
-window.seekToSegment = seekToSegment;
-window.editSegment = editSegment;
-window.deleteSegment = deleteSegment;
-window.saveElicitationEdit = saveElicitationEdit;
-window.markElicitationComplete = markElicitationComplete;
+window.toggleExtendedTranscript = toggleExtendedTranscript;
 window.registerLocalVideo = registerLocalVideo;
 window.handleFeedback = handleFeedback;
 window.openProject = openProject;
@@ -3932,52 +3495,3 @@ window.assignVideos = assignVideos;
 window.addVideoToProject = addVideoToProject;
 window.removeVideoFromProject = removeVideoFromProject;
 window.deleteVideo = deleteVideo;
-
-// DIAGNOSTIC FUNCTION: Call from console to debug segmentation issues
-window.debugSegmentation = function() {
-    console.log('=== SEGMENTATION DIAGNOSTICS ===');
-    
-    const segmentTab = document.getElementById('segmentTab');
-    const segmentationControls = document.getElementById('segmentationControls');
-    const timelineTrack = segmentationControls?.querySelector('.timeline-track');
-    const timelineSelection = document.getElementById('timelineSelection');
-    const trimHandleStart = document.getElementById('trimHandleStart');
-    const trimHandleEnd = document.getElementById('trimHandleEnd');
-    const segmentVideoPlayer = document.getElementById('segmentVideoPlayer');
-    
-    console.log('DOM Elements Found:');
-    console.log('- segmentTab:', !!segmentTab, 'display:', segmentTab ? window.getComputedStyle(segmentTab).display : 'N/A');
-    console.log('- segmentationControls:', !!segmentationControls, 'display:', segmentationControls ? window.getComputedStyle(segmentationControls).display : 'N/A');
-    console.log('- timelineTrack:', !!timelineTrack, 'display:', timelineTrack ? window.getComputedStyle(timelineTrack).display : 'N/A');
-    console.log('- timelineSelection:', !!timelineSelection, 'display:', timelineSelection ? window.getComputedStyle(timelineSelection).display : 'N/A');
-    console.log('- trimHandleStart:', !!trimHandleStart, 'display:', trimHandleStart ? window.getComputedStyle(trimHandleStart).display : 'N/A');
-    console.log('- trimHandleEnd:', !!trimHandleEnd, 'display:', trimHandleEnd ? window.getComputedStyle(trimHandleEnd).display : 'N/A');
-    console.log('- segmentVideoPlayer:', !!segmentVideoPlayer, 'duration:', segmentVideoPlayer?.duration || 'N/A');
-    
-    console.log('\nTimeline Track Measurements:');
-    if (timelineTrack) {
-        const rect = timelineTrack.getBoundingClientRect();
-        console.log('- getBoundingClientRect():', rect);
-        console.log('- offsetWidth:', timelineTrack.offsetWidth);
-        console.log('- clientWidth:', timelineTrack.clientWidth);
-    }
-    
-    console.log('\nHandle Positions:');
-    if (trimHandleStart) {
-        const rect = trimHandleStart.getBoundingClientRect();
-        console.log('- trimHandleStart rect:', rect);
-    }
-    if (trimHandleEnd) {
-        const rect = trimHandleEnd.getBoundingClientRect();
-        console.log('- trimHandleEnd rect:', rect);
-    }
-    
-    console.log('\nCurrent State:');
-    console.log('- state.segmentStartTime:', state.segmentStartTime);
-    console.log('- state.segmentEndTime:', state.segmentEndTime);
-    console.log('- isDragging:', isDragging);
-    console.log('- dragType:', dragType);
-    
-    console.log('\n(Tip: Try dragging a handle and watch the console logs)');
-    console.log('=== END DIAGNOSTICS ===');
-};
