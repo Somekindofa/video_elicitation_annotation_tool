@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, cast
 import uuid
 
-from sqlalchemy.exc import IntegrityError
+from pymysql import IntegrityError
 
 from fastapi import (
     FastAPI,
@@ -25,17 +25,18 @@ from fastapi import (
     Form,
 )
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.ext.asyncio import AsyncSession
 import aiofiles
 from starlette.types import Scope
 
 # Use absolute imports to allow running main.py directly
-import database as db
+# MIGRATED: Using Moodle database instead of SQLite
+import database_compat as db
+from auth import verify_moodle_jwt, MoodleUser
+from database_compat import AsyncSession  # Type alias for compatibility
 import models
 from models import Task
-from sqlalchemy.future import select
 from transcription import transcribe_audio_simple, preload_model, get_model_info
 from config import (
     HOST,
@@ -50,6 +51,7 @@ from config import (
     MAX_UPLOAD_SIZE,
     GOOGLE_DRIVE_API_KEY,
     GOOGLE_DRIVE_DEFAULT_FOLDER_ID,
+    MOODLE_ORIGIN,
 )
 
 # Configure logging
@@ -168,6 +170,14 @@ async def health_check():
     }
 
 
+@app.get("/api/storage-mode")
+async def storage_mode():
+    """Return storage mode so the frontend knows whether WebDAV/Moodle integration is active"""
+    from config import MOODLE_INTEGRATION
+    mode = "webdav" if MOODLE_INTEGRATION else "server"
+    return {"mode": mode}
+
+
 @app.post("/api/videos/upload", response_model=models.VideoResponse)
 async def upload_video(
     file: UploadFile = File(...), session: AsyncSession = Depends(db.get_session)
@@ -233,11 +243,14 @@ async def upload_video(
 
 @app.get("/api/videos", response_model=List[models.VideoResponse])
 async def list_videos(
-    skip: int = 0, limit: int = 100, session: AsyncSession = Depends(db.get_session)
+    skip: int = 0,
+    limit: int = 100,
+    session: AsyncSession = Depends(db.get_session),
+    current_user: MoodleUser = Depends(verify_moodle_jwt),
 ):
-    """Get list of all videos"""
+    """Get list of videos belonging to the current user"""
     try:
-        videos = await db.get_all_videos(session, skip, limit)
+        videos = await db.get_videos_by_user(session, current_user.userid, skip, limit)
 
         # Add annotation count to each video
         response_videos = []
@@ -282,6 +295,18 @@ async def get_video_file(
         video = await db.get_video(session, video_id)
         if not video:
             raise HTTPException(status_code=404, detail="Video not found")
+
+        # For WebDAV videos, redirect to the Moodle stream.php URL
+        if video.source_type == "webdav":
+            # Use the filepath if it already looks like a stream.php URL
+            # Otherwise construct one from MOODLE_ORIGIN and the video ID
+            fp = video.filepath or ""
+            if "stream.php" in fp:
+                stream_url = fp
+            else:
+                origin = MOODLE_ORIGIN.rstrip("/")
+                stream_url = f"{origin}/local/videoelicit/stream.php?videoid={video.id}"
+            return RedirectResponse(url=stream_url, status_code=302)
 
         if not os.path.exists(str(video.filepath)):
             raise HTTPException(status_code=404, detail="Video file not found on disk")
@@ -390,21 +415,49 @@ async def update_video(
 
 
 @app.delete("/api/videos/{video_id}")
-async def delete_video(video_id: int, session: AsyncSession = Depends(db.get_session)):
-    """Delete a video and all its annotations"""
+async def delete_video(video_id: int, force: bool = False, session: AsyncSession = Depends(db.get_session)):
+    """Delete a video and all its annotations
+
+    If the video is `source_type=='webdav'` the external OwnCloud file must be deleted via the Moodle/WebDAV flow.
+    To avoid orphaning remote files we refuse FastAPI-side deletes for WebDAV videos unless `?force=true` is provided.
+    """
     try:
         video = await db.get_video(session, video_id)
         if not video:
             raise HTTPException(status_code=404, detail="Video not found")
 
-        # Only delete video file if it was uploaded (not local)
-        if not bool(video.is_local) and os.path.exists(str(video.filepath)):
-            os.remove(str(video.filepath))
+        # Reject accidental deletes for WebDAV-linked videos unless caller explicitly forces local-only delete
+        if getattr(video, 'source_type', '') == 'webdav' and not force:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Video is linked to an external WebDAV/OwnCloud resource. "
+                    "Delete the file via the Moodle OwnCloud browser (or call the Moodle webdav API) first. "
+                    "If you really want to remove the local FastAPI record only, call this endpoint again with `?force=true`."
+                ),
+            )
 
-        # Delete annotation audio files
+        # Only delete a local filesystem file — never try to remove WebDAV/external URLs or directories.
+        # Some Moodle records use '/' or stream.php URLs for external resources; guard against that.
+        try:
+            fp = str(video.filepath or "")
+            if video.source_type != 'webdav' and fp and os.path.exists(fp) and os.path.isfile(fp):
+                os.remove(fp)
+            else:
+                logger.debug(f"Skipping file unlink for video ID={video_id} (source_type={video.source_type}, filepath={fp})")
+        except Exception as e:
+            logger.warning(f"Skipping file delete for video ID={video_id}: {e}")
+
+        # Delete annotation audio files (only if they exist and are files)
         for annotation in video.annotations:
-            if os.path.exists(str(annotation.audio_filepath)):
-                os.remove(str(annotation.audio_filepath))
+            try:
+                afp = str(annotation.audio_filepath or "")
+                if afp and os.path.exists(afp) and os.path.isfile(afp):
+                    os.remove(afp)
+                else:
+                    logger.debug(f"Skipping audio unlink for annotation {annotation.id} (path={afp})")
+            except Exception as e:
+                logger.warning(f"Failed to remove audio file for annotation {annotation.id}: {e}")
 
         # Delete from database
         await db.delete_video(session, video_id)
@@ -600,10 +653,86 @@ async def browse_local_directory(directory: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/api/videos/webdav/register", response_model=models.VideoResponse)
+async def register_webdav_video(
+    request: Request,
+    session: AsyncSession = Depends(db.get_session),
+    current_user: MoodleUser = Depends(verify_moodle_jwt),
+):
+    """
+    Register an OwnCloud/WebDAV video by its Moodle video ID.
+    If moodle_video_id is provided, look up the existing Moodle record and return it.
+    This avoids creating duplicate records in the Moodle DB.
+    """
+    try:
+        body = await request.json()
+        stream_url = body.get("stream_url")  # e.g. https://moodle.example.com/local/videoelicit/stream.php?videoid=42
+        filename = body.get("filename", "video.mp4")
+        file_size = body.get("file_size", 0)
+        moodle_video_id = body.get("moodle_video_id")  # Moodle DB video ID
+
+        if not stream_url:
+            raise HTTPException(status_code=400, detail="stream_url is required")
+
+        # If we have the Moodle video ID, look up the existing record instead of creating a new one
+        if moodle_video_id:
+            try:
+                moodle_id_int = int(moodle_video_id)
+                existing = await db.get_video(session, moodle_id_int)
+                if existing:
+                    logger.info(f"WebDAV video already registered as Moodle ID={moodle_id_int}, returning it")
+                    response_data = models.VideoResponse.model_validate(existing)
+                    response_data.annotation_count = 0
+                    return response_data
+            except (ValueError, TypeError):
+                pass  # Invalid moodle_video_id, fall through to create
+
+        # Check by filepath/stream_url (deduplication fallback)
+        existing = await db.get_video_by_filepath(session, stream_url)
+        if existing:
+            logger.info(f"WebDAV video already registered by filepath, returning it")
+            response_data = models.VideoResponse.model_validate(existing)
+            response_data.annotation_count = 0
+            return response_data
+
+        # Not found — create new record
+        video_data = models.VideoCreate(
+            filename=filename,
+            filepath=stream_url,
+            file_size=file_size,
+            mime_type="video/mp4",
+            is_local=0,
+            source_type="webdav",
+            user_id=current_user.userid,
+        )
+
+        video = await db.create_video(session, video_data)
+        logger.info(f"WebDAV video registered: {filename} (ID={video.id}, stream_url={stream_url})")
+
+        response_data = models.VideoResponse.model_validate(video)
+        response_data.annotation_count = 0
+        return response_data
+
+    except IntegrityError:
+        # Already registered — look it up and return it
+        existing = await db.get_video_by_filepath(session, stream_url)
+        if existing:
+            response_data = models.VideoResponse.model_validate(existing)
+            response_data.annotation_count = 0
+            return response_data
+        raise HTTPException(status_code=409, detail="Video already registered")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error registering WebDAV video: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/videos/local/register", response_model=models.VideoResponse)
 async def register_local_video(
     request: models.LocalVideoRegisterRequest,
     session: AsyncSession = Depends(db.get_session),
+    current_user: MoodleUser = Depends(verify_moodle_jwt),
 ):
     """
     Register a local video file without copying it
@@ -660,6 +789,7 @@ async def register_local_video(
             mime_type=mime_type,
             is_local=1,
             source_type="local",
+            user_id=current_user.userid,
         )
 
         video = await db.create_video(session, video_data)
@@ -835,6 +965,7 @@ async def create_annotation(
     craft: Optional[str] = Form(None),
     task: Optional[str] = Form(None),
     session: AsyncSession = Depends(db.get_session),
+    current_user: MoodleUser = Depends(verify_moodle_jwt),
 ):
     """Create a new annotation with audio recording"""
     try:
@@ -876,6 +1007,8 @@ async def create_annotation(
             audio_filepath=str(audio_filepath),
             craft=craft,
             task=task,
+            user_id=current_user.userid,
+            context_id=current_user.contextid,
         )
 
         annotation = await db.create_annotation(session, annotation_data)

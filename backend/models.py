@@ -245,6 +245,7 @@ class VideoCreate(BaseModel):
     mime_type: Optional[str] = None
     is_local: int = 0
     source_type: str = "uploaded"
+    user_id: Optional[int] = None
 
 
 class VideoResponse(BaseModel):
@@ -312,6 +313,8 @@ class AnnotationCreate(BaseModel):
     audio_filepath: str
     craft: Optional[str] = None
     task: Optional[str] = None
+    user_id: Optional[int] = 0
+    context_id: Optional[int] = 0
 
 
 class AnnotationUpdate(BaseModel):
@@ -345,8 +348,8 @@ class AnnotationResponse(BaseModel):
     video_id: int
     start_time: float
     end_time: float
-    audio_filename: str
-    audio_filepath: str
+    audio_filename: Optional[str] = None
+    audio_filepath: Optional[str] = None
     transcription: Optional[str] = None
     transcription_status: str
     review_status: str = "pending"
@@ -358,10 +361,10 @@ class AnnotationResponse(BaseModel):
     judge_decision: Optional[str] = None
     tags: Optional[List[Dict[str, Optional[str]]]] = None
     tagging_status: str
-    tagging_trigger_number: int = 0
-    detected_task_status: str = "pending"
+    tagging_trigger_number: Optional[int] = 0
+    detected_task_status: Optional[str] = "pending"
     detected_task: Optional[str] = None
-    detected_task_confidence: float = 0.0
+    detected_task_confidence: Optional[float] = 0.0
     feedback: Optional[int] = None
     feedback_choices: Optional[str] = None
     craft: Optional[str] = None
@@ -398,6 +401,21 @@ class AnnotationResponse(BaseModel):
     def duration(self) -> float:
         """Computed duration field"""
         return self.end_time - self.start_time
+
+
+class RecordingStartRequest(BaseModel):
+    """Schema for starting a recording"""
+
+    video_id: int
+    start_time: float = Field(..., ge=0)
+
+
+class RecordingStopRequest(BaseModel):
+    """Schema for stopping a recording"""
+
+    video_id: int
+    end_time: float = Field(..., gt=0)
+    audio_data: str  # Base64 encoded audio data
 
 
 class RecordingStartRequest(BaseModel):
