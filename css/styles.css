@@ -195,7 +195,7 @@ body {
     position: absolute;
     top: 0;
     bottom: 0;
-    background: rgba(37, 99, 235, 0.18);
+    background: rgba(37, 99, 235, 0.42);
     border-radius: 8px;
     pointer-events: none;
 }
@@ -886,6 +886,7 @@ body {
 .modal-body {
     padding: var(--spacing-lg);
     overflow-y: auto;
+    overflow-x: hidden;
     flex: 1;
 }
 
@@ -1854,6 +1855,22 @@ body {
     max-width: 900px;
 }
 
+/* Make only the OwnCloud modal slightly wider than other "large" modals */
+#ownCloudModal .modal-content,
+#ownCloudModal .modal-content.modal-large {
+    /* Increase width for OwnCloud upload dialog only */
+    max-width: 1000px;   /* previously 900px for .modal-large */
+    width: 88%;          /* responsive but wider */
+    max-height: 90vh;    /* allow a bit more vertical space */
+}
+
+/* Limit the upload-area inside the modal so layout remains balanced */
+#ownCloudUploadArea {
+    max-width: 960px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
 .assign-videos-container {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -2160,6 +2177,33 @@ body {
 }
 
 /* Tagging progress indicator */
+/* AI pipeline status badges */
+.ai-pipeline-status {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm);
+    border-radius: var(--radius-sm);
+    font-size: 0.813rem;
+    margin-top: var(--spacing-sm);
+    background: rgba(100, 116, 139, 0.1);
+    border: 1px solid rgba(100, 116, 139, 0.3);
+    color: var(--text-secondary);
+}
+.ai-pipeline-status i { animation: pulse 1.5s ease-in-out infinite; }
+.judge-ok {
+    background: rgba(34, 197, 94, 0.1);
+    border-color: rgba(34, 197, 94, 0.3);
+    color: #16a34a;
+}
+.judge-ok i { animation: none; }
+.judge-review {
+    background: rgba(234, 179, 8, 0.1);
+    border-color: rgba(234, 179, 8, 0.3);
+    color: #b45309;
+}
+.judge-review i { animation: none; }
+
 .tagging-progress {
     display: flex;
     align-items: center;
@@ -2232,3 +2276,309 @@ body {
     font-style: italic;
 }
 
+/* ===== Annotation card: header layout ===== */
+.annotation-time-wrapper {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    flex-wrap: wrap;
+}
+
+.annotation-status-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: var(--spacing-xs);
+}
+
+/* ===== Detected task badge ===== */
+.detected-task-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(99, 102, 241, 0.12);
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    color: #4f46e5;
+    border-radius: var(--radius-sm);
+    padding: 2px 8px;
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.detected-task-badge:hover { background: rgba(99, 102, 241, 0.22); }
+.task-edit-icon { font-size: 0.65rem; opacity: 0.6; }
+.task-edit-input {
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 2px 6px;
+    font-size: 0.82rem;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    outline: none;
+    width: 160px;
+}
+
+/* ===== Review panel container ===== */
+.review-panel-container {
+    margin-top: var(--spacing-sm);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.review-toggle-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: var(--bg-secondary);
+    cursor: pointer;
+    user-select: none;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    border-bottom: 1px solid transparent;
+    transition: background 0.15s;
+}
+.review-toggle-header:hover { background: var(--bg-hover, rgba(0,0,0,0.05)); }
+
+.review-toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.tier-badge {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 10px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #fff;
+    letter-spacing: 0.02em;
+}
+
+.review-panel {
+    display: block;
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    padding: 0 var(--spacing-md);
+    background: var(--bg-primary);
+    transition: max-height 0.3s ease, opacity 0.25s ease, padding 0.25s ease;
+}
+.review-panel.visible {
+    max-height: 2000px;
+    opacity: 1;
+    padding: var(--spacing-sm) var(--spacing-md);
+}
+
+.review-header-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: var(--spacing-sm);
+}
+
+.review-header { flex: 1; }
+
+.sensations-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.sensation-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.72rem;
+    font-weight: 500;
+    background: rgba(100, 116, 139, 0.15);
+    color: var(--text-secondary);
+    border: 1px solid rgba(100, 116, 139, 0.25);
+}
+.sensation-badge.visual   { background: rgba(59, 130, 246, 0.12); border-color: rgba(59, 130, 246, 0.3); color: #2563eb; }
+.sensation-badge.tactile  { background: rgba(234, 179, 8, 0.12);  border-color: rgba(234, 179, 8, 0.3);  color: #b45309; }
+.sensation-badge.auditory { background: rgba(34, 197, 94, 0.12);  border-color: rgba(34, 197, 94, 0.3);  color: #16a34a; }
+.sensation-badge.proprioceptive { background: rgba(168, 85, 247, 0.12); border-color: rgba(168, 85, 247, 0.3); color: #7c3aed; }
+
+/* ===== Dimension cards ===== */
+.dimension-card {
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    margin-bottom: var(--spacing-xs);
+    overflow: hidden;
+    cursor: pointer;
+}
+.dimension-card.complete { border-left: 3px solid #22c55e; }
+.dimension-card.incomplete { border-left: 3px solid #f59e0b; }
+
+.dimension-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 10px;
+    background: var(--bg-secondary);
+    font-size: 0.82rem;
+}
+.dimension-card.complete .dimension-header { color: #15803d; }
+.dimension-card.incomplete .dimension-header { color: #92400e; }
+
+.dimension-content {
+    padding: var(--spacing-sm) var(--spacing-md);
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+.dimension-content ul { margin: 4px 0 4px 16px; padding: 0; }
+.dimension-content li { margin-bottom: 2px; }
+
+.what-is-good { margin-bottom: var(--spacing-xs); color: #15803d; }
+.missing-elements { color: #92400e; margin: 4px 0; }
+
+.prompts-list { margin-top: var(--spacing-xs); }
+.prompt-item {
+    padding: 4px 8px;
+    background: rgba(99, 102, 241, 0.06);
+    border-left: 2px solid rgba(99, 102, 241, 0.4);
+    border-radius: 2px;
+    margin-bottom: 4px;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+}
+
+/* ===== Review action buttons ===== */
+.review-actions {
+    display: flex;
+    gap: var(--spacing-sm);
+    margin-top: var(--spacing-sm);
+    flex-wrap: wrap;
+}
+.edit-elicitation-btn {
+    font-size: 0.78rem;
+    padding: 4px 10px;
+    background: rgba(99, 102, 241, 0.1);
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    color: #4f46e5;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+}
+.edit-elicitation-btn:hover { background: rgba(99, 102, 241, 0.2); }
+.mark-complete-btn {
+    font-size: 0.78rem;
+    padding: 4px 10px;
+    background: rgba(34, 197, 94, 0.1);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    color: #16a34a;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+}
+.mark-complete-btn:hover:not(.disabled) { background: rgba(34, 197, 94, 0.2); }
+.mark-complete-btn.disabled { opacity: 0.45; cursor: not-allowed; }
+
+
+/* ===== Elicitation edit modal ===== */
+.elicitation-modal-content {
+    max-width: 640px;
+    width: 90%;
+    overflow: hidden;
+}
+
+.elicitation-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--spacing-md) var(--spacing-lg);
+    background: #cbecff;
+    border-bottom: 1px solid #a8d8f5;
+}
+
+.elicitation-modal-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.elicitation-modal-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 1rem;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    flex-shrink: 0;
+}
+.elicitation-modal-close:hover {
+    background: rgba(0, 0, 0, 0.08);
+    color: var(--text-primary);
+}
+
+.elicitation-modal-body {
+    padding: var(--spacing-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.elicitation-modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-md) var(--spacing-lg);
+    border-top: 1px solid var(--border-color);
+    background: var(--surface-hover);
+}
+
+.elicitation-priority-prompts {
+    background: rgba(0, 120, 200, 0.06);
+    border: 1px solid rgba(0, 120, 200, 0.2);
+    border-radius: var(--radius-sm);
+    padding: var(--spacing-sm) var(--spacing-md);
+    font-size: 0.83rem;
+    color: var(--text-secondary);
+}
+.elicitation-priority-prompts ul {
+    margin: 6px 0 0 16px;
+    padding: 0;
+}
+.elicitation-priority-prompts li {
+    margin-bottom: 4px;
+    color: #0066cc;
+}
+
+.elicitation-textarea-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+#elicitationTextEdit {
+    width: 100%;
+    box-sizing: border-box;
+    font-size: 0.9rem;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    resize: vertical;
+    background: var(--surface-hover);
+    color: var(--text-primary);
+    font-family: inherit;
+    line-height: 1.6;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+#elicitationTextEdit:focus {
+    outline: none;
+    border-color: #5aafde;
+    box-shadow: 0 0 0 3px rgba(203, 236, 255, 0.6);
+}

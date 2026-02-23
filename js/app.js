@@ -29,7 +29,9 @@ const state = {
     segmentEndTime: null,
     segments: [],
     // Cached list of files found in the user's OwnCloud personal folder (populated on select)
-    ownCloudFiles: []
+    ownCloudFiles: [],
+    // Tracks which annotation review panels are open { [annotationId]: boolean }
+    showReviewPanels: {}
 };
 
 // API Base URL and JWT token from iframe query
@@ -114,7 +116,7 @@ function resetInterface() {
         <div class="empty-state">
             <i class="fas fa-film empty-icon"></i>
             <h3>No Video Loaded</h3>
-            <p>Click "Add Local Videos" to get started</p>
+            <p>Click "Upload to OwnCloud" then "Select Video" to get started</p>
         </div>
     `;
 
@@ -204,25 +206,8 @@ async function initializeApp() {
 
     // Load craft selection from localStorage (default to glassblowing)
     state.craft = localStorage.getItem('craft') || 'glassblowing';
-    // Load task selection from localStorage (optional)
-    state.task = localStorage.getItem('task') || '';
-    // Create selectors UI
-    createCraftSelectorUI();
-    await initializeTaskSelector();
-
-    // Reload tasks when craft changes
-    const craftSelect = document.getElementById('craftSelector');
-    if (craftSelect) {
-        craftSelect.addEventListener('change', async () => {
-            state.craft = craftSelect.value;
-            try { localStorage.setItem('craft', state.craft); } catch (_) { }
-            // Reload tasks for the new craft domain
-            const taskSelect = document.getElementById('taskSelect');
-            if (taskSelect) {
-                await loadTasks(taskSelect, state.craft);
-            }
-        });
-    }
+    // Create craft selector UI only (task selector removed)
+    createElicitControlsUI();
 
     // Load existing videos
     await loadVideos();
@@ -242,138 +227,133 @@ async function initializeApp() {
         }
     }
 
+    // Show tutorial automatically for newcomers (non-blocking)
+    maybeShowTutorialForNewcomer().catch(() => {});
+
+    // Check for any uploads interrupted by a previous page navigation (non-blocking)
+    if (_webdavApiUrl) checkAndOfferResumeUploads().catch(e => console.warn('Resume check:', e));
+
     console.log('Application initialized successfully');
 }
 
 // Create a small craft selector UI under the recording controls
-function createCraftSelectorUI() {
+function createElicitControlsUI() {
     try {
         const controls = document.getElementById('recordingControls');
         if (!controls) return;
 
-        // Create container
         const wrapper = document.createElement('div');
-        wrapper.className = 'craft-selector';
+        wrapper.className = 'elicit-controls';
         wrapper.style.margin = '10px 0';
 
-        const label = document.createElement('div');
-        label.textContent = 'Select your craft domain';
-        label.style.fontSize = '0.9rem';
-        label.style.marginBottom = '6px';
+        // --- Craft domain selector ---
+        const craftLabel = document.createElement('div');
+        craftLabel.textContent = 'Select your craft domain';
+        craftLabel.style.fontSize = '0.9rem';
+        craftLabel.style.marginBottom = '6px';
 
-        const select = document.createElement('select');
-        select.id = 'craftSelector';
-        select.style.padding = '6px 8px';
-        select.style.borderRadius = '4px';
-        select.style.border = '1px solid #ccc';
+        const craftSelect = document.createElement('select');
+        craftSelect.id = 'craftSelector';
+        craftSelect.style.padding = '6px 8px';
+        craftSelect.style.borderRadius = '4px';
+        craftSelect.style.border = '1px solid #ccc';
 
-        const opts = [
+        [
             { value: 'glassblowing', label: 'Glassblowing' },
             { value: 'scientific_glassblowing', label: 'Scientific Glassblowing' },
             { value: 'jewelry', label: 'Jewelry' }
-        ];
-
-        opts.forEach(o => {
+        ].forEach(o => {
             const option = document.createElement('option');
             option.value = o.value;
             option.textContent = o.label;
-            select.appendChild(option);
+            craftSelect.appendChild(option);
         });
 
-        // Set current value
-        select.value = state.craft || 'glassblowing';
-
-        // On change, update state and persist
-        select.addEventListener('change', (e) => {
+        craftSelect.value = state.craft || 'glassblowing';
+        craftSelect.addEventListener('change', (e) => {
             state.craft = e.target.value;
             try { localStorage.setItem('craft', state.craft); } catch (e) { }
         });
 
-        wrapper.appendChild(label);
-        wrapper.appendChild(select);
+        wrapper.appendChild(craftLabel);
+        wrapper.appendChild(craftSelect);
+
+        // --- Segment selector ---
+        const segWrapper = document.createElement('div');
+        segWrapper.id = 'segmentSelectorWrapper';
+        segWrapper.style.marginTop = '10px';
+        segWrapper.style.display = 'none'; // hidden until segments exist
+
+        const segLabel = document.createElement('div');
+        segLabel.textContent = 'Select segment';
+        segLabel.style.fontSize = '0.9rem';
+        segLabel.style.marginBottom = '6px';
+
+        const segSelect = document.createElement('select');
+        segSelect.id = 'segmentSelector';
+        segSelect.style.padding = '6px 8px';
+        segSelect.style.borderRadius = '4px';
+        segSelect.style.border = '1px solid #ccc';
+
+        segSelect.addEventListener('change', (e) => {
+            const startTime = parseFloat(e.target.value);
+            if (!isNaN(startTime)) {
+                const videoPlayer = document.getElementById('videoPlayer');
+                if (videoPlayer) {
+                    videoPlayer.pause();
+                    videoPlayer.currentTime = Math.max(0, startTime);
+                }
+            }
+        });
+
+        segWrapper.appendChild(segLabel);
+        segWrapper.appendChild(segSelect);
+        wrapper.appendChild(segWrapper);
 
         // Insert at top of recording controls
         controls.insertBefore(wrapper, controls.firstChild);
     } catch (e) {
-        console.error('Failed to create craft selector UI', e);
+        console.error('Failed to create elicit controls UI', e);
     }
 }
 
-// Task selector with select + add-new input
-async function initializeTaskSelector() {
-    const controls = document.getElementById('recordingControls');
-    if (!controls) return;
+// Update the segment dropdown in the elicit controls to reflect currently loaded segments.
+function refreshSegmentSelector() {
+    const wrapper = document.getElementById('segmentSelectorWrapper');
+    const segSelect = document.getElementById('segmentSelector');
+    if (!wrapper || !segSelect) return;
 
-    const wrapper = document.createElement('div');
-    wrapper.className = 'task-selector';
-    wrapper.style.margin = '10px 0';
+    const segments = state.segments || [];
+    segSelect.innerHTML = '';
 
-    const label = document.createElement('div');
-    label.textContent = 'Task (choose or add)';
-    label.style.fontSize = '0.9rem';
-    label.style.marginBottom = '6px';
-
-    const select = document.createElement('select');
-    select.id = 'taskSelect';
-    select.style.padding = '6px 8px';
-    select.style.borderRadius = '4px';
-    select.style.border = '1px solid #ccc';
-    select.style.minWidth = '240px';
-
-    const addInput = document.createElement('input');
-    addInput.id = 'taskAddInput';
-    addInput.placeholder = 'Type task name';
-    addInput.style.padding = '6px 8px';
-    addInput.style.borderRadius = '4px';
-    addInput.style.border = '1px solid #ccc';
-    addInput.style.marginLeft = '8px';
-    addInput.style.minWidth = '200px';
-
-    const addBtn = document.createElement('button');
-    addBtn.textContent = 'Add Task';
-    addBtn.style.marginLeft = '8px';
-    addBtn.style.padding = '6px 12px';
-    addBtn.style.borderRadius = '4px';
-    addBtn.style.border = '1px solid #ccc';
-    addBtn.style.background = '#f0f0f0';
-    addBtn.style.cursor = 'pointer';
-
-    select.addEventListener('change', (e) => {
-        state.task = e.target.value || '';
-        try { localStorage.setItem('task', state.task); } catch (_) { }
-    });
-
-    addBtn.addEventListener('click', async () => {
-        const value = addInput.value.trim();
-        if (!value) return;
-        try {
-            await createOrSelectTask(value);
-            addInput.value = '';
-        } catch (err) {
-            console.error('Failed to add task', err);
-        }
-    });
-
-    const row = document.createElement('div');
-    row.style.display = 'flex';
-    row.style.alignItems = 'center';
-    row.appendChild(select);
-    row.appendChild(addInput);
-    row.appendChild(addBtn);
-
-    wrapper.appendChild(label);
-    wrapper.appendChild(row);
-
-    const existingCraft = controls.querySelector('.craft-selector');
-    if (existingCraft && existingCraft.nextSibling) {
-        controls.insertBefore(wrapper, existingCraft.nextSibling);
-    } else {
-        controls.insertBefore(wrapper, controls.firstChild);
+    if (segments.length === 0) {
+        wrapper.style.display = 'none';
+        return;
     }
 
-    await loadTasks(select, state.craft);
-    renderTaskOptions(select);
+    // Placeholder option
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = '— choose a segment —';
+    placeholder.disabled = true;
+    placeholder.selected = true;
+    segSelect.appendChild(placeholder);
+
+    segments.forEach(seg => {
+        const opt = document.createElement('option');
+        opt.value = seg.start_time;
+        opt.textContent = seg.name
+            ? `${seg.name} (${formatTime(seg.start_time)} → ${formatTime(seg.end_time)})`
+            : `${formatTime(seg.start_time)} → ${formatTime(seg.end_time)}`;
+        segSelect.appendChild(opt);
+    });
+
+    wrapper.style.display = 'block';
 }
+
+// Task selector removed — only craft domain selection is shown in the Elicit tab.
+// These stubs prevent errors if any legacy code path calls them.
+async function initializeTaskSelector() { /* removed */ }
 
 async function loadTasks(selectEl, craft) {
     try {
@@ -449,6 +429,9 @@ function setupEventListeners() {
 
     // Video selection
     document.getElementById('selectVideoBtn').addEventListener('click', async () => {
+        // Offer resume banners for any uploads interrupted since last page load.
+        if (_webdavApiUrl) checkAndOfferResumeUploads().catch(e => console.warn('Resume check:', e));
+
         // When user opens the video selector, proactively PROPFIND the user's OwnCloud personal folder
         // so the UI can offer remote files without additional browsing steps.
         if (_webdavApiUrl) {
@@ -471,12 +454,6 @@ function setupEventListeners() {
             showToast('No Videos', 'Please upload videos first', 'info');
         }
     });
-
-    // Add Videos - opens file picker for upload
-    document.getElementById('addVideosBtn').addEventListener('click', handleAddLocalVideos);
-
-    // Handle video file selection for upload
-    document.getElementById('videoFileInput').addEventListener('change', handleLocalVideoSelection);
 
     // Recording
     document.getElementById('recordBtn').addEventListener('click', toggleRecording);
@@ -613,21 +590,53 @@ function handleWebSocketMessage(message) {
             updateExtendedTranscriptStatus(message.annotation_id, 'failed');
             break;
 
-        // case 'tagging_status':
-        //     updateTaggingStatus(message.annotation_id, message.status);
-        //     break;
+        case 'judge_status':
+            updateJudgeStatus(message.annotation_id, message.status);
+            break;
 
-        // case 'tagging_complete':
-        //     updateTags(message.annotation_id, message.tags);
-        //     if (state.currentVideoId) {
-        //         loadAnnotations(state.currentVideoId);
-        //     }
-        //     break;
+        case 'judge_complete':
+            updateJudgeDecision(message.annotation_id, message.judge_decision);
+            break;
 
-        // case 'tagging_error':
-        //     showToast('Tagging Error', message.error, 'error');
-        //     updateTaggingStatus(message.annotation_id, 'failed');
-        //     break;
+        case 'judge_error':
+            updateJudgeStatus(message.annotation_id, 'failed');
+            break;
+
+        case 'tagging_status':
+            updateTaggingStatus(message.annotation_id, message.status);
+            break;
+
+        case 'tagging_complete':
+            updateTags(message.annotation_id, message.tags);
+            break;
+
+        case 'tagging_error':
+            updateTaggingStatus(message.annotation_id, 'failed');
+            break;
+
+        case 'task_detection_status':
+            updateTaskDetectionStatus(message.annotation_id, message.status);
+            break;
+
+        case 'task_detection_complete':
+            updateTaskDetected(message.annotation_id, message.detected_task, message.confidence);
+            break;
+
+        case 'task_detection_error':
+            updateTaskDetectionStatus(message.annotation_id, 'failed');
+            break;
+
+        case 'review_status':
+            updateReviewStatus(message.annotation_id, message.status);
+            break;
+
+        case 'review_complete':
+            updateReviewResults(message.annotation_id, message.review_results, message.is_salient);
+            break;
+
+        case 'review_error':
+            updateReviewStatus(message.annotation_id, 'failed');
+            break;
 
         case 'annotation_deleted':
             if (state.currentVideoId) {
@@ -651,32 +660,6 @@ async function checkMicrophonePermission() {
     }
 }
 
-// Handle Add Local Videos button click
-async function handleAddLocalVideos() {
-    const input = document.getElementById('videoFileInput');
-    if (input) {
-        input.value = '';
-        input.click();
-    }
-}
-
-// Local Video Selection - Register local videos without copying
-async function handleLocalVideoSelection(event) {
-    const files = Array.from(event.target.files);
-
-    if (files.length === 0) return;
-
-    try {
-        await uploadVideos(files);
-        await loadVideos();
-        showToast('Upload Complete', `${files.length} video(s) uploaded`, 'success');
-    } catch (error) {
-        console.error('Video upload error:', error);
-        showToast('Upload Error', error.message, 'error');
-    } finally {
-        event.target.value = '';
-    }
-}
 
 function ensureUploadPanel() {
     let panel = document.getElementById('uploadProgressPanel');
@@ -711,7 +694,7 @@ function ensureUploadPanel() {
     return panel;
 }
 
-function updateUploadRow(fileName, percent) {
+function updateUploadRow(fileName, percent, statusText, isError) {
     const list = document.getElementById('uploadProgressList');
     if (!list) return;
 
@@ -722,6 +705,7 @@ function updateUploadRow(fileName, percent) {
         row.style.marginBottom = '10px';
 
         const label = document.createElement('div');
+        label.className = 'upload-row-label';
         label.textContent = fileName;
         label.style.fontSize = '12px';
         label.style.marginBottom = '4px';
@@ -740,14 +724,40 @@ function updateUploadRow(fileName, percent) {
         fill.style.width = '0%';
         fill.style.background = '#2a7ae2';
         bar.appendChild(fill);
-
         row.appendChild(bar);
+
+        const status = document.createElement('div');
+        status.className = 'upload-row-status';
+        status.style.fontSize = '11px';
+        status.style.marginTop = '3px';
+        status.style.color = '#666';
+        row.appendChild(status);
+
         list.appendChild(row);
     }
 
     const fill = row.querySelector('.upload-progress-fill');
     if (fill) {
         fill.style.width = `${percent}%`;
+        fill.style.background = isError ? '#dc3545' : '#2a7ae2';
+    }
+
+    const status = row.querySelector('.upload-row-status');
+    if (status && statusText !== undefined) {
+        status.textContent = statusText;
+        status.style.color = isError ? '#dc3545' : '#666';
+    }
+}
+
+function removeUploadRow(fileName) {
+    const list = document.getElementById('uploadProgressList');
+    if (!list) return;
+    const row = list.querySelector(`[data-file="${CSS.escape(fileName)}"]`);
+    if (row) row.remove();
+    // Hide the panel if no rows remain
+    if (!list.children.length) {
+        const panel = document.getElementById('uploadProgressPanel');
+        if (panel) panel.remove();
     }
 }
 
@@ -826,8 +836,12 @@ function showVideoModal() {
 
     container.innerHTML = '';
 
+    // Build set of filenames/paths already loaded into the plugin (for greying out OwnCloud items)
+    const loadedFilenames = new Set(state.videos.map(v => v.filename));
+
+    // ── Loaded videos (plugin-side records) ─────────────────────────────────
     if (state.videos.length === 0) {
-        container.innerHTML = '<p class="empty-state">No videos available</p>';
+        container.innerHTML = '<p class="empty-state" style="color:#999;font-size:0.9rem;padding:0.5rem 0;">No videos loaded yet. Click an OwnCloud file below to load it.</p>';
     } else {
         state.videos.forEach(video => {
             const item = document.createElement('div');
@@ -837,12 +851,14 @@ function showVideoModal() {
             }
 
             item.innerHTML = `
-                <div class="video-list-name">${video.filename}</div>
+                <div class="video-list-name">${escapeHtml(video.filename)}</div>
                 <div class="video-list-meta">
                     ${formatFileSize(video.file_size)} • ${video.annotation_count} elicitations
                 </div>
                 <div class="video-list-actions">
-                    <button class="btn btn-icon btn-small btn-danger video-delete-btn" title="Delete video" onclick="event.stopPropagation(); deleteVideo(${video.id})">
+                    <button class="btn btn-icon btn-small btn-danger video-delete-btn"
+                        title="Remove from plugin (does not delete OwnCloud file)"
+                        onclick="event.stopPropagation(); deleteVideo(${video.id})">
                         <i class="fas fa-trash"></i>
                     </button>
                 </div>
@@ -856,7 +872,7 @@ function showVideoModal() {
 
             container.appendChild(item);
 
-            // Load and render segments for this video (show nested under the video entry)
+            // Fetch and render segments nested under this video entry
             (async () => {
                 try {
                     const resp = await fetch(`${API_BASE}/api/segments/video/${video.id}`);
@@ -868,7 +884,9 @@ function showVideoModal() {
                     segContainer.className = 'video-segments-list';
                     segContainer.innerHTML = segs.map(seg => `
                         <div class="video-segment-item">
-                            <button class="btn btn-small" onclick="loadVideoAndSegment(${video.id}, ${seg.start_time})"><i class="fas fa-play"></i> ${formatTime(seg.start_time)} → ${formatTime(seg.end_time)}</button>
+                            <button class="btn btn-small" onclick="loadVideoAndSegment(${video.id}, ${seg.start_time})">
+                                <i class="fas fa-play"></i> ${formatTime(seg.start_time)} → ${formatTime(seg.end_time)}
+                            </button>
                             <span class="segment-name">${escapeHtml(seg.name || '')}</span>
                         </div>
                     `).join('');
@@ -879,19 +897,120 @@ function showVideoModal() {
         });
     }
 
-    // If OwnCloud scanning was performed, render its files inside this modal for selection
+    // ── OwnCloud personal folder ─────────────────────────────────────────────
     const ownCloudArea = document.getElementById('videoModalOwnCloudArea');
     if (ownCloudArea) {
         if (state.ownCloudFiles && state.ownCloudFiles.length > 0) {
             ownCloudArea.style.display = 'block';
-            // Reuse existing renderer but target the video-modal container
-            renderOwnCloudItems(state.ownCloudFiles, '/', 'videoModalOwnCloudFilesList');
+            renderOwnCloudItemsForModal(state.ownCloudFiles, loadedFilenames);
         } else {
             ownCloudArea.style.display = 'none';
         }
     }
 
     modal.classList.add('active');
+}
+
+/**
+ * Render OwnCloud files inside the Select Video modal.
+ * Files already loaded into the plugin are shown greyed-out (not_loadable).
+ * A trash icon on each item deletes the OwnCloud file (permanent).
+ */
+function renderOwnCloudItemsForModal(files, loadedFilenames) {
+    const listEl = document.getElementById('videoModalOwnCloudFilesList');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+
+    const videoFiles = files.filter(f => f.type === 'file');
+
+    if (videoFiles.length === 0) {
+        listEl.innerHTML = '<p style="color:#999;font-size:0.85rem;padding:0.5rem;">No video files found in your OwnCloud folder.</p>';
+        return;
+    }
+
+    videoFiles.forEach(f => {
+        const alreadyLoaded = loadedFilenames.has(f.name);
+        const item = document.createElement('div');
+        item.style.cssText = `
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0.5rem 0.75rem; border-bottom: 1px solid #eee; gap: 0.5rem;
+            ${alreadyLoaded ? 'opacity:0.45; pointer-events:none;' : 'cursor:pointer;'}
+        `;
+        if (!alreadyLoaded) {
+            item.style.pointerEvents = 'auto';
+            item.addEventListener('click', (e) => {
+                if (e.target.closest('.oc-delete-btn')) return;
+                const videoUrl = f.url || f.href || f.path || f.name;
+                linkOwnCloudVideo(f.name, f.size || 0, videoUrl);
+                closeVideoModal();
+            });
+        }
+
+        item.innerHTML = `
+            <div style="display:flex;align-items:center;gap:0.6rem;min-width:0;flex:1;">
+                <i class="fas fa-video" style="color:${alreadyLoaded ? '#aaa' : '#0066cc'};flex-shrink:0;"></i>
+                <div style="min-width:0;">
+                    <div style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(f.name)}</div>
+                    <div style="font-size:0.8rem;color:#888;">${f.size ? formatFileSize(f.size) : ''}</div>
+                </div>
+                ${alreadyLoaded ? '<span style="font-size:0.75rem;color:#888;margin-left:auto;white-space:nowrap;">already loaded</span>' : ''}
+            </div>
+            <button class="btn btn-icon btn-small btn-danger oc-delete-btn"
+                title="Delete from OwnCloud (permanent)"
+                style="flex-shrink:0;pointer-events:auto;">
+                <i class="fas fa-trash"></i>
+            </button>
+        `;
+        // Attach delete handler via data attributes (avoids HTML-attribute quoting issues with JSON.stringify)
+        const deleteBtn = item.querySelector('.oc-delete-btn');
+        if (deleteBtn) {
+            deleteBtn._ocName = f.name;
+            deleteBtn._ocPath = f.path || f.href || '';
+            deleteBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                deleteOwnCloudFile(e.currentTarget._ocName, e.currentTarget._ocPath);
+            });
+        }
+
+        listEl.appendChild(item);
+    });
+}
+
+/**
+ * Delete an OwnCloud file via the WebDAV API proxy.
+ * This is the ONLY way users can delete their OwnCloud files from within the plugin.
+ */
+async function deleteOwnCloudFile(filename, path) {
+    if (!confirm(`Delete "${filename}" from OwnCloud?\n\nThis is permanent and cannot be undone.`)) return;
+    if (!_webdavApiUrl) { showToast('Error', 'WebDAV API not configured', 'error'); return; }
+    try {
+        showLoading(`Deleting ${filename} from OwnCloud…`);
+        const resp = await fetch(`${_webdavApiUrl}?action=delete&path=${encodeURIComponent(path || filename)}`, { method: 'GET' });
+        hideLoading();
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || data.error) {
+            throw new Error(data.error || `HTTP ${resp.status}`);
+        }
+        showToast('Deleted', `${filename} removed from OwnCloud`, 'success');
+
+        // Also remove the local plugin record if this file was already registered
+        const linkedVideo = state.videos.find(v => v.filename === filename && v.source_type === 'webdav');
+        if (linkedVideo) {
+            try {
+                await fetch(`${API_BASE}/api/videos/${linkedVideo.id}?force=true`, { method: 'DELETE' });
+            } catch (_) { /* best-effort */ }
+            await loadVideos();
+        }
+
+        // Refresh OwnCloud file list and re-render modal
+        await scanUserOwnCloudFolder();
+        const loadedFilenames = new Set(state.videos.map(v => v.filename));
+        renderOwnCloudItemsForModal(state.ownCloudFiles, loadedFilenames);
+    } catch (err) {
+        hideLoading();
+        console.error('OwnCloud delete failed', err);
+        showToast('Error', `Failed to delete: ${err.message}`, 'error');
+    }
 }
 
 function closeVideoModal() {
@@ -952,86 +1071,336 @@ async function openOwnCloudModal() {
     }
 }
 
+// ── Resumable Upload State ────────────────────────────────────────────────────
+// Persists chunked-upload progress to localStorage so a page navigation mid-upload
+// does not lose everything. The OwnCloud session folder (MKCOL'd under /uploads/)
+// survives page close; on return the client can verify it and resume from last offset.
+//
+// localStorage key: oc_pending_upload_{encodeURIComponent(filename)}
+// Value JSON: { uploadId, filename, filesize, nextOffset, startedAt }
+// nextOffset is written BEFORE each chunk PUT — if the page closes during a PUT,
+// the worst case is that chunk is re-sent (OwnCloud PUT is idempotent by offset).
+
+function saveUploadState(filename, uploadId, filesize, nextOffset) {
+    try {
+        localStorage.setItem(
+            'oc_pending_upload_' + encodeURIComponent(filename),
+            JSON.stringify({ uploadId, filename, filesize, nextOffset, startedAt: Date.now() })
+        );
+    } catch (e) { console.warn('saveUploadState failed', e); }
+}
+
+function clearUploadState(filename) {
+    try { localStorage.removeItem('oc_pending_upload_' + encodeURIComponent(filename)); }
+    catch (e) { console.warn('clearUploadState failed', e); }
+}
+
+function loadPendingUploads() {
+    const pending = [];
+    try {
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith('oc_pending_upload_')) {
+                try {
+                    const val = JSON.parse(localStorage.getItem(key));
+                    if (val && val.uploadId && val.filename) pending.push(val);
+                } catch (_) { localStorage.removeItem(key); }
+            }
+        }
+    } catch (e) { console.warn('loadPendingUploads failed', e); }
+    return pending;
+}
+
 /**
- * Upload a file to OwnCloud via the PHP proxy (HTTP/1.1, avoids ERR_HTTP2_PROTOCOL_ERROR).
- * Shows inline progress in the OwnCloud modal.
+ * Check localStorage for interrupted uploads, verify each against OwnCloud via
+ * chunkstatus, and show a resume banner for any that still have a live session.
+ * Called from initializeApp() and from the selectVideoBtn click handler.
  */
-async function uploadToOwnCloud(file) {
+async function checkAndOfferResumeUploads() {
+    if (!_webdavApiUrl) return;
+    const pending = loadPendingUploads();
+    for (const saved of pending) {
+        try {
+            const params = new URLSearchParams({ action: 'chunkstatus', upload_id: saved.uploadId });
+            const res  = await fetch(`${_webdavApiUrl}?${params}`, { method: 'GET' });
+            const data = await res.json();
+            if (!data.exists) { clearUploadState(saved.filename); continue; }
+
+            // Compute resume offset from what OwnCloud has confirmed
+            let resumeOffset = saved.nextOffset;
+            if (data.chunks && data.chunks.length > 0) {
+                const ocNext = Math.max(...data.chunks) + CHUNK_SIZE;
+                resumeOffset = Math.min(Math.max(ocNext, saved.nextOffset), saved.filesize);
+            }
+            _showResumeBanner(saved.filename, saved.filesize,
+                { uploadId: saved.uploadId, nextOffset: resumeOffset });
+        } catch (e) { console.warn('Resume check error for', saved.filename, e); }
+    }
+}
+
+/**
+ * Render a "resume upload" banner inside the floating upload panel.
+ * The user must re-select the file (browser security: File objects don't survive navigation).
+ */
+function _showResumeBanner(filename, filesize, resumeState) {
+    const bannerId = 'resume-banner-' + encodeURIComponent(filename);
+    if (document.getElementById(bannerId)) return;
+
+    ensureUploadPanel();
+    const list = document.getElementById('uploadProgressList');
+    if (!list) return;
+
+    const resumedMB = (resumeState.nextOffset / 1048576).toFixed(1);
+    const totalMB   = (filesize / 1048576).toFixed(1);
+    const shortName = filename.length > 35 ? filename.slice(0, 32) + '...' : filename;
+
+    const banner = document.createElement('div');
+    banner.id = bannerId;
+    banner.style.cssText = 'margin-bottom:10px;padding:8px;background:#fff3cd;border:1px solid #ffc107;border-radius:6px;font-size:0.85rem;';
+
+    const msg = document.createElement('div');
+    msg.style.marginBottom = '4px';
+    msg.textContent = `Incomplete upload: ${shortName} (${resumedMB} / ${totalMB} MB done)`;
+    banner.appendChild(msg);
+
+    const hint = document.createElement('div');
+    hint.style.cssText = 'color:#6c757d;font-size:0.78rem;margin-bottom:6px;';
+    hint.textContent = 'Select the same file again to resume from where it stopped.';
+    banner.appendChild(hint);
+
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex;gap:6px;';
+
+    const resumeBtn = document.createElement('button');
+    resumeBtn.textContent = 'Resume';
+    resumeBtn.style.cssText = 'padding:4px 10px;background:#0066cc;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.82rem;';
+    resumeBtn.addEventListener('click', () => {
+        const fi = document.createElement('input');
+        fi.type = 'file';
+        fi.accept = 'video/*';
+        fi.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            if (file.name !== filename) {
+                showToast('Resume', `Please select "${filename}" to resume.`, 'error'); return;
+            }
+            if (file.size !== filesize) {
+                showToast('Resume', 'File size mismatch — select the exact same file.', 'error'); return;
+            }
+            banner.remove();
+            uploadToOwnCloud(file, resumeState);
+        });
+        fi.click();
+    });
+
+    const dismissBtn = document.createElement('button');
+    dismissBtn.textContent = 'Dismiss';
+    dismissBtn.style.cssText = 'padding:4px 10px;background:#6c757d;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.82rem;';
+    dismissBtn.addEventListener('click', () => {
+        clearUploadState(filename);
+        banner.remove();
+        const l = document.getElementById('uploadProgressList');
+        if (l && !l.children.length) {
+            const panel = document.getElementById('uploadProgressPanel');
+            if (panel) panel.remove();
+        }
+    });
+
+    btnRow.appendChild(resumeBtn);
+    btnRow.appendChild(dismissBtn);
+    banner.appendChild(btnRow);
+    list.appendChild(banner);
+}
+// ── End Resumable Upload State ─────────────────────────────────────────────────
+
+/**
+ * Upload a file to OwnCloud via the PHP proxy using OwnCloud DAV chunking 1.0.
+ * Chunks are sent sequentially (10 MB each) so no single request exceeds OwnCloud's
+ * per-request body limit. Progress is shown in the fixed upload panel; the upload
+ * button stays enabled so the user can start additional uploads concurrently.
+ * Pass resumeState = { uploadId, nextOffset } to resume an interrupted upload.
+ */
+const CHUNK_SIZE = 10 * 1024 * 1024; // 10 MB per chunk
+
+async function uploadToOwnCloud(file, resumeState = null) {
     if (!_webdavApiUrl) { showToast('Error', 'WebDAV API not configured', 'error'); return; }
 
-    const progressArea = document.getElementById('ownCloudUploadProgress');
-    const bar          = document.getElementById('ownCloudUploadBar');
-    const pctEl        = document.getElementById('ownCloudUploadPct');
-    const nameEl       = document.getElementById('ownCloudUploadFilename');
-    const statusEl     = document.getElementById('ownCloudUploadStatus');
+    // Dismiss any existing resume banner for this file (fresh start or user-initiated resume).
+    const _existBanner = document.getElementById('resume-banner-' + encodeURIComponent(file.name));
+    if (_existBanner) _existBanner.remove();
 
-    const shortName = file.name.length > 40 ? file.name.slice(0, 37) + '…' : file.name;
-    nameEl.textContent  = shortName;
-    pctEl.textContent   = '0%';
-    bar.style.width     = '0%';
-    statusEl.textContent= '';
-    progressArea.style.display = 'block';
-    document.getElementById('ownCloudUploadBtn').disabled = true;
+    // Each upload gets its own row in the floating panel — button stays enabled.
+    ensureUploadPanel();
+    // Reuse the existing OwnCloud session when resuming; generate a new one otherwise.
+    const sessionUploadId = resumeState
+        ? resumeState.uploadId
+        : ('oc-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8));
+    updateUploadRow(file.name, 0, resumeState ? 'Resuming…' : 'Preparing…');
+
+    // Per-file row in the inline modal upload list.
+    const uploadList = document.getElementById('ownCloudUploadList');
+    let inlineRow = null;
+    let inlineBar = null;
+    let inlinePct = null;
+    let inlineStatus = null;
+
+    if (uploadList) {
+        uploadList.style.display = 'block';
+        inlineRow = document.createElement('div');
+        inlineRow.dataset.file = file.name;
+        inlineRow.style.cssText = 'margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid #e9ecef;';
+
+        const header = document.createElement('div');
+        header.style.cssText = 'display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:3px;';
+        const nameEl = document.createElement('span');
+        nameEl.style.cssText = 'overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:75%;';
+        nameEl.textContent = file.name.length > 40 ? file.name.slice(0, 37) + '…' : file.name;
+        inlinePct = document.createElement('span');
+        inlinePct.style.fontWeight = '600';
+        inlinePct.textContent = '0%';
+        header.appendChild(nameEl);
+        header.appendChild(inlinePct);
+        inlineRow.appendChild(header);
+
+        const barTrack = document.createElement('div');
+        barTrack.style.cssText = 'height:6px; background:#dee2e6; border-radius:999px; overflow:hidden;';
+        inlineBar = document.createElement('div');
+        inlineBar.style.cssText = 'height:100%; width:0; background:#0066cc; transition:width 0.2s;';
+        barTrack.appendChild(inlineBar);
+        inlineRow.appendChild(barTrack);
+
+        inlineStatus = document.createElement('div');
+        inlineStatus.style.cssText = 'font-size:0.8rem; color:#666; margin-top:3px;';
+        inlineRow.appendChild(inlineStatus);
+
+        uploadList.appendChild(inlineRow);
+    }
+
+    const updateProgress = (pct, statusText) => {
+        updateUploadRow(file.name, pct, statusText);
+        if (inlineBar) inlineBar.style.width = pct + '%';
+        if (inlinePct) inlinePct.textContent = pct + '%';
+        if (inlineStatus) inlineStatus.textContent = statusText || '';
+    };
 
     const setError = (msg) => {
-        statusEl.textContent = '✗ ' + msg;
-        statusEl.style.color = '#dc3545';
-        bar.style.background = '#dc3545';
-        document.getElementById('ownCloudUploadBtn').disabled = false;
+        updateUploadRow(file.name, 0, '✗ ' + msg, true);
+        if (inlineStatus) { inlineStatus.textContent = '✗ ' + msg; inlineStatus.style.color = '#dc3545'; }
+        if (inlineBar) inlineBar.style.background = '#dc3545';
     };
 
     try {
-        // Step 1: Ensure the user's upload folder exists
+        // Step 1: Ensure destination folder exists on OwnCloud.
         await fetch(`${_webdavApiUrl}?action=ensureuserfolder`, { method: 'GET' });
 
-        // Step 2: Send file to PHP proxy (multipart POST → curl PUT to OwnCloud over HTTP/1.1)
-        const formData = new FormData();
-        formData.append('file', file, file.name);
+        // Step 2: Create the OwnCloud upload session (MKCOL /uploads/{uuid}/{session_id}/).
+        // Skip when resuming — the session folder already exists on OwnCloud.
+        if (!resumeState) {
+            const startParams = new URLSearchParams({ action: 'chunkstart', upload_id: sessionUploadId, filename: file.name });
+            const startRes = await fetch(`${_webdavApiUrl}?${startParams}`, { method: 'POST' });
+            const startData = await startRes.json();
+            if (!startData.success) throw new Error(startData.error || 'Failed to start chunked upload');
+        }
 
-        // Use XHR so we can track upload progress
-        const uploaded = await new Promise((resolve, reject) => {
-            const xhr = new XMLHttpRequest();
-            xhr.open('POST', `${_webdavApiUrl}?action=proxyupload&filename=${encodeURIComponent(file.name)}`);
-            xhr.upload.addEventListener('progress', (evt) => {
-                if (!evt.lengthComputable) return;
-                const pct = Math.round((evt.loaded / evt.total) * 100);
-                bar.style.width = pct + '%';
-                pctEl.textContent = pct + '%';
-                statusEl.textContent = `${(evt.loaded / 1048576).toFixed(1)} / ${(evt.total / 1048576).toFixed(1)} MB`;
+        // Step 3: Send chunks sequentially, starting from resumeState.nextOffset when resuming.
+        const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+        const startChunk  = resumeState ? Math.floor(resumeState.nextOffset / CHUNK_SIZE) : 0;
+        for (let i = startChunk; i < totalChunks; i++) {
+            const offset = i * CHUNK_SIZE;
+            const chunk  = file.slice(offset, offset + CHUNK_SIZE);
+            const fd     = new FormData();
+            fd.append('chunk', chunk, file.name);
+
+            const chunkParams = new URLSearchParams({ action: 'chunkput', upload_id: sessionUploadId, offset: String(offset) });
+            const pct = Math.round((offset / file.size) * 100);
+            const uploadedMB = (offset / 1048576).toFixed(1);
+            const totalMB    = (file.size  / 1048576).toFixed(1);
+            updateProgress(pct, `${uploadedMB} / ${totalMB} MB`);
+
+            // Persist state BEFORE sending — if the page closes mid-PUT, this offset is recoverable.
+            saveUploadState(file.name, sessionUploadId, file.size, offset);
+
+            await new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', `${_webdavApiUrl}?${chunkParams}`);
+                xhr.addEventListener('load', () => {
+                    try {
+                        const res = JSON.parse(xhr.responseText);
+                        if (xhr.status >= 200 && xhr.status < 300 && res.success) resolve(res);
+                        else reject(new Error(res.error || `Chunk HTTP ${xhr.status}`));
+                    } catch (e) { reject(new Error('Invalid chunk response')); }
+                });
+                xhr.addEventListener('error', () => reject(new Error('Network error on chunk ' + i)));
+                xhr.send(fd);
             });
-            xhr.addEventListener('load', () => {
-                try {
-                    const res = JSON.parse(xhr.responseText);
-                    if (xhr.status >= 200 && xhr.status < 300 && res.success) {
-                        resolve(res);
-                    } else {
-                        reject(new Error(res.error || `HTTP ${xhr.status}`));
-                    }
-                } catch (e) { reject(new Error('Invalid server response')); }
-            });
-            xhr.addEventListener('error', () => reject(new Error('Network error during upload')));
-            xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')));
-            xhr.send(formData);
-        });
+        }
 
-        bar.style.width = '100%';
-        pctEl.textContent = '100%';
-        statusEl.textContent = 'Registering…';
+        // Step 4: MOVE assembled chunks to final destination and register in Moodle DB.
+        updateProgress(99, 'Assembling…');
+        if (inlinePct) inlinePct.innerHTML = '<i class="fas fa-spinner fa-spin" style="font-size:0.9em;"></i>';
 
-        // Step 3: Register in Moodle DB (PHP verifies via PROPFIND)
-        const regParams = new URLSearchParams({
-            action:    'registerupload',
+        const finishParams = new URLSearchParams({
+            action:    'chunkfinish',
+            upload_id: sessionUploadId,
             filename:  file.name,
-            file_path: uploaded.file_path,
             filesize:  String(file.size),
         });
-        const regRes  = await fetch(`${_webdavApiUrl}?${regParams}`, { method: 'POST' });
-        const regData = await regRes.json();
-        if (regData.error) throw new Error(regData.error);
 
-        const moodleVideoId = regData.moodle_id;
+        let finishData = null;
+        try {
+            const finishRes = await fetch(`${_webdavApiUrl}?${finishParams}`, { method: 'POST' });
+            const text = await finishRes.text();
+            try { finishData = JSON.parse(text); } catch (_) { /* non-JSON body — see below */ }
+        } catch (netErr) {
+            // network-level failure — fall through to assembly polling
+        }
 
-        // Step 4: Register in FastAPI
+        // If chunkfinish returned a gateway error (504 etc.) or non-JSON, OwnCloud may still
+        // be assembling chunks. Poll registerupload every 10 s with no cap — assembly of a
+        // 6 GB file can take many minutes. Only give up after 15 min of no progress.
+        if (!finishData?.success) {
+            if (finishData?.error && !finishData.error.match(/gateway|timeout|504/i)) {
+                // Definitive API error — clear state and surface it
+                clearUploadState(file.name);
+                throw new Error(finishData.error);
+            }
+            const assemblyStart   = Date.now();
+            const MAX_ASSEMBLY_MS = 15 * 60 * 1000; // 15 minutes
+            while (true) {
+                await new Promise(r => setTimeout(r, 10_000)); // 10 s between polls
+                const elapsed = Math.round((Date.now() - assemblyStart) / 1000);
+                updateProgress(99, `Assembling… (${elapsed} s)`);
+                if (inlinePct) inlinePct.innerHTML =
+                    `<i class="fas fa-spinner fa-spin" style="font-size:0.9em;"></i> ${elapsed}s`;
+                const checkParams = new URLSearchParams({
+                    action:    'registerupload',
+                    filename:  file.name,
+                    file_path: `Moodle_OwnCloud_Storage/Users/${window.USER_ID || ''}/${file.name}`,
+                    filesize:  String(file.size),
+                });
+                try {
+                    const checkRes  = await fetch(`${_webdavApiUrl}?${checkParams}`, { method: 'GET' });
+                    const checkData = JSON.parse(await checkRes.text());
+                    if (checkData.success) { finishData = checkData; break; }
+                    // 422 = "not found yet" — keep polling
+                    if (checkRes.status !== 422 && checkData.error && !checkData.error.match(/not found/i)) {
+                        clearUploadState(file.name);
+                        throw new Error(checkData.error || `Unexpected status ${checkRes.status}`);
+                    }
+                } catch (pollErr) {
+                    if (pollErr.message?.startsWith('Unexpected')) throw pollErr;
+                    console.warn('Assembly poll transient error:', pollErr.message);
+                }
+                if (Date.now() - assemblyStart > MAX_ASSEMBLY_MS) {
+                    // Do NOT clear state — chunks are on OwnCloud; user can retry on next visit.
+                    throw new Error('Assembly exceeded 15 minutes — check OwnCloud server load');
+                }
+            }
+        }
+
+        const moodleVideoId = finishData.moodle_id;
+
+        // Step 5: Register in FastAPI backend.
         if (moodleVideoId) {
             const streamUrl = `${_moodleWwwRoot}/local/videoelicit/stream.php?videoid=${moodleVideoId}`;
             await fetch(`${API_BASE}/api/videos/webdav/register`, {
@@ -1046,18 +1415,26 @@ async function uploadToOwnCloud(file) {
             });
         }
 
-        statusEl.textContent = '✓ Upload complete!';
-        statusEl.style.color = '#28a745';
+        // Clear persisted state — upload finished successfully.
+        clearUploadState(file.name);
 
-        // Refresh browser listing
+        updateProgress(100, '✓ Upload complete!');
+        if (inlineStatus) { inlineStatus.textContent = '✓ Upload complete!'; inlineStatus.style.color = '#28a745'; }
+
         await browseOwnCloudDirectory('/');
         await loadVideos();
+
+        setTimeout(() => {
+            removeUploadRow(file.name);
+            if (inlineRow && inlineRow.parentNode) {
+                inlineRow.remove();
+                if (uploadList && !uploadList.children.length) uploadList.style.display = 'none';
+            }
+        }, 4000);
 
     } catch (err) {
         console.error('OwnCloud upload error:', err);
         setError(err.message || 'Upload failed');
-    } finally {
-        document.getElementById('ownCloudUploadBtn').disabled = false;
     }
 }
 
@@ -1432,6 +1809,15 @@ async function loadVideo(videoId) {
         // Load annotations
         await loadAnnotations(videoId);
 
+        // Fetch segments and populate the elicit-controls segment selector
+        try {
+            const segResp = await fetch(`${API_BASE}/api/segments/video/${videoId}`);
+            if (segResp.ok) {
+                state.segments = await segResp.json() || [];
+                refreshSegmentSelector();
+            }
+        } catch (_) { /* non-fatal */ }
+
         showToast('Video Loaded', video.filename, 'success');
     } catch (error) {
         console.error('Error loading video:', error);
@@ -1634,7 +2020,14 @@ async function loadAnnotations(videoId) {
         const response = await fetch(`${API_BASE}/api/annotations?video_id=${videoId}`);
         if (!response.ok) throw new Error('Failed to load annotations');
 
-        state.annotations = await response.json();
+        const raw = await response.json();
+        // tags may arrive as a JSON string — parse it to an array for the renderer
+        state.annotations = raw.map(ann => {
+            if (ann.tags && typeof ann.tags === 'string') {
+                try { ann.tags = JSON.parse(ann.tags); } catch (e) { ann.tags = []; }
+            }
+            return ann;
+        });
 
         renderAnnotations();
         renderTimeline();
@@ -1663,7 +2056,6 @@ function renderAnnotations() {
     // Sort annotations based on current sort option
     const sortedAnnotations = getSortedAnnotations();
 
-    // Render sorted annotations
     sortedAnnotations.forEach(annotation => {
         const item = document.createElement('div');
         item.className = 'annotation-item';
@@ -1673,84 +2065,149 @@ function renderAnnotations() {
         const statusText = getStatusText(annotation.transcription_status);
         const statusClass = annotation.transcription_status;
 
-        // Extended transcript UI logic
-        let extendedTranscriptHTML = '';
-        if (annotation.transcription && annotation.transcription_status === 'completed') {
-            if (annotation.extended_transcript_status === 'processing') {
-                extendedTranscriptHTML = `
-                    <div class="extended-transcript-progress">
-                        <i class="fa-solid fa-hammer"></i>
-                        <span class="ellipsis">
-                            <span></span>
-                            <span></span>
-                            <span></span>
-                        </span>
-                    </div>
-                `;
-            } else if (annotation.extended_transcript_status === 'completed' && annotation.extended_transcript) {
-                const feedbackClass = annotation.feedback !== null ?
-                    (annotation.feedback === 1 ? 'thumbs-up' : 'thumbs-down') : '';
-                const extendedHtml = mdToHtml(annotation.extended_transcript);
-                extendedTranscriptHTML = `
-                    <div class="extended-transcript-container">
-                        <div class="extended-transcript-toggle" onclick="toggleExtendedTranscript(${annotation.id})">
-                            <i class="fa-solid fa-caret-down"></i>
-                            <span>See Extended Transcript</span>
-                        </div>
-                        <div class="extended-transcript-content" id="extended-${annotation.id}">
-                            <div class="md">${extendedHtml}</div>
-                            <div class="feedback-buttons">
-                                <button class="feedback-btn thumbs-up ${annotation.feedback === 1 ? 'active' : ''}" 
-                                    onclick="handleFeedback(${annotation.id}, 1, event)">
-                                    <i class="fa-solid fa-thumbs-up"></i>
-                                    <span>Utile</span>
-                                </button>
-                                <button class="feedback-btn thumbs-down ${annotation.feedback === 0 ? 'active' : ''}" 
-                                    onclick="handleFeedback(${annotation.id}, 0, event)">
-                                    <i class="fa-solid fa-thumbs-down"></i>
-                                    <span>Pas utile</span>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                `;
+        // --- Task badge: user-set task takes priority, falls back to detected_task ---
+        const displayTask = annotation.task || annotation.detected_task;
+        let taskBadgeHTML = '';
+        if (displayTask) {
+            taskBadgeHTML = `
+                <span class="detected-task-badge editable" onclick="startEditTask(${annotation.id})" title="Click to edit task">
+                    <strong id="task-display-${annotation.id}">${escapeHtml(displayTask)}</strong>
+                    <i class="fas fa-pencil-alt task-edit-icon"></i>
+                </span>`;
+        }
+
+        // --- Tags ---
+        let tagsHTML = '';
+        if (annotation.transcription_status === 'completed') {
+            if (annotation.tagging_status === 'processing') {
+                tagsHTML = `<div class="tagging-progress"><i class="fa-solid fa-tag"></i> <span>Generating tags...</span></div>`;
+            } else if (annotation.tagging_status === 'completed' && annotation.tags && annotation.tags.length > 0) {
+                const tagsInner = annotation.tags.map((tag, idx) => {
+                    const cat = tag.category || '';
+                    return `<span class="annotation-tag category-${cat}" title="${escapeHtml(cat)} - Click to delete" onclick="deleteTag(event, ${annotation.id}, ${idx})">${escapeHtml(tag.name)}</span>`;
+                }).join('');
+                tagsHTML = `<div class="annotation-tags">${tagsInner}</div>`;
             }
         }
 
-        // Tags UI logic
-        let tagsHTML = '';
-        if (annotation.extended_transcript_status === 'completed') {
-            if (annotation.tagging_status === 'processing') {
-                tagsHTML = `
-                    <div class="tagging-progress">
-                        <i class="fa-solid fa-tag"></i>
-                        <span>Generating tags...</span>
-                    </div>
-                `;
-            } else if (annotation.tagging_status === 'completed' && annotation.tags && annotation.tags.length > 0) {
-                tagsHTML = `<div class="annotation-tags">`;
+        // --- Relaunch tagging button (shown once transcription done) ---
+        let relaunchTaggingBtn = '';
+        if (annotation.transcription_status === 'completed') {
+            relaunchTaggingBtn = `<button class="btn btn-icon btn-tiny" onclick="event.stopPropagation(); triggerTagging(${annotation.id});" title="Relaunch tagging"><i class="fa-solid fa-tags"></i></button>`;
+        }
 
-                annotation.tags.forEach(tag => {
-                    const categoryClass = tag.category ? `category-${tag.category}` : '';
-                    tagsHTML += `
-                        <span class="annotation-tag ${categoryClass}" title="${tag.category || 'tag'}">
-                            ${tag.name}
+        // --- Review panel ---
+        let reviewPanelHTML = '';
+        if (annotation.review_status === 'processing') {
+            reviewPanelHTML = `<div class="review-panel-container"><div class="ai-pipeline-status"><i class="fa-solid fa-magnifying-glass"></i> <span>AI Review in progress...</span></div></div>`;
+        } else if (annotation.review_status === 'completed' && annotation.review_results) {
+            let rr = annotation.review_results;
+            if (typeof rr === 'string') { try { rr = JSON.parse(rr); } catch(e) { rr = {}; } }
+
+            const tier = rr.completeness_tier || 'MINIMAL';
+            const tierColors = { MINIMAL: '#dc3545', PARTIAL: '#ffc107', SUBSTANTIAL: '#17a2b8', COMPLETE: '#28a745' };
+            const tierLabels = { MINIMAL: 'Minimal', PARTIAL: 'Partiel', SUBSTANTIAL: 'Substantiel', COMPLETE: 'Complet' };
+            const tierColor = tierColors[tier] || '#6c757d';
+            const tierLabel = tierLabels[tier] || tier;
+
+            const sa = rr.sensations_analysis || {};
+            const sensationTypes = [
+                { key: 'visual_mentioned', label: 'Visuel', icon: 'fa-eye', cls: 'visual' },
+                { key: 'tactile_mentioned', label: 'Tactile', icon: 'fa-hand', cls: 'tactile' },
+                { key: 'auditory_mentioned', label: 'Auditif', icon: 'fa-ear-listen', cls: 'auditory' },
+                { key: 'proprioceptive_mentioned', label: 'Proprioceptif', icon: 'fa-person', cls: 'proprioceptive' },
+            ];
+            const sensationBadges = sensationTypes
+                .filter(s => sa[s.key])
+                .map(s => `<span class="sensation-badge ${s.cls}"><i class="fa-solid ${s.icon}"></i> ${s.label}</span>`)
+                .join('');
+
+            const dims = rr.dimensions || {};
+            const dimOrder = ['HOW', 'EVALUATION', 'FEEDBACK'];
+            let dimsHTML = '';
+            dimOrder.forEach(dimKey => {
+                const dim = dims[dimKey];
+                if (!dim) return;
+                const covered = dim.covered;
+                const cardClass = covered ? 'complete' : 'incomplete';
+                const checkIcon = covered ? '✓' : '✗';
+                const statusLabel = covered ? 'Complet' : 'Incomplet';
+
+                let whatIsGoodHTML = '';
+                if (covered && dim.what_is_good && dim.what_is_good.length > 0) {
+                    const items = dim.what_is_good.map(w => `<li>${escapeHtml(w)}</li>`).join('');
+                    whatIsGoodHTML = `<div class="what-is-good"><strong>✓ Ce qui est bien :</strong><ul>${items}</ul></div>`;
+                }
+
+                let missingHTML = '';
+                if (!covered && dim.missing_elements && dim.missing_elements.length > 0) {
+                    missingHTML = `<p class="missing-elements"><em>Manque: ${escapeHtml(dim.missing_elements.join(', '))}</em></p>`;
+                }
+
+                let promptsHTML = '';
+                if (!covered && dim.prompts && dim.prompts.length > 0) {
+                    const promptItems = dim.prompts.map(p => `<div class="prompt-item"><span>${escapeHtml(p)}</span></div>`).join('');
+                    promptsHTML = `<div class="prompts-list">${promptItems}</div>`;
+                }
+
+                const contentStyle = covered ? 'display: block;' : 'display: none;';
+                dimsHTML += `
+                    <div class="dimension-card ${cardClass}" onclick="toggleDimension(${annotation.id}, '${dimKey}')">
+                        <div class="dimension-header">
+                            <strong>${checkIcon} ${dimKey}</strong>
+                            <span>${statusLabel}</span>
+                        </div>
+                        <div class="dimension-content" id="dim-${annotation.id}-${dimKey}" style="${contentStyle}">
+                            ${whatIsGoodHTML}${missingHTML}${promptsHTML}
+                        </div>
+                    </div>`;
+            });
+
+            const readyToComplete = rr.ready_to_proceed;
+            const relaunchReviewBtn = `<button class="btn btn-icon btn-tiny" onclick="triggerReview(${annotation.id})" title="Relaunch AI Review"><i class="fa-solid fa-arrow-rotate-right"></i></button>`;
+
+            const panelOpen = !!state.showReviewPanels[annotation.id];
+            reviewPanelHTML = `
+                <div class="review-panel-container">
+                    <div class="review-toggle-header" onclick="toggleReviewPanel(${annotation.id})">
+                        <span class="review-toggle-label">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            AI Review
+                            <span class="tier-badge" style="background-color: ${tierColor}">${tierLabel}</span>
                         </span>
-                    `;
-                });
-
-                tagsHTML += `</div>`;
-            }
+                        <span class="review-toggle-indicator"><i class="fa-solid fa-chevron-${panelOpen ? 'up' : 'down'}"></i></span>
+                    </div>
+                    <div class="review-panel ${panelOpen ? 'visible' : ''}" id="review-panel-${annotation.id}">
+                        <div class="review-header-row">
+                            <div class="review-header">
+                                <div class="sensations-badges">${sensationBadges}</div>
+                            </div>
+                            ${relaunchReviewBtn}
+                        </div>
+                        ${dimsHTML}
+                        <div class="review-actions">
+                            <button class="btn edit-elicitation-btn" onclick="editElicitation(${annotation.id})">
+                                <i class="fa-solid fa-pencil"></i> Modifier l'élicitation
+                            </button>
+                            <button class="btn mark-complete-btn ${readyToComplete ? '' : 'disabled'}" onclick="markElicitationComplete(${annotation.id})" ${readyToComplete ? '' : 'disabled'}>
+                                <i class="fa-solid fa-check"></i> Marquer comme complet
+                            </button>
+                        </div>
+                    </div>
+                </div>`;
         }
 
         item.innerHTML = `
             <div class="annotation-header">
-                <span class="annotation-time">
-                    ${formatTime(annotation.start_time)} - ${formatTime(annotation.end_time)}
-                    (${duration.toFixed(1)}s)
-                </span>
+                <div class="annotation-time-wrapper">
+                    <span class="annotation-time">
+                        ${formatTime(annotation.start_time)} - ${formatTime(annotation.end_time)}
+                        (${duration.toFixed(1)}s)
+                    </span>
+                    ${taskBadgeHTML}
+                </div>
                 <div class="annotation-actions">
-                    <button class="btn btn-icon btn-small" onclick="seekToAnnotation(${annotation.start_time})" title="Jump to time">
+                    <button class="btn btn-icon btn-small play-btn" onclick="seekToAnnotation(${annotation.start_time})" title="Jump to time">
                         <i class="fas fa-play"></i>
                     </button>
                     <button class="btn btn-icon btn-small" onclick="startEditTranscription(${annotation.id})" title="Edit transcription">
@@ -1764,21 +2221,225 @@ function renderAnnotations() {
             <div class="annotation-transcription">
                 ${annotation.transcription || '<em>Transcription pending...</em>'}
             </div>
-            <div class="annotation-status ${statusClass}">
-                ${statusText}
+            <div class="annotation-status-row">
+                <div class="annotation-status ${statusClass}">
+                    ${statusText}
+                </div>
+                ${relaunchTaggingBtn}
             </div>
             ${tagsHTML}
-            ${extendedTranscriptHTML}
+            ${reviewPanelHTML}
         `;
 
         item.addEventListener('click', (e) => {
-            if (!e.target.closest('button') && !e.target.closest('.extended-transcript-toggle') && !e.target.closest('.feedback-btn')) {
+            if (!e.target.closest('button') && !e.target.closest('.review-toggle-header') && !e.target.closest('.dimension-card')) {
                 seekToAnnotation(annotation.start_time);
             }
         });
 
         container.appendChild(item);
     });
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function toggleReviewPanel(annotationId) {
+    state.showReviewPanels[annotationId] = !state.showReviewPanels[annotationId];
+    renderAnnotations();
+}
+
+function toggleDimension(annotationId, dimKey) {
+    const content = document.getElementById(`dim-${annotationId}-${dimKey}`);
+    if (!content) return;
+    content.style.display = content.style.display === 'none' ? 'block' : 'none';
+}
+
+async function triggerTagging(annotationId) {
+    try {
+        const response = await fetch(`${API_BASE}/api/annotations/${annotationId}/tags`, {
+            method: 'POST'
+        });
+        if (!response.ok) throw new Error('Failed to trigger tagging');
+        showToast('Tagging', 'Tag generation started', 'info');
+    } catch (err) {
+        showToast('Error', err.message, 'error');
+    }
+}
+
+async function triggerReview(annotationId) {
+    try {
+        const response = await fetch(`${API_BASE}/api/annotations/${annotationId}/review`, {
+            method: 'POST'
+        });
+        if (!response.ok) throw new Error('Failed to trigger review');
+        showToast('Review', 'AI review started', 'info');
+    } catch (err) {
+        showToast('Error', err.message, 'error');
+    }
+}
+
+async function deleteTag(event, annotationId, tagIndex) {
+    event.stopPropagation();
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (!annotation || !annotation.tags) return;
+    const newTags = annotation.tags.filter((_, i) => i !== tagIndex);
+    try {
+        const response = await fetch(`${API_BASE}/api/annotations/${annotationId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tags: JSON.stringify(newTags) })
+        });
+        if (!response.ok) throw new Error('Failed to delete tag');
+        annotation.tags = newTags;
+        renderAnnotations();
+    } catch (err) {
+        showToast('Error', err.message, 'error');
+    }
+}
+
+function startEditTask(annotationId) {
+    const display = document.getElementById(`task-display-${annotationId}`);
+    if (!display) return;
+    const current = display.textContent.trim();
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = current;
+    input.className = 'task-edit-input';
+    input.onclick = e => e.stopPropagation();
+
+    const badge = display.closest('.detected-task-badge');
+    badge.replaceWith(input);
+    input.focus();
+
+    async function saveTask() {
+        const newTask = input.value.trim();
+        try {
+            const response = await fetch(`${API_BASE}/api/annotations/${annotationId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ detected_task: newTask || null })
+            });
+            if (!response.ok) throw new Error('Failed to update task');
+            const ann = state.annotations.find(a => a.id === annotationId);
+            if (ann) ann.detected_task = newTask || null;
+            renderAnnotations();
+        } catch (err) {
+            showToast('Error', err.message, 'error');
+            renderAnnotations();
+        }
+    }
+
+    input.addEventListener('blur', saveTask);
+    input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+        if (e.key === 'Escape') { renderAnnotations(); }
+    });
+}
+
+function editElicitation(annotationId) {
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (!annotation) return;
+
+    const existing = document.getElementById('editElicitationModal');
+    if (existing) existing.remove();
+
+    let review = annotation.review_results;
+    if (typeof review === 'string') { try { review = JSON.parse(review); } catch(e) { review = null; } }
+
+    const priorityPromptsHTML = review && review.priority_prompts && review.priority_prompts.length > 0
+        ? `<div class="elicitation-priority-prompts">
+            <strong>Points à adresser en priorité :</strong>
+            <ul>${review.priority_prompts.map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ul>
+        </div>` : '';
+
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.id = 'editElicitationModal';
+    modal.innerHTML = `
+        <div class="modal-content elicitation-modal-content">
+            <div class="elicitation-modal-header">
+                <h2 class="elicitation-modal-title">Modifier l'élicitation</h2>
+                <button class="elicitation-modal-close" onclick="closeEditElicitationModal()" title="Fermer" aria-label="Fermer">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div class="elicitation-modal-body">
+                ${priorityPromptsHTML}
+                <label class="elicitation-textarea-label" for="elicitationTextEdit">Transcription</label>
+                <textarea id="elicitationTextEdit" rows="10">${escapeHtml(annotation.transcription || '')}</textarea>
+            </div>
+            <div class="elicitation-modal-footer">
+                <button class="btn btn-secondary" onclick="closeEditElicitationModal()">Annuler</button>
+                <button class="btn btn-primary" onclick="saveElicitationEdit(${annotationId})">
+                    <i class="fa-solid fa-rotate-right"></i> Enregistrer et re-analyser
+                </button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    modal.style.display = 'flex';
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeEditElicitationModal(); });
+    document.getElementById('elicitationTextEdit').focus();
+}
+
+function closeEditElicitationModal() {
+    const modal = document.getElementById('editElicitationModal');
+    if (modal) modal.remove();
+}
+
+async function saveElicitationEdit(annotationId) {
+    const textarea = document.getElementById('elicitationTextEdit');
+    const newTranscription = textarea ? textarea.value.trim() : '';
+    if (!newTranscription) {
+        showToast('Erreur', 'La transcription ne peut pas être vide', 'error');
+        return;
+    }
+    try {
+        showLoading('Saving...');
+        const updateResponse = await fetch(`${API_BASE}/api/annotations/${annotationId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ transcription: newTranscription })
+        });
+        if (!updateResponse.ok) throw new Error('Failed to update transcription');
+
+        const annotation = state.annotations.find(a => a.id === annotationId);
+        if (annotation) {
+            annotation.transcription = newTranscription;
+            annotation.review_status = 'pending';
+            annotation.review_results = null;
+        }
+
+        await fetch(`${API_BASE}/api/annotations/${annotationId}/review`, { method: 'POST' });
+
+        closeEditElicitationModal();
+        showToast('Succès', 'Élicitation mise à jour, re-analyse en cours', 'success');
+        renderAnnotations();
+    } catch (error) {
+        showToast('Erreur', error.message, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function markElicitationComplete(annotationId) {
+    try {
+        const response = await fetch(`${API_BASE}/api/annotations/${annotationId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ review_status: 'skipped' })
+        });
+        if (!response.ok) throw new Error('Failed to mark as complete');
+        const annotation = state.annotations.find(a => a.id === annotationId);
+        if (annotation) annotation.review_status = 'skipped';
+        showToast('Succès', 'Élicitation marquée comme complète', 'success');
+        renderAnnotations();
+    } catch (error) {
+        showToast('Erreur', error.message, 'error');
+    }
 }
 
 function renderTimeline() {
@@ -2260,6 +2921,83 @@ function updateExtendedTranscript(annotationId, extendedTranscript) {
     }
 }
 
+function updateJudgeStatus(annotationId, status) {
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (annotation) {
+        annotation.judge_status = status;
+        renderAnnotations();
+    }
+}
+
+function updateJudgeDecision(annotationId, judgeDecision) {
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (annotation) {
+        annotation.judge_status = 'completed';
+        annotation.judge_decision = judgeDecision;
+        renderAnnotations();
+    }
+}
+
+function updateTaggingStatus(annotationId, status) {
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (annotation) {
+        annotation.tagging_status = status;
+        renderAnnotations();
+    }
+}
+
+function updateTags(annotationId, tags) {
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (annotation) {
+        annotation.tagging_status = 'completed';
+        // tags may arrive as array of objects or JSON string
+        if (typeof tags === 'string') {
+            try { tags = JSON.parse(tags); } catch(e) { tags = []; }
+        }
+        annotation.tags = tags || [];
+        renderAnnotations();
+    }
+}
+
+function updateTaskDetectionStatus(annotationId, status) {
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (annotation) {
+        annotation.detected_task_status = status;
+        renderAnnotations();
+    }
+}
+
+function updateTaskDetected(annotationId, detectedTask, confidence) {
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (annotation) {
+        annotation.detected_task_status = 'completed';
+        if (detectedTask && (confidence === undefined || confidence >= 0.5)) {
+            annotation.detected_task = detectedTask;
+        }
+        renderAnnotations();
+    }
+}
+
+function updateReviewStatus(annotationId, status) {
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (annotation) {
+        annotation.review_status = status;
+        renderAnnotations();
+    }
+}
+
+function updateReviewResults(annotationId, reviewResults, isSalient) {
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (annotation) {
+        annotation.review_status = 'completed';
+        annotation.review_results = reviewResults;
+        if (isSalient !== undefined) annotation.is_salient = isSalient;
+        // Auto-open the review panel for this annotation
+        state.showReviewPanels[annotationId] = true;
+        renderAnnotations();
+    }
+}
+
 // function updateTaggingStatus(annotationId, status) {
 //     const annotation = state.annotations.find(a => a.id === annotationId);
 //     if (annotation) {
@@ -2545,12 +3283,6 @@ function initializeSegmentTab() {
     const createBtn = document.getElementById('createSegmentBtn');
     if (createBtn) createBtn.addEventListener('click', createSegment);
 
-    const setStartBtn = document.getElementById('setSegmentStartBtn');
-    if (setStartBtn) setStartBtn.addEventListener('click', setSegmentStart);
-
-    const setEndBtn = document.getElementById('setSegmentEndBtn');
-    if (setEndBtn) setEndBtn.addEventListener('click', setSegmentEnd);
-
     const loadIntoMainBtn = document.getElementById('loadIntoMainBtn');
     if (loadIntoMainBtn) loadIntoMainBtn.addEventListener('click', () => {
         if (state.currentVideoId) {
@@ -2679,12 +3411,21 @@ function initializeSegmentSlider() {
     // Expose small updater used elsewhere
     window.updateSegmentSliderUI = updateUI;
 
-    // Initial render
-    if (state.segmentStartTime == null || state.segmentEndTime == null) {
-        const dur = (document.getElementById('segmentPlayer') || document.getElementById('videoPlayer')).duration || 0;
-        state.segmentStartTime = state.segmentStartTime ?? 0;
-        state.segmentEndTime = state.segmentEndTime ?? dur || 0;
+    // When segment player loads metadata, reset handles to 0 → full duration
+    const segPlayer = document.getElementById('segmentPlayer');
+    if (segPlayer) {
+        segPlayer.addEventListener('loadedmetadata', () => {
+            const dur = segPlayer.duration || 0;
+            state.segmentStartTime = 0;
+            state.segmentEndTime = dur;
+            updateUI();
+        });
     }
+
+    // Initial render — start handle at left (0%), end handle at right (100% or known duration)
+    const dur0 = (document.getElementById('segmentPlayer') || document.getElementById('videoPlayer')).duration || 0;
+    if (state.segmentStartTime == null) state.segmentStartTime = 0;
+    if (state.segmentEndTime == null) state.segmentEndTime = dur0 > 0 ? dur0 : 0;
     updateUI();
 }
 
@@ -2707,7 +3448,7 @@ function renderSegmentVideoSelector() {
             <div class="empty-state">
                 <i class="fas fa-film empty-icon"></i>
                 <h3>No Video Loaded</h3>
-                <p>Use "Add Local Videos" or "Select Video" to add videos.</p>
+                <p>Use "Upload to OwnCloud" then "Select Video" to add videos.</p>
             </div>
         `;
         return;
@@ -2738,15 +3479,12 @@ function loadSegmentPlayer(videoId) {
     src.src = `${API_BASE}/api/videos/${videoId}/file`;
     player.load();
 
-    // Show player container and reset any existing start/end markers
+    // Show player container and reset start/end to 0 → full (loadedmetadata will refine)
     const container = document.getElementById('segmentVideoPlayerContainer');
     if (container) container.style.display = 'block';
-    state.segmentStartTime = null;
-    state.segmentEndTime = null;
-    const sdisp = document.getElementById('segmentStartDisplay');
-    const edisp = document.getElementById('segmentEndDisplay');
-    if (sdisp) sdisp.textContent = 'Start: -';
-    if (edisp) edisp.textContent = 'End: -';
+    state.segmentStartTime = 0;
+    state.segmentEndTime = 0;
+    if (window.updateSegmentSliderUI) window.updateSegmentSliderUI();
 
     // Refresh segments list for the loaded video
     loadSegments();
@@ -2769,6 +3507,7 @@ async function loadSegments() {
         const segments = await resp.json();
         state.segments = segments || [];
         renderSegments();
+        refreshSegmentSelector();
     } catch (err) {
         console.error('Failed to load segments', err);
         list.innerHTML = '<div class="empty-state"><p>Failed to load segments</p></div>';
@@ -2804,13 +3543,12 @@ function renderSegments() {
 }
 
 function loadVideoSegment(startTime) {
-    // Switch to annotate tab and seek
+    // Switch to annotate tab and seek — do NOT autoplay, let the user decide when to start
     switchTab('annotate');
     const videoPlayer = document.getElementById('videoPlayer');
     if (videoPlayer && !isNaN(startTime)) {
-        // ensure video loaded
+        videoPlayer.pause();
         videoPlayer.currentTime = Math.max(0, startTime);
-        videoPlayer.play();
     }
 }
 
@@ -3054,109 +3792,48 @@ async function deleteVideo(videoId) {
     const name = video ? video.filename : `ID ${videoId}`;
 
     const willDeleteRemote = video && video.source_type === 'webdav';
-    const confirmMsg = `Delete video "${name}" and ALL its elicitations?\n\nThis will remove the video file and all associated annotations.${willDeleteRemote ? '\n\nFor WebDAV videos the file in OwnCloud will also be deleted.' : ''} Continue?`;
+    // Trash on loaded videos = remove plugin record only. OwnCloud deletion is handled separately.
+    const confirmMsg = willDeleteRemote
+        ? `Remove "${name}" from the plugin?\n\nThis removes the video and all its elicitations from this tool.\nThe file on OwnCloud is NOT deleted — use the trash icon in the OwnCloud section for that.`
+        : `Delete video "${name}" and ALL its elicitations? This cannot be undone.`;
 
     if (!confirm(confirmMsg)) {
         return;
     }
 
     try {
-        showLoading('Deleting video...');
+        showLoading('Removing video...');
 
-        // If this is a WebDAV-linked video, attempt to delete the remote OwnCloud file first
-        if (willDeleteRemote && _webdavApiUrl) {
-            // Try to extract Moodle video id from stream.php URL (pattern: stream.php?videoid=123)
-            const m = (video.filepath || '').match(/[?&]videoid=(\d+)/);
-            if (m && m[1]) {
-                const moodleId = m[1];
-                try {
-                    const delRes = await fetch(`${_webdavApiUrl}?action=delete`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ videoid: Number(moodleId) }),
-                    });
-                    if (!delRes.ok) {
-                        const txt = await delRes.text();
-                        throw new Error(txt || `HTTP ${delRes.status}`);
-                    }
-                    const delJson = await delRes.json();
-                    if (!delJson.success) {
-                        throw new Error(delJson.error || 'Unknown error');
-                    }
-                } catch (err) {
-                    hideLoading();
-                    showToast('Error', `Failed to delete remote OwnCloud file: ${err.message}`, 'error');
-                    return; // abort to avoid leaving remote file behind
-                }
-            } else {
-                // No Moodle ID in filepath — cannot delete remote file reliably
-                if (!confirm('Cannot determine Moodle video id for this WebDAV-linked video. The file on OwnCloud will NOT be deleted. Do you want to remove the local record anyway?')) {
-                    return; // abort
-                }
-                // Explicitly request a local-only delete (server will refuse unless force=true)
-                const response = await fetch(`${API_BASE}/api/videos/${videoId}?force=true`, {
-                    method: 'DELETE'
-                });
+        // Choose endpoint: WebDAV videos get force=true (local record only, OwnCloud untouched)
+        const deleteUrl = willDeleteRemote
+            ? `${API_BASE}/api/videos/${videoId}?force=true`
+            : `${API_BASE}/api/videos/${videoId}`;
 
-                if (!response.ok) {
-                    const errText = await response.text();
-                    throw new Error(errText || 'Failed to delete video');
-                }
+        const response = await fetch(deleteUrl, { method: 'DELETE' });
 
-                // Remove from local state (same as normal flow)
-                state.videos = state.videos.filter(v => v.id !== videoId);
-
-                // If the deleted video is currently loaded, clear the player
-                if (state.currentVideoId === videoId) {
-                    state.currentVideo = null;
-                    state.currentVideoId = null;
-                    try { localStorage.removeItem('currentVideoId'); } catch (e) { console.error('Failed to clear video state:', e); }
-                    document.getElementById('videoPlayerContainer').style.display = 'none';
-                    document.getElementById('recordingControls').style.display = 'none';
-                    document.getElementById('videoSelector').style.display = 'flex';
-                    document.getElementById('videoInfo').style.display = 'none';
-                }
-
-                await loadVideos();
-                showToast('Deleted', 'Video record removed (remote file NOT deleted)', 'success');
-                hideLoading();
-                closeVideoModal();
-                return;
+        if (!response.ok) {
+            // 404 means the record is already gone (e.g. OwnCloud file was deleted first and
+            // cleaned up the local record). Treat it as success so the UI stays consistent.
+            if (response.status !== 404) {
+                const errText = await response.text();
+                throw new Error(errText || 'Failed to delete video');
             }
         }
 
-        const response = await fetch(`${API_BASE}/api/videos/${videoId}`, {
-            method: 'DELETE'
-        });
-
-        if (!response.ok) {
-            const errText = await response.text();
-            throw new Error(errText || 'Failed to delete video');
-        }
-
-        // Remove from local state
         state.videos = state.videos.filter(v => v.id !== videoId);
 
-        // If the deleted video is currently loaded, clear the player
         if (state.currentVideoId === videoId) {
             state.currentVideo = null;
             state.currentVideoId = null;
-            // Clear persisted video state
-            try {
-                localStorage.removeItem('currentVideoId');
-            } catch (e) {
-                console.error('Failed to clear video state:', e);
-            }
+            try { localStorage.removeItem('currentVideoId'); } catch (e) { console.error('Failed to clear video state:', e); }
             document.getElementById('videoPlayerContainer').style.display = 'none';
             document.getElementById('recordingControls').style.display = 'none';
             document.getElementById('videoSelector').style.display = 'flex';
             document.getElementById('videoInfo').style.display = 'none';
         }
 
-        // Refresh videos in case of ordering or counts
         await loadVideos();
-
-        showToast('Deleted', 'Video and its elicitations were deleted', 'success');
+        showToast('Removed', willDeleteRemote ? 'Plugin record removed (OwnCloud file untouched)' : 'Video and elicitations deleted', 'success');
     } catch (error) {
         console.error('Error deleting video:', error);
         showToast('Error', 'Failed to delete video', 'error');
@@ -3486,6 +4163,16 @@ async function registerLocalVideo(filepath, filename) {
 window.seekToAnnotation = seekToAnnotation;
 window.deleteAnnotation = deleteAnnotation;
 window.toggleExtendedTranscript = toggleExtendedTranscript;
+window.toggleReviewPanel = toggleReviewPanel;
+window.toggleDimension = toggleDimension;
+window.triggerTagging = triggerTagging;
+window.triggerReview = triggerReview;
+window.deleteTag = deleteTag;
+window.startEditTask = startEditTask;
+window.editElicitation = editElicitation;
+window.closeEditElicitationModal = closeEditElicitationModal;
+window.saveElicitationEdit = saveElicitationEdit;
+window.markElicitationComplete = markElicitationComplete;
 window.registerLocalVideo = registerLocalVideo;
 window.handleFeedback = handleFeedback;
 window.openProject = openProject;
@@ -3495,3 +4182,152 @@ window.assignVideos = assignVideos;
 window.addVideoToProject = addVideoToProject;
 window.removeVideoFromProject = removeVideoFromProject;
 window.deleteVideo = deleteVideo;
+window.openTutorialModal = openTutorialModal;
+
+// =============================================================================
+// TUTORIAL / HELP SYSTEM
+// =============================================================================
+
+const TUTORIAL_MARKDOWN = `
+# Bienvenue dans l'outil d'élicitation vidéo
+
+Cet outil a été conçu dans le cadre du projet **ReSOuRCE** pour capturer et préserver les savoirs experts des artisans. Vous allez pouvoir commenter vos propres vidéos à la voix, et un système d'intelligence artificielle vous aidera à structurer et enrichir vos commentaires.
+
+---
+
+## 1. Uploader une vidéo
+
+Vos vidéos sont stockées dans un espace personnel sécurisé appelé **OwnCloud**, hébergé par Mines Paris.
+
+**OwnCloud, c'est quoi ?**
+C'est un espace de stockage en ligne similaire à Dropbox ou Google Drive, mais hébergé sur les serveurs de l'école, garantissant la confidentialité de vos données.
+
+**Format accepté :** MP4, MOV, AVI, WebM (jusqu'à 5 Go par fichier).
+
+**Étapes pour uploader une vidéo :**
+1. Cliquez sur **"Upload to OwnCloud"** dans la barre du haut.
+2. Une fenêtre s'ouvre — cliquez sur **"Upload video to OwnCloud"**.
+3. Sélectionnez votre fichier vidéo depuis votre ordinateur.
+4. La barre de progression indique l'avancement. Attendez le message **"Upload complete !"** avant de fermer.
+
+> La première fois, un dossier personnel est créé automatiquement à votre nom.
+
+---
+
+## 2. Sélectionner une vidéo
+
+Une fois votre vidéo uploadée, cliquez sur **"Select Video"** dans la barre du haut.
+
+- La fenêtre affiche vos vidéos déjà chargées dans le plugin, ainsi que les fichiers présents dans votre dossier OwnCloud.
+- **Fichiers grisés** : déjà chargés, pas besoin de les recharger.
+- Cliquez sur un fichier OwnCloud non grisé pour le charger dans le lecteur vidéo.
+- L'icône 🗑 à droite d'un fichier OwnCloud **supprime le fichier définitivement** de votre espace OwnCloud.
+- L'icône 🗑 à côté d'une vidéo chargée retire uniquement la vidéo du plugin (le fichier OwnCloud est conservé).
+
+---
+
+## 3. Éliciter (commenter une vidéo)
+
+L'onglet **"Elicit"** est le cœur de l'outil.
+
+1. Chargez une vidéo (voir étape 2).
+2. Lancez la lecture et positionnez-vous sur le moment qui vous semble intéressant à commenter.
+3. Appuyez sur le bouton **micro** pour commencer l'enregistrement. Le micro capture votre voix pendant que la vidéo tourne.
+4. Appuyez à nouveau sur le micro pour **arrêter** l'enregistrement.
+
+**Ce qui se passe ensuite (automatiquement) :**
+- Votre commentaire vocal est **transcrit** par intelligence artificielle.
+- Des **tags** sont extraits (geste, outil, matière, intention...).
+- Une **tâche détectée** est identifiée (ex. : "tournassage", "émaillage"...).
+- Une **revue IA** évalue la complétude de votre commentaire selon trois dimensions : *Comment faire* (HOW), *Évaluation* (EVALUATION), et *Retour d'expérience* (FEEDBACK).
+
+Vous pouvez **éditer la transcription** et **relancer l'analyse** si vous le souhaitez.
+
+---
+
+## 4. Segmenter une vidéo
+
+L'onglet **"Segment"** vous permet de découper une vidéo en segments thématiques avant de l'éliciter.
+
+1. Dans l'onglet Segment, sélectionnez votre vidéo avec **"Open"**.
+2. Utilisez les **deux poignées de la barre de timeline** pour délimiter un segment.
+   - Poignée gauche (bleue) = début du segment.
+   - Poignée droite (violette) = fin du segment.
+3. Cliquez sur **"Create segment"** pour enregistrer.
+
+Les segments apparaissent dans le panneau de droite. Vous pouvez les charger dans le lecteur principal pour éliciter uniquement cette portion.
+
+---
+
+## 5. Protection des données (RGPD)
+
+Les données collectées dans cet outil sont utilisées **exclusivement** dans le cadre du projet de recherche **ReSOuRCE** soutenu par le gouvernement français dans le cadre du volet « Compétences et métiers d'avenir » du programme France 2030, géré par la Caisse des Dépôts, dont l'objectif est la préservation des savoirs experts dans les métiers d'art.
+
+- **Votre identifiant** dans le système est un numéro anonyme. **Votre nom n'est pas associé à vos données** dans les exports de recherche.
+- Vos données (vidéos, transcriptions, commentaires) sont hébergées sur les serveurs de **Mines Paris** et ne sont **pas transmises à des tiers**.
+- Elles servent uniquement à l'évaluation de l'expérience et à la rédaction d'articles scientifiques.
+- **Aucune donnée n'est commercialisée.**
+
+Pour toute question, contactez l'équipe ReSOuRCE à Mines Paris - PSL:
+- Théo Akbas - theo.akbas@minesparis.psl.eu
+- Alina Glushkova - alina.glushkova@minesparis.psl.eu
+`;
+
+function openTutorialModal() {
+    const modal = document.getElementById('tutorialModal');
+    const body = document.getElementById('tutorialBody');
+    if (!modal || !body) return;
+
+    // Render Markdown (marked + DOMPurify)
+    if (window.marked && window.DOMPurify) {
+        body.innerHTML = DOMPurify.sanitize(marked.parse(TUTORIAL_MARKDOWN));
+    } else {
+        body.textContent = TUTORIAL_MARKDOWN;
+    }
+
+    modal.classList.add('active');
+
+    const closeBtn = document.getElementById('closeTutorialBtn');
+    if (closeBtn) {
+        closeBtn.onclick = closeTutorialModal;
+    }
+    // Click outside to close
+    modal.onclick = (e) => { if (e.target === modal) closeTutorialModal(); };
+}
+
+function closeTutorialModal() {
+    const modal = document.getElementById('tutorialModal');
+    if (modal) modal.classList.remove('active');
+    // Remember that user has seen the tutorial
+    try { localStorage.setItem('tutorialSeen', '1'); } catch (e) {}
+}
+
+/**
+ * Auto-open tutorial for first-time users.
+ * A newcomer is someone who has no personal OwnCloud folder yet.
+ * We check this after the OwnCloud config check resolves.
+ * Falls back to localStorage flag if WebDAV is not configured.
+ */
+async function maybeShowTutorialForNewcomer() {
+    try {
+        const seen = localStorage.getItem('tutorialSeen');
+        if (seen) return; // Already acknowledged
+
+        if (!_webdavApiUrl) {
+            // Can't check OwnCloud — show tutorial for first visit anyway
+            openTutorialModal();
+            return;
+        }
+
+        // Check if user folder exists via ensureuserfolder (creates it if absent, returns {created:true} the first time)
+        const resp = await fetch(`${_webdavApiUrl}?action=ensureuserfolder`);
+        if (!resp.ok) { openTutorialModal(); return; }
+        const data = await resp.json().catch(() => ({}));
+        // If the folder was just created → newcomer
+        if (data.created === true) {
+            openTutorialModal();
+        }
+    } catch (e) {
+        // Non-blocking — ignore errors silently
+    }
+}

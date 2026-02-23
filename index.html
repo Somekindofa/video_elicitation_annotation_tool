@@ -19,16 +19,12 @@
                 <p class="subtitle">ReSource Project - Expert Knowledge Capture</p>
             </div>
             <div class="header-actions">
-                <button id="addVideosBtn" class="btn btn-primary">
-                    <i class="fas fa-plus"></i> Add Local Videos
-                </button>
                 <button id="linkOwnCloudBtn" class="btn btn-info">
                     <i class="fas fa-cloud-upload-alt"></i> Upload to OwnCloud
                 </button>
                 <button id="selectVideoBtn" class="btn btn-secondary">
                     <i class="fas fa-video"></i> Select Video
                 </button>
-                <input type="file" id="videoFileInput" accept="video/*" multiple style="display: none;">
             </div>
         </header>
 
@@ -41,7 +37,7 @@
             <button class="tab-btn" data-tab="segment">
                 <i class="fas fa-scissors"></i> Segment
             </button>
-            <button class="tab-btn" data-tab="projects">
+            <button class="tab-btn" data-tab="projects" disabled title="Work in progress — not yet available" style="opacity:0.4;cursor:not-allowed;">
                 <i class="fas fa-folder-tree"></i> Projects
             </button>
         </div>
@@ -55,7 +51,7 @@
                     <div class="empty-state">
                         <i class="fas fa-film empty-icon"></i>
                         <h3>No Video Loaded</h3>
-                        <p>Click "Add Local Videos" to get started</p>
+                        <p>Click "Upload to OwnCloud" then "Select Video" to get started</p>
                     </div>
                 </div>
 
@@ -198,22 +194,16 @@
                                     <div class="segment-handle start" id="segmentHandleStart" role="slider" tabindex="0" aria-label="Segment start"></div>
                                     <div class="segment-handle end" id="segmentHandleEnd" role="slider" tabindex="0" aria-label="Segment end"></div>
                                 </div>
-                                <div class="segment-timeline-labels">
+                                <div class="segment-timeline-labels" style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
                                     <span id="segmentStartDisplay">Start: -</span>
-                                    <span id="segmentEndDisplay" style="margin-left:12px;">End: -</span>
+                                    <span id="segmentEndDisplay">End: -</span>
+                                    <button id="createSegmentBtn" class="btn btn-primary btn-small" style="margin-left:auto;">Create segment</button>
                                 </div>
                             </div>
                         </div>
                     </div>
-                    <div class="segment-controls" style="padding:1rem; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                    <div class="segment-controls" style="padding:0.5rem 1rem; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
                         <button id="loadIntoMainBtn" class="btn btn-small">Open in main player</button>
-                        <button id="setSegmentStartBtn" class="btn btn-small">Set start</button>
-                        <button id="setSegmentEndBtn" class="btn btn-small">Set end</button>
-                        <button id="createSegmentBtn" class="btn btn-primary">Create segment</button>
-                        <div style="margin-top:8px; min-width:220px;">
-                            <span id="segmentStartDisplay">Start: -</span>
-                            <span style="margin-left:12px;" id="segmentEndDisplay">End: -</span>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -386,17 +376,8 @@
                             <span style="font-size: 0.85rem; color: #666;">Uploads via secure server proxy (supports large files)</span>
                         </div>
                         <input type="file" id="ownCloudFileInput" accept="video/*,.mp4,.mov,.avi,.mkv,.webm" style="display:none">
-                        <!-- Per-file upload progress -->
-                        <div id="ownCloudUploadProgress" style="display:none; margin-top: 0.75rem;">
-                            <div style="font-size: 0.85rem; margin-bottom: 4px;">
-                                <span id="ownCloudUploadFilename"></span>
-                                <span id="ownCloudUploadPct" style="float:right; font-weight:600;"></span>
-                            </div>
-                            <div style="height:6px; background:#dee2e6; border-radius:999px; overflow:hidden;">
-                                <div id="ownCloudUploadBar" style="height:100%; width:0; background:#0066cc; transition:width 0.2s;"></div>
-                            </div>
-                            <div id="ownCloudUploadStatus" style="font-size:0.8rem; color:#666; margin-top:4px;"></div>
-                        </div>
+                        <!-- Per-file upload progress list -->
+                        <div id="ownCloudUploadList" style="margin-top: 0.75rem; max-height: 144px; overflow-y: auto; display: none;"></div>
                     </div>
 
                     <!-- Loading Indicator -->
@@ -421,6 +402,31 @@
         <!-- Toast Notifications -->
         <div id="toastContainer" class="toast-container"></div>
     </div>
+
+    <!-- Tutorial / Help Modal -->
+    <div id="tutorialModal" class="modal" style="z-index:10000;">
+        <div class="modal-content" style="max-width:720px;max-height:85vh;display:flex;flex-direction:column;">
+            <div class="modal-header">
+                <h2>Guide d'utilisation</h2>
+                <button class="modal-close" id="closeTutorialBtn">&times;</button>
+            </div>
+            <div class="modal-body" id="tutorialBody" style="overflow-y:auto;flex:1;line-height:1.7;font-size:0.95rem;">
+                <!-- Rendered Markdown injected by JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating help button (always visible) -->
+    <button id="tutorialFab" title="Guide d'utilisation" onclick="openTutorialModal()" style="
+        position:fixed;bottom:24px;right:24px;z-index:9999;
+        width:46px;height:46px;border-radius:50%;
+        background:#0066cc;color:#fff;border:none;cursor:pointer;
+        font-size:1.25rem;font-weight:700;
+        box-shadow:0 4px 14px rgba(0,102,204,0.45);
+        display:flex;align-items:center;justify-content:center;
+        line-height:1;">
+        <i class="fas fa-question"></i>
+    </button>
 
     <!-- Scripts -->
     <!-- Markdown renderer and sanitizer -->
