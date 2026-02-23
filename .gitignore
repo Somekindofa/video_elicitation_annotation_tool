@@ -6,6 +6,7 @@ __pycache__/
 .Python
 env/
 venv/
+.venv/
 ENV/
 build/
 develop-eggs/
@@ -46,6 +47,9 @@ data/exports/*.json
 !data/videos/.gitkeep
 !data/audio/.gitkeep
 !data/exports/.gitkeep
+
+# Database backups
+database_backups/
 
 # Database (comment out if you want to version control)
 elicitations_db/annotations.db
