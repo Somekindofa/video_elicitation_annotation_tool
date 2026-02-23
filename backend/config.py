@@ -26,16 +26,35 @@ for directory in [DATA_DIR, VIDEOS_DIR, AUDIO_DIR, EXPORTS_DIR, CHROMA_DIR]:
 # Database (keep in CHROMA_DIR root so migrate_db and app agree)
 DATABASE_URL = f"sqlite+aiosqlite:///{CHROMA_DIR / 'annotations.db'}"
 
+# === MOODLE INTEGRATION CONFIGURATION ===
+MOODLE_INTEGRATION = os.getenv('MOODLE_INTEGRATION', 'false').lower() in ('true', '1', 'yes')
+MOODLE_JWT_SECRET = os.getenv('MOODLE_JWT_SECRET', 'changeme')
+MOODLE_PROXY_MODE = os.getenv('MOODLE_PROXY_MODE', 'false').lower() in ('true', '1', 'yes')
+MOODLE_ORIGIN = os.getenv('MOODLE_ORIGIN', '')
+
+# === MOODLE DATABASE CONFIGURATION (NEW) ===
+# Replaces SQLite for operational data
+MOODLE_DB_TYPE = os.getenv('MOODLE_DB_TYPE', 'mysql')  # or 'postgresql'
+MOODLE_DB_HOST = os.getenv('MOODLE_DB_HOST', 'localhost')
+MOODLE_DB_PORT = int(os.getenv('MOODLE_DB_PORT', '3306'))
+MOODLE_DB_NAME = os.getenv('MOODLE_DB_NAME', 'moodle')
+MOODLE_DB_USER = os.getenv('MOODLE_DB_USER', 'moodleuser')
+MOODLE_DB_PASSWORD = os.getenv('MOODLE_DB_PASSWORD', '')
+MOODLE_TABLE_PREFIX = os.getenv('MOODLE_TABLE_PREFIX', 'mdl_')
+
 # Server settings
 HOST = "localhost"
 PORT = 8005
 DEBUG = True
 
-# CORS settings - adjust for production
-CORS_ORIGINS = [
+# CORS settings — includes the Moodle origin so the iframe can make same-origin API calls
+_extra_origins = [o.strip() for o in os.getenv("CORS_EXTRA_ORIGINS", "").split(",") if o.strip()]
+CORS_ORIGINS = [o for o in [
     "http://localhost:8005",
     "http://127.0.0.1:8005",
-]
+    MOODLE_ORIGIN,          # e.g. https://aimove.minesparis.psl.eu
+    *_extra_origins,
+] if o]
 
 # Fireworks.ai API settings
 FIREWORKS_API_KEY = os.getenv(

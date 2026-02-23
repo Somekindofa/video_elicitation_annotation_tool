@@ -9,8 +9,9 @@ requests
 
 # WebSocket Support
 websockets
-sqlalchemy
-aiosqlite
+
+# Database (Moodle MySQL/MariaDB)
+pymysql
 
 # Audio Processing & Transcription
 # Using Fireworks.ai API instead of local Whisper
@@ -20,7 +21,7 @@ soundfile
 
 # File Handling
 aiofiles
-python-magic-bin
+python-magic
 
 # Data Processing
 pydantic
