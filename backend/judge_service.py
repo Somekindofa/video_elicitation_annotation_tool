@@ -3,7 +3,6 @@ Judge service for determining whether an elicitation needs AI Review.
 Uses LLM to analyze transcription completeness and make intelligent decisions.
 """
 
-import json
 import logging
 from typing import Any, Dict, Optional
 
@@ -12,60 +11,6 @@ import aiohttp
 from config import FIREWORKS_API_KEY, FIREWORKS_LLM_API_URL, FIREWORKS_LLM_MODEL
 
 logger = logging.getLogger(__name__)
-
-# Deterministic, key-value output instructions (no JSON from LLM)
-JUDGE_KEYED_OUTPUT_INSTRUCTIONS = """
-Répondez UNIQUEMENT sous forme de lignes "CLE: valeur". NE PRODUSEZ PAS de JSON.
-Listes séparées par " | ". Booléens: true/false. Aucune ligne vide.
-
-CLES ATTENDUES:
-NEEDS_REVIEW
-REASONING
-MISSING_ELEMENTS
-STRENGTHS
-"""
-
-
-def _extract_first_json_object(text: str) -> Optional[Dict[str, Any]]:
-    """Extract the first valid JSON object from a string using brace matching."""
-    if not text:
-        return None
-
-    start = text.find("{")
-    if start == -1:
-        return None
-
-    depth = 0
-    in_string = False
-    escape = False
-    for idx in range(start, len(text)):
-        ch = text[idx]
-        if in_string:
-            if escape:
-                escape = False
-            elif ch == "\\":
-                escape = True
-            elif ch == '"':
-                in_string = False
-            continue
-
-        if ch == '"':
-            in_string = True
-            continue
-
-        if ch == "{":
-            depth += 1
-        elif ch == "}":
-            depth -= 1
-            if depth == 0:
-                candidate = text[start : idx + 1]
-                try:
-                    parsed = json.loads(candidate)
-                    return parsed if isinstance(parsed, dict) else None
-                except json.JSONDecodeError:
-                    return None
-
-    return None
 
 
 def _parse_keyed_judge(text: str) -> Dict[str, Any]:
@@ -115,28 +60,24 @@ Une élicitation NÉCESSITE UNE ANALYSE si elle:
 - Omet les sensations critiques pour l'apprentissage
 - Saute des étapes importantes
 
-## Format de Sortie
-
-Retournez un objet JSON:
-
-```json
-{
-  "needs_review": true/false,
-  "confidence": 0.0-1.0,
-  "reasoning": "Explication courte du jugement",
-  "missing_elements": ["élément 1", "élément 2"],
-  "strengths": ["point fort 1", "point fort 2"]
-}
-```
-
 ## Règles Critiques
 
 1. Soyez PRAGMATIQUE: une élicitation imparfaite mais fonctionnelle n'a pas besoin d'analyse
 2. Ne soyez pas EXCESSIF: l'expertise du formateur a de la valeur même sans perfection
 3. Priorisez les SENSATIONS manquantes comme signal fort qu'une analyse est nécessaire
-4. Si vous êtes INCERTAIN (confidence < 0.6), acceptez que l'analyse soit utile
-5. Calculez needs_review = True si:
-   - (au moins 2 éléments manquent) OU (aucune sensation mentionnée)
+4. Si vous êtes INCERTAIN, acceptez que l'analyse soit utile
+5. needs_review = true si au moins 2 éléments manquent OU si aucune sensation n'est mentionnée
+
+## Format de réponse
+
+Répondez UNIQUEMENT sous forme de lignes "CLE: valeur". NE PRODUISEZ PAS de JSON.
+Listes séparées par " | ". Booléens: true/false.
+
+CLES ATTENDUES (dans cet ordre) :
+NEEDS_REVIEW
+REASONING
+MISSING_ELEMENTS
+STRENGTHS
 
 Analysez maintenant cette élicitation:"""
 
@@ -181,8 +122,6 @@ async def judge_elicitation(
     # Build prompt
     prompt = f"""{JUDGE_SYSTEM_PROMPT}
 
-{JUDGE_KEYED_OUTPUT_INSTRUCTIONS}
-
 Transcription: {transcription}
 {f'Domaine: {craft}' if craft else ''}
 """
@@ -196,11 +135,11 @@ Transcription: {transcription}
     payload = {
         "model": FIREWORKS_LLM_MODEL,
         "prompt": prompt,
-        "max_tokens": 350,
-        "temperature": 0.2,  # Lower temperature for consistent judging
-        "top_p": 0.9,
-        "frequency_penalty": 0.1,
-        "presence_penalty": 0.1,
+        "max_tokens": 200,
+        "temperature": 0.0,
+        "top_p": 1.0,
+        "frequency_penalty": 0.0,
+        "presence_penalty": 0.0,
     }
 
     try:
