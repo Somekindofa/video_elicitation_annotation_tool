@@ -3,6 +3,461 @@
  * Main JavaScript file handling all client-side functionality
  */
 
+// ─────────────────────────────────────────────────────────────
+// Internationalisation (i18n)
+// ─────────────────────────────────────────────────────────────
+const TRANSLATIONS = {
+    en: {
+        // Header / nav
+        backToMoodle: 'Back to Moodle',
+        headerSubtitle: 'ReSource Project - Expert Knowledge Capture',
+        uploadToOwnCloud: 'Upload to OwnCloud',
+        selectVideo: 'Select Video',
+        tabElicit: 'Elicit',
+        tabSegment: 'Segment',
+        tabProjects: 'Projects',
+
+        // Empty states
+        noVideoLoaded: 'No Video Loaded',
+        noVideoHint: 'Click "Upload to OwnCloud" then "Select Video" to get started',
+        segmentNoVideoHint: 'Open a video from the selector to view or create segments',
+        noAnnotationsYet: 'No annotations yet',
+        noAnnotationsHint: 'Start recording to create your first elicitation',
+        noSegmentsYet: 'No segments yet',
+        noProjectsYet: 'No Projects Yet',
+        noProjectsHint: 'Create a project to organize your videos for batch elicitation',
+
+        // Recording controls
+        skipBack10: 'Skip back 10 seconds',
+        skipForward10: 'Skip forward 10 seconds',
+        startRecording: 'Start Recording',
+        statusReady: 'Ready',
+        browserNoVideo: 'Your browser does not support the video tag.',
+
+        // Video info bar
+        videoLabel: 'Video:',
+        elicitationsLabel: 'Elicitations:',
+        exportAnnotations: 'Export Annotations',
+
+        // Annotations panel
+        panelElicitations: 'Elicitations',
+        sort: 'Sort',
+        refresh: 'Refresh',
+        sortTimelyAsc: 'Timely (Asc)',
+        sortTimelyDesc: 'Timely (Desc)',
+        sortNewest: 'Newest',
+
+        // Segment panel
+        panelSegments: 'Segments',
+        segmentStart: 'Segment start',
+        segmentEnd: 'Segment end',
+        segmentStartPrefix: 'Start',
+        segmentEndPrefix: 'End',
+        createSegment: 'Create segment',
+        openInMainPlayer: 'Open in main player',
+
+        // Projects panel
+        newProject: 'New Project',
+
+        // Video list modal
+        modalSelectVideo: 'Select Video',
+        ownCloudFiles: 'OwnCloud files',
+        ownCloudTip: 'Tip: click a file to link & load it into the player.',
+
+        // OwnCloud modal
+        uploadVideoToOwnCloud: 'Upload video to OwnCloud',
+        uploadSecureHint: 'Uploads via secure server proxy (supports large files)',
+        ownCloudNotConfigured: 'OwnCloud is not configured. Please contact your administrator.',
+        loadingFiles: 'Loading files...',
+
+        // Project modal
+        createProject: 'Create Project',
+        editProject: 'Edit Project',
+        projectNameLabel: 'Project Name *',
+        projectNamePlaceholder: 'Enter project name',
+        projectDescLabel: 'Description',
+        projectDescPlaceholder: 'Optional description',
+        saveProject: 'Save Project',
+
+        // Assign videos modal
+        assignVideosTo: 'Assign Videos to',
+        availableVideos: 'Available Videos',
+        videosInProject: 'Videos in Project (Drag to reorder)',
+
+        // Local folder modal
+        browseLocalFolder: 'Browse Local Video Folder',
+        folderPathLabel: 'Folder Path *',
+        folderPathHint: 'Enter the absolute path to your video folder (Windows: C:\\path\\to\\folder, Linux/Mac: /path/to/folder)',
+        browseFolder: 'Browse Folder',
+        foundVideos: 'Found Videos',
+
+        // Shared buttons
+        cancel: 'Cancel',
+        close: 'Close',
+        save: 'Save',
+
+        // Loading / processing
+        processing: 'Processing...',
+        loadingEllipsis: 'Loading...',
+
+        // Tutorial
+        guideTitle: 'Usage Guide',
+
+        // Dynamic JS strings (recording status)
+        statusRecording: 'Recording...',
+        statusReadyToRecord: 'Ready to Record',
+        statusProcessing: 'Processing...',
+
+        // Elicit controls
+        craftDomainLabel: 'Select your craft domain',
+        segmentSelectorLabel: 'Select segment',
+        segmentSelectorPlaceholder: '— choose a segment —',
+
+        // Craft names
+        craft_glassblowing: 'Glassblowing',
+        craft_scientific_glassblowing: 'Scientific Glassblowing',
+        craft_jewelry: 'Jewelry',
+        craft_glovemaking: 'Glovemaking',
+
+        // Annotation card dynamic text
+        jumpToTime: 'Jump to time',
+        editTranscription: 'Edit transcription',
+        deleteAnnotation: 'Delete',
+        markComplete: 'Mark as complete',
+        relaunchTagging: 'Relaunch tagging',
+        relaunchReview: 'Relaunch AI Review',
+        modifyElicitation: 'Modify elicitation',
+        recordAnswer: 'Record an answer',
+
+        // Video list items
+        removeFromPlugin: 'Remove from plugin (does not delete OwnCloud file)',
+        deleteFromOwnCloud: 'Delete from OwnCloud (permanent)',
+
+        // Segment cards
+        deleteSegment: 'Delete segment',
+        previewSegment: 'Click to preview this segment',
+
+        // Transcription status
+        transcriptionPending: 'Transcription pending...',
+        transcribingAudio: 'Transcribing audio...',
+        transcriptionComplete: 'Transcription complete',
+        transcriptionFailed: 'Transcription failed',
+
+        // Toast titles
+        toastError: 'Error',
+        toastSuccess: 'Success',
+        toastWarning: 'Warning',
+
+        // Inline recording / guided QA
+        answerByVoice: 'Answer by voice',
+        stopRecording: 'Stop recording',
+        transcribingInProgress: 'Transcribing...',
+        replaySegment: 'Replay the segment',
+        replaySegmentFor: 'Replay segment to recall',
+
+        // No video in list
+        noVideosLoaded: 'No videos loaded yet. Click an OwnCloud file below to load it.',
+        noOwnCloudFiles: 'No video files found in your OwnCloud folder.',
+        noSegmentsForVideo: 'No segments for this video',
+        loadVideoFirst: 'Load a video first to see segments.',
+    },
+    fr: {
+        // Header / nav
+        backToMoodle: 'Vers Moodle',
+        headerSubtitle: 'Projet ReSource - Capture de savoirs experts',
+        uploadToOwnCloud: 'Déposer sur OwnCloud',
+        selectVideo: 'Choisir une vidéo',
+        tabElicit: 'Éliciter',
+        tabSegment: 'Segmenter',
+        tabProjects: 'Projets',
+
+        // Empty states
+        noVideoLoaded: 'Aucune vidéo chargée',
+        noVideoHint: 'Cliquez sur "Déposer sur OwnCloud" puis "Choisir une vidéo" pour démarrer',
+        segmentNoVideoHint: 'Ouvrez une vidéo depuis le sélecteur pour voir ou créer des segments',
+        noAnnotationsYet: 'Aucune annotation pour l\'instant',
+        noAnnotationsHint: 'Commencez un enregistrement pour créer votre première élicitation',
+        noSegmentsYet: 'Aucun segment pour l\'instant',
+        noProjectsYet: 'Aucun projet pour l\'instant',
+        noProjectsHint: 'Créez un projet pour organiser vos vidéos en élicitation par lots',
+
+        // Recording controls
+        skipBack10: 'Reculer de 10 secondes',
+        skipForward10: 'Avancer de 10 secondes',
+        startRecording: 'Démarrer l\'enregistrement',
+        statusReady: 'Prêt',
+        browserNoVideo: 'Votre navigateur ne supporte pas la lecture vidéo.',
+
+        // Video info bar
+        videoLabel: 'Vidéo :',
+        elicitationsLabel: 'Élicitations :',
+        exportAnnotations: 'Exporter les annotations',
+
+        // Annotations panel
+        panelElicitations: 'Élicitations',
+        sort: 'Trier',
+        refresh: 'Rafraîchir',
+        sortTimelyAsc: 'Chronologique (croissant)',
+        sortTimelyDesc: 'Chronologique (décroissant)',
+        sortNewest: 'Plus récent',
+
+        // Segment panel
+        panelSegments: 'Segments',
+        segmentStart: 'Début du segment',
+        segmentEnd: 'Fin du segment',
+        segmentStartPrefix: 'Début',
+        segmentEndPrefix: 'Fin',
+        createSegment: 'Créer un segment',
+        openInMainPlayer: 'Ouvrir dans le lecteur principal',
+
+        // Projects panel
+        newProject: 'Nouveau projet',
+
+        // Video list modal
+        modalSelectVideo: 'Choisir une vidéo',
+        ownCloudFiles: 'Fichiers OwnCloud',
+        ownCloudTip: 'Astuce : cliquez sur un fichier pour le lier et le charger dans le lecteur.',
+
+        // OwnCloud modal
+        uploadVideoToOwnCloud: 'Déposer une vidéo sur OwnCloud',
+        uploadSecureHint: 'Envoi via proxy sécurisé côté serveur (supporte les gros fichiers)',
+        ownCloudNotConfigured: 'OwnCloud n\'est pas configuré. Contactez votre administrateur.',
+        loadingFiles: 'Chargement des fichiers...',
+
+        // Project modal
+        createProject: 'Créer un projet',
+        editProject: 'Modifier le projet',
+        projectNameLabel: 'Nom du projet *',
+        projectNamePlaceholder: 'Saisir le nom du projet',
+        projectDescLabel: 'Description',
+        projectDescPlaceholder: 'Description optionnelle',
+        saveProject: 'Enregistrer le projet',
+
+        // Assign videos modal
+        assignVideosTo: 'Assigner des vidéos à',
+        availableVideos: 'Vidéos disponibles',
+        videosInProject: 'Vidéos du projet (glisser pour réordonner)',
+
+        // Local folder modal
+        browseLocalFolder: 'Parcourir le dossier vidéo local',
+        folderPathLabel: 'Chemin du dossier *',
+        folderPathHint: 'Entrez le chemin absolu vers votre dossier vidéo (Windows : C:\\chemin\\vers\\dossier, Linux/Mac : /chemin/vers/dossier)',
+        browseFolder: 'Parcourir',
+        foundVideos: 'Vidéos trouvées',
+
+        // Shared buttons
+        cancel: 'Annuler',
+        close: 'Fermer',
+        save: 'Enregistrer',
+
+        // Loading / processing
+        processing: 'Traitement en cours...',
+        loadingEllipsis: 'Chargement...',
+
+        // Tutorial
+        guideTitle: 'Guide d\'utilisation',
+
+        // Dynamic JS strings (recording status)
+        statusRecording: 'Enregistrement…',
+        statusReadyToRecord: 'Prêt à enregistrer',
+        statusProcessing: 'Traitement…',
+
+        // Elicit controls
+        craftDomainLabel: 'Sélectionnez votre domaine artisanal',
+        segmentSelectorLabel: 'Choisir un segment',
+        segmentSelectorPlaceholder: '— choisir un segment —',
+
+        // Craft names
+        craft_glassblowing: 'Soufflage de verre',
+        craft_scientific_glassblowing: 'Verrerie scientifique',
+        craft_jewelry: 'Joaillerie',
+        craft_glovemaking: 'Ganterie',
+
+        // Annotation card dynamic text
+        jumpToTime: 'Aller au moment',
+        editTranscription: 'Modifier la transcription',
+        deleteAnnotation: 'Supprimer',
+        markComplete: 'Marquer comme complet',
+        relaunchTagging: 'Relancer le balisage',
+        relaunchReview: 'Relancer la revue IA',
+        modifyElicitation: 'Modifier l\'élicitation',
+        recordAnswer: 'Enregistrer une réponse',
+
+        // Video list items
+        removeFromPlugin: 'Retirer du plugin (ne supprime pas le fichier OwnCloud)',
+        deleteFromOwnCloud: 'Supprimer d\'OwnCloud (définitif)',
+
+        // Segment cards
+        deleteSegment: 'Supprimer le segment',
+        previewSegment: 'Cliquer pour prévisualiser ce segment',
+
+        // Transcription status
+        transcriptionPending: 'Transcription en attente…',
+        transcribingAudio: 'Transcription en cours…',
+        transcriptionComplete: 'Transcription terminée',
+        transcriptionFailed: 'Échec de la transcription',
+
+        // Toast titles
+        toastError: 'Erreur',
+        toastSuccess: 'Succès',
+        toastWarning: 'Avertissement',
+
+        // Inline recording / guided QA
+        answerByVoice: 'Répondre par la voix',
+        stopRecording: 'Arrêter l\'enregistrement',
+        transcribingInProgress: 'Transcription…',
+        replaySegment: 'Rejouer le segment',
+        replaySegmentFor: 'Rejouer le segment pour vous remémorer',
+
+        // No video in list
+        noVideosLoaded: 'Aucune vidéo chargée. Cliquez sur un fichier OwnCloud ci-dessous pour le charger.',
+        noOwnCloudFiles: 'Aucun fichier vidéo trouvé dans votre dossier OwnCloud.',
+        noSegmentsForVideo: 'Aucun segment pour cette vidéo',
+        loadVideoFirst: 'Chargez d\'abord une vidéo pour voir les segments.',
+    },
+};
+
+// Current language – persisted across page reloads
+let currentLang = (() => {
+    try { return localStorage.getItem('appLang') || 'en'; } catch (e) { return 'en'; }
+})();
+
+/**
+ * Returns the translated string for `key` in the current language.
+ * Falls back to English, then to the raw key.
+ */
+function t(key) {
+    return (TRANSLATIONS[currentLang] && TRANSLATIONS[currentLang][key]) ||
+           (TRANSLATIONS.en && TRANSLATIONS.en[key]) ||
+           key;
+}
+
+/**
+ * Apply translations to all elements that carry a data-i18n* attribute,
+ * and update the lang toggle button.
+ */
+function applyLanguage() {
+    // Text content
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        el.textContent = t(key);
+    });
+
+    // title attributes
+    document.querySelectorAll('[data-i18n-title]').forEach(el => {
+        const key = el.getAttribute('data-i18n-title');
+        el.title = t(key);
+    });
+
+    // placeholder attributes
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+        const key = el.getAttribute('data-i18n-placeholder');
+        el.placeholder = t(key);
+    });
+
+    // aria-label attributes
+    document.querySelectorAll('[data-i18n-aria-label]').forEach(el => {
+        const key = el.getAttribute('data-i18n-aria-label');
+        el.setAttribute('aria-label', t(key));
+    });
+
+    // Update <html lang>
+    document.documentElement.lang = currentLang;
+
+    // Update lang toggle button
+    const langFlag = document.getElementById('langFlag');
+    const langLabel = document.getElementById('langLabel');
+    if (langFlag) langFlag.textContent = currentLang === 'fr' ? '🇫🇷' : '🇬🇧';
+    if (langLabel) langLabel.textContent = currentLang === 'fr' ? 'FR' : 'EN';
+
+    // Refresh dynamic UI areas that build their own HTML
+    // (these functions read t() at build time so they just need to be re-called)
+    refreshDynamicUIStrings();
+}
+
+/**
+ * Refresh UI areas whose content is generated by JS functions.
+ * Called after a language switch.
+ */
+function refreshDynamicUIStrings() {
+    // Recording status indicator (if not actively recording)
+    if (!state.isRecording) {
+        const statusTextEl = document.getElementById('statusText');
+        if (statusTextEl && (
+            statusTextEl.textContent === TRANSLATIONS.en.statusReady ||
+            statusTextEl.textContent === TRANSLATIONS.fr.statusReady ||
+            statusTextEl.textContent === 'Ready'
+        )) {
+            statusTextEl.textContent = t('statusReady');
+        }
+    }
+
+    // Elicit controls (craft label + segment selector placeholder)
+    const craftLabelEl = document.querySelector('.elicit-controls > div');
+    if (craftLabelEl && !craftLabelEl.id) {
+        craftLabelEl.textContent = t('craftDomainLabel');
+    }
+    // Update craft option labels for current language
+    const craftSelector = document.getElementById('craftSelector');
+    if (craftSelector) {
+        Array.from(craftSelector.options).forEach(opt => {
+            const key = opt.getAttribute('data-craft-key');
+            if (key) opt.textContent = t(key);
+        });
+    }
+    const segLabelEl = document.querySelector('#segmentSelectorWrapper > div');
+    if (segLabelEl) segLabelEl.textContent = t('segmentSelectorLabel');
+    const segPlaceholder = document.querySelector('#segmentSelector option[disabled]');
+    if (segPlaceholder) segPlaceholder.textContent = t('segmentSelectorPlaceholder');
+
+    // Empty-state messages injected by resetInterface() / loadAnnotations()
+    // Rebuild them only when appropriate
+    if (!state.currentVideoId) {
+        const videoSelector = document.getElementById('videoSelector');
+        if (videoSelector && videoSelector.querySelector('.empty-state')) {
+            videoSelector.querySelector('.empty-state h3').textContent = t('noVideoLoaded');
+            videoSelector.querySelector('.empty-state p').textContent = t('noVideoHint');
+        }
+    }
+
+    const annotsList = document.getElementById('annotationsList');
+    if (annotsList && annotsList.querySelector('.empty-state')) {
+        const p1 = annotsList.querySelector('.empty-state p:first-of-type');
+        const p2 = annotsList.querySelector('.empty-state p.hint');
+        if (p1) p1.textContent = t('noAnnotationsYet');
+        if (p2) p2.textContent = t('noAnnotationsHint');
+    }
+
+    // Segment start/end display (prefix only)
+    refreshSegmentDisplayPrefixes();
+}
+
+/** Keep "Start: X" / "End: X" labels translated when the user switches language. */
+function refreshSegmentDisplayPrefixes() {
+    const startEl = document.getElementById('segmentStartDisplay');
+    const endEl   = document.getElementById('segmentEndDisplay');
+    if (startEl) {
+        const raw = startEl.textContent;
+        const colonIdx = raw.indexOf(':');
+        const timeStr = colonIdx !== -1 ? raw.slice(colonIdx) : ': -';
+        startEl.textContent = t('segmentStartPrefix') + timeStr;
+    }
+    if (endEl) {
+        const raw = endEl.textContent;
+        const colonIdx = raw.indexOf(':');
+        const timeStr = colonIdx !== -1 ? raw.slice(colonIdx) : ': -';
+        endEl.textContent = t('segmentEndPrefix') + timeStr;
+    }
+}
+
+/** Toggle between EN and FR */
+function toggleLanguage() {
+    currentLang = currentLang === 'en' ? 'fr' : 'en';
+    try { localStorage.setItem('appLang', currentLang); } catch (e) {}
+    applyLanguage();
+}
+
+// ─────────────────────────────────────────────────────────────
 // Application State
 const state = {
     currentVideo: null,
@@ -31,7 +486,19 @@ const state = {
     // Cached list of files found in the user's OwnCloud personal folder (populated on select)
     ownCloudFiles: [],
     // Tracks which annotation review panels are open { [annotationId]: boolean }
-    showReviewPanels: {}
+    showReviewPanels: {},
+    // Guided Q&A voice enrichment session
+    guidedQA: {
+        annotationId: null,
+        questions: [],          // array of strings (priority_prompts)
+        currentIndex: 0,
+        originalTranscript: '',
+        updatedTranscript: '',  // accumulates appended answer transcriptions
+        isRecording: false,
+        mediaRecorder: null,
+        audioChunks: [],
+        loopInterval: null,
+    }
 };
 
 // API Base URL and JWT token from iframe query
@@ -115,8 +582,8 @@ function resetInterface() {
     videoSelector.innerHTML = `
         <div class="empty-state">
             <i class="fas fa-film empty-icon"></i>
-            <h3>No Video Loaded</h3>
-            <p>Click "Upload to OwnCloud" then "Select Video" to get started</p>
+            <h3>${t('noVideoLoaded')}</h3>
+            <p>${t('noVideoHint')}</p>
         </div>
     `;
 
@@ -125,8 +592,8 @@ function resetInterface() {
     annotationsList.innerHTML = `
         <div class="empty-state">
             <i class="fas fa-pen-to-square empty-icon"></i>
-            <p>No annotations yet</p>
-            <p class="hint">Start recording to create your first elicitation</p>
+            <p>${t('noAnnotationsYet')}</p>
+            <p class="hint">${t('noAnnotationsHint')}</p>
         </div>
     `;
 
@@ -195,6 +662,17 @@ async function initializeApp() {
         });
     }
 
+    // "Back to Moodle" button: navigate the top-level window, not just the iframe.
+    // Without this, clicking the link updates the iframe's URL but leaves the parent
+    // page's address bar stuck on /local/videoelicit/index.php.
+    const backBtn = document.getElementById('backToMoodleBtn');
+    if (backBtn) {
+        backBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            window.top.location.href = backBtn.href;
+        });
+    }
+
     // Connect WebSocket
     connectWebSocket();
 
@@ -233,6 +711,9 @@ async function initializeApp() {
     // Check for any uploads interrupted by a previous page navigation (non-blocking)
     if (_webdavApiUrl) checkAndOfferResumeUploads().catch(e => console.warn('Resume check:', e));
 
+    // Apply language (reads localStorage preference or defaults to 'en')
+    applyLanguage();
+
     console.log('Application initialized successfully');
 }
 
@@ -248,7 +729,7 @@ function createElicitControlsUI() {
 
         // --- Craft domain selector ---
         const craftLabel = document.createElement('div');
-        craftLabel.textContent = 'Select your craft domain';
+        craftLabel.textContent = t('craftDomainLabel');
         craftLabel.style.fontSize = '0.9rem';
         craftLabel.style.marginBottom = '6px';
 
@@ -259,13 +740,15 @@ function createElicitControlsUI() {
         craftSelect.style.border = '1px solid #ccc';
 
         [
-            { value: 'glassblowing', label: 'Glassblowing' },
-            { value: 'scientific_glassblowing', label: 'Scientific Glassblowing' },
-            { value: 'jewelry', label: 'Jewelry' }
+            { value: 'glassblowing', key: 'craft_glassblowing' },
+            { value: 'scientific_glassblowing', key: 'craft_scientific_glassblowing' },
+            { value: 'jewelry', key: 'craft_jewelry' },
+            { value: 'glovemaking', key: 'craft_glovemaking' },
         ].forEach(o => {
             const option = document.createElement('option');
             option.value = o.value;
-            option.textContent = o.label;
+            option.setAttribute('data-craft-key', o.key);
+            option.textContent = t(o.key);
             craftSelect.appendChild(option);
         });
 
@@ -285,7 +768,7 @@ function createElicitControlsUI() {
         segWrapper.style.display = 'none'; // hidden until segments exist
 
         const segLabel = document.createElement('div');
-        segLabel.textContent = 'Select segment';
+        segLabel.textContent = t('segmentSelectorLabel');
         segLabel.style.fontSize = '0.9rem';
         segLabel.style.marginBottom = '6px';
 
@@ -334,7 +817,7 @@ function refreshSegmentSelector() {
     // Placeholder option
     const placeholder = document.createElement('option');
     placeholder.value = '';
-    placeholder.textContent = '— choose a segment —';
+    placeholder.textContent = t('segmentSelectorPlaceholder');
     placeholder.disabled = true;
     placeholder.selected = true;
     segSelect.appendChild(placeholder);
@@ -437,7 +920,7 @@ function setupEventListeners() {
         if (_webdavApiUrl) {
             try {
                 showLoading('Scanning OwnCloud user folder...');
-                await scanUserOwnCloudFolder();
+                await Promise.all([scanUserOwnCloudFolder(), loadVideos()]);
                 hideLoading();
                 showToast('OwnCloud', `Found ${state.ownCloudFiles.length} files in your personal folder`, 'success');
             } catch (err) {
@@ -445,6 +928,8 @@ function setupEventListeners() {
                 console.error('OwnCloud scan failed:', err);
                 showToast('OwnCloud', `Scan failed: ${err.message}`, 'error');
             }
+        } else {
+            await loadVideos();
         }
 
         // Open the normal video modal if we have any videos (local or linked) or remote OwnCloud files
@@ -562,6 +1047,11 @@ function handleWebSocketMessage(message) {
             break;
 
         case 'transcription_complete':
+            if (!message.transcription || !message.transcription.trim()) {
+                showToast('Transcription Failed', 'Transcription was empty — check your microphone.', 'error');
+                updateAnnotationStatus(message.annotation_id, 'failed');
+                break;
+            }
             updateAnnotationTranscription(message.annotation_id, message.transcription);
             showToast('Transcription Complete', 'Audio has been transcribed', 'success');
             if (state.currentVideoId) {
@@ -651,12 +1141,12 @@ async function checkMicrophonePermission() {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         stream.getTracks().forEach(track => track.stop());
-        updateRecordingStatus('ready', 'Ready to Record');
+        updateRecordingStatus('ready', t('statusReadyToRecord'));
         console.log('Microphone permission granted');
     } catch (error) {
         console.error('Microphone permission denied:', error);
         showToast('Microphone Access Required', 'Please grant microphone permission to record annotations', 'warning');
-        updateRecordingStatus('error', 'Microphone Access Denied');
+        updateRecordingStatus('error', currentLang === 'fr' ? 'Micro refusé' : 'Microphone Access Denied');
     }
 }
 
@@ -841,7 +1331,7 @@ function showVideoModal() {
 
     // ── Loaded videos (plugin-side records) ─────────────────────────────────
     if (state.videos.length === 0) {
-        container.innerHTML = '<p class="empty-state" style="color:#999;font-size:0.9rem;padding:0.5rem 0;">No videos loaded yet. Click an OwnCloud file below to load it.</p>';
+        container.innerHTML = `<p class="empty-state" style="color:#999;font-size:0.9rem;padding:0.5rem 0;">${t('noVideosLoaded')}</p>`;
     } else {
         state.videos.forEach(video => {
             const item = document.createElement('div');
@@ -857,7 +1347,7 @@ function showVideoModal() {
                 </div>
                 <div class="video-list-actions">
                     <button class="btn btn-icon btn-small btn-danger video-delete-btn"
-                        title="Remove from plugin (does not delete OwnCloud file)"
+                        title="${t('removeFromPlugin')}"
                         onclick="event.stopPropagation(); deleteVideo(${video.id})">
                         <i class="fas fa-trash"></i>
                     </button>
@@ -924,7 +1414,7 @@ function renderOwnCloudItemsForModal(files, loadedFilenames) {
     const videoFiles = files.filter(f => f.type === 'file');
 
     if (videoFiles.length === 0) {
-        listEl.innerHTML = '<p style="color:#999;font-size:0.85rem;padding:0.5rem;">No video files found in your OwnCloud folder.</p>';
+        listEl.innerHTML = `<p style="color:#999;font-size:0.85rem;padding:0.5rem;">${t('noOwnCloudFiles')}</p>`;
         return;
     }
 
@@ -953,10 +1443,10 @@ function renderOwnCloudItemsForModal(files, loadedFilenames) {
                     <div style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(f.name)}</div>
                     <div style="font-size:0.8rem;color:#888;">${f.size ? formatFileSize(f.size) : ''}</div>
                 </div>
-                ${alreadyLoaded ? '<span style="font-size:0.75rem;color:#888;margin-left:auto;white-space:nowrap;">already loaded</span>' : ''}
+                ${alreadyLoaded ? `<span style="font-size:0.75rem;color:#888;margin-left:auto;white-space:nowrap;">${currentLang === 'fr' ? 'déjà chargé' : 'already loaded'}</span>` : ''}
             </div>
             <button class="btn btn-icon btn-small btn-danger oc-delete-btn"
-                title="Delete from OwnCloud (permanent)"
+                title="${t('deleteFromOwnCloud')}"
                 style="flex-shrink:0;pointer-events:auto;">
                 <i class="fas fa-trash"></i>
             </button>
@@ -1796,10 +2286,13 @@ async function loadVideo(videoId) {
         document.getElementById('recordingControls').style.display = 'block';
         document.getElementById('videoInfo').style.display = 'flex';
 
-        // Set video source
+        // Set video source. Append JWT token so the Moodle stream.php proxy can
+        // authenticate the browser redirect — <video> src requests don't carry
+        // the Authorization header that our fetch() patch injects.
         const videoPlayer = document.getElementById('videoPlayer');
         const videoSource = document.getElementById('videoSource');
-        videoSource.src = `${API_BASE}/api/videos/${videoId}/file`;
+        const tokenParam = MOODLE_JWT ? `?token=${encodeURIComponent(MOODLE_JWT)}` : '';
+        videoSource.src = `${API_BASE}/api/videos/${videoId}/file${tokenParam}`;
         videoPlayer.load();
 
         // Update video info
@@ -1863,7 +2356,7 @@ async function startRecording() {
         state.recordingStartWallTime = Date.now(); // Track actual recording time
 
         // Update UI
-        updateRecordingStatus('recording', 'Recording...');
+        updateRecordingStatus('recording', t('statusRecording'));
         document.getElementById('recordBtn').classList.add('recording');
         document.getElementById('recordingPulse').style.display = 'block';
 
@@ -1902,7 +2395,7 @@ async function handleRecordingStop() {
     if (actualRecordingDuration < 0.5) {
         showToast('Recording Too Short', 'Please record for at least 0.5 seconds', 'warning');
         // Reset UI
-        updateRecordingStatus('ready', 'Ready to Record');
+        updateRecordingStatus('ready', t('statusReadyToRecord'));
         document.getElementById('recordBtn').classList.remove('recording');
         document.getElementById('recordBtn').disabled = false;
         document.getElementById('recordingTimer').style.display = 'none';
@@ -1911,7 +2404,7 @@ async function handleRecordingStop() {
     }
 
     // Update UI
-    updateRecordingStatus('processing', 'Processing...');
+    updateRecordingStatus('processing', t('statusProcessing'));
     document.getElementById('recordBtn').classList.remove('recording');
     document.getElementById('recordBtn').classList.add('processing');
     document.getElementById('recordBtn').disabled = true;
@@ -1973,6 +2466,10 @@ async function handleRecordingStop() {
         const currentCount = parseInt(document.getElementById('annotationCount').textContent);
         document.getElementById('annotationCount').textContent = currentCount + 1;
 
+        // Keep state.videos in sync so the Select Video modal shows the correct count
+        const vid = state.videos.find(v => v.id === state.currentVideoId);
+        if (vid) vid.annotation_count = (vid.annotation_count || 0) + 1;
+
     } catch (error) {
         console.error('Error saving annotation:', error);
         showToast('Error', 'Failed to save annotation', 'error');
@@ -1980,7 +2477,7 @@ async function handleRecordingStop() {
         hideLoading();
 
         // Reset UI
-        updateRecordingStatus('ready', 'Ready to Record');
+        updateRecordingStatus('ready', t('statusReadyToRecord'));
         document.getElementById('recordBtn').classList.remove('processing');
         document.getElementById('recordBtn').disabled = false;
     }
@@ -2044,8 +2541,8 @@ function renderAnnotations() {
         container.innerHTML = `
             <div class="empty-state">
                 <i class="fas fa-pen-to-square empty-icon"></i>
-                <p>No elicitation yet</p>
-                <p class="hint">Start recording to create your first elicitation</p>
+                <p>${t('noAnnotationsYet')}</p>
+                <p class="hint">${t('noAnnotationsHint')}</p>
             </div>
         `;
         return;
@@ -2060,6 +2557,50 @@ function renderAnnotations() {
         const item = document.createElement('div');
         item.className = 'annotation-item';
         item.dataset.id = annotation.id;
+
+        // ── In-place guided Q&A mode ──────────────────────────────────────────
+        if (state.guidedQA.annotationId === annotation.id) {
+            item.classList.add('elicit-inplace-active');
+            item.style.cursor = 'default';
+
+            const qa = state.guidedQA;
+            const qIdx = qa.currentIndex;
+            const questionText = qa.questions[qIdx] || '';
+            const total = qa.questions.length;
+            const annId = annotation.id;
+
+            item.innerHTML = `
+                <div class="elicit-inplace-question-area" id="eip-question-area-${annId}">
+                    <div class="elicit-inplace-question-card" id="eip-question-card-${annId}">
+                        <div class="eip-question-progress">${qIdx + 1} / ${total}</div>
+                        <div class="eip-question-text" id="eip-question-text-${annId}">${escapeHtml(questionText)}</div>
+                    </div>
+                </div>
+                <div class="elicit-inplace-transcription-area">
+                    <textarea class="eip-transcription-textarea" id="eip-transcript-${annId}" readonly placeholder="La transcription apparaîtra ici…"></textarea>
+                    <div class="eip-transcribing-hint" id="eip-hint-${annId}" style="display:none;">
+                        <span class="eip-spinner"></span> Transcription…
+                    </div>
+                </div>
+                <div class="elicit-inplace-record-area">
+                    <button class="eip-record-btn" id="eip-record-btn-${annId}" onclick="toggleInPlaceRecording(${annId})" title="${t('recordAnswer')}">
+                        <i class="fa-solid fa-microphone" id="eip-record-icon-${annId}"></i>
+                    </button>
+                    <div class="eip-record-actions">
+                        <button class="btn btn-small btn-secondary" onclick="skipInPlaceQuestion(${annId})">${currentLang === 'fr' ? 'Passer' : 'Skip'} <i class="fa-solid fa-arrow-right"></i></button>
+                        <button class="btn btn-small btn-danger" onclick="cancelInPlaceQA(${annId})">${t('cancel')}</button>
+                    </div>
+                </div>
+            `;
+
+            container.appendChild(item);
+            // Show the question with slide-in animation
+            requestAnimationFrame(() => {
+                const card = document.getElementById(`eip-question-card-${annId}`);
+                if (card) card.classList.add('eip-slide-in');
+            });
+            return; // skip normal card rendering
+        }
 
         const duration = annotation.end_time - annotation.start_time;
         const statusText = getStatusText(annotation.transcription_status);
@@ -2081,19 +2622,20 @@ function renderAnnotations() {
         if (annotation.transcription_status === 'completed') {
             if (annotation.tagging_status === 'processing') {
                 tagsHTML = `<div class="tagging-progress"><i class="fa-solid fa-tag"></i> <span>Generating tags...</span></div>`;
-            } else if (annotation.tagging_status === 'completed' && annotation.tags && annotation.tags.length > 0) {
-                const tagsInner = annotation.tags.map((tag, idx) => {
+            } else {
+                const tagsInner = (annotation.tags || []).map((tag, idx) => {
                     const cat = tag.category || '';
                     return `<span class="annotation-tag category-${cat}" title="${escapeHtml(cat)} - Click to delete" onclick="deleteTag(event, ${annotation.id}, ${idx})">${escapeHtml(tag.name)}</span>`;
                 }).join('');
-                tagsHTML = `<div class="annotation-tags">${tagsInner}</div>`;
+                const addTagBtn = `<button class="add-tag-btn" onclick="event.stopPropagation(); openAddTagInline(event, ${annotation.id})" title="Add a tag">+</button>`;
+                tagsHTML = `<div class="annotation-tags" id="annotation-tags-${annotation.id}">${tagsInner}${addTagBtn}</div>`;
             }
         }
 
         // --- Relaunch tagging button (shown once transcription done) ---
         let relaunchTaggingBtn = '';
         if (annotation.transcription_status === 'completed') {
-            relaunchTaggingBtn = `<button class="btn btn-icon btn-tiny" onclick="event.stopPropagation(); triggerTagging(${annotation.id});" title="Relaunch tagging"><i class="fa-solid fa-tags"></i></button>`;
+            relaunchTaggingBtn = `<button class="btn btn-icon btn-tiny" onclick="event.stopPropagation(); triggerTagging(${annotation.id});" title="${t('relaunchTagging')}"><i class="fa-solid fa-tags"></i></button>`;
         }
 
         // --- Review panel ---
@@ -2150,9 +2692,10 @@ function renderAnnotations() {
                     promptsHTML = `<div class="prompts-list">${promptItems}</div>`;
                 }
 
-                const contentStyle = covered ? 'display: block;' : 'display: none;';
+                const contentStyle = covered ? 'display: none;' : 'display: none;';
+                const clickAttr = covered ? '' : `onclick="toggleDimension(${annotation.id}, '${dimKey}')"`;
                 dimsHTML += `
-                    <div class="dimension-card ${cardClass}" onclick="toggleDimension(${annotation.id}, '${dimKey}')">
+                    <div class="dimension-card ${cardClass}" ${clickAttr}>
                         <div class="dimension-header">
                             <strong>${checkIcon} ${dimKey}</strong>
                             <span>${statusLabel}</span>
@@ -2164,7 +2707,7 @@ function renderAnnotations() {
             });
 
             const readyToComplete = rr.ready_to_proceed;
-            const relaunchReviewBtn = `<button class="btn btn-icon btn-tiny" onclick="triggerReview(${annotation.id})" title="Relaunch AI Review"><i class="fa-solid fa-arrow-rotate-right"></i></button>`;
+            const relaunchReviewBtn = `<button class="btn btn-icon btn-tiny" onclick="triggerReview(${annotation.id})" title="${t('relaunchReview')}"><i class="fa-solid fa-arrow-rotate-right"></i></button>`;
 
             const panelOpen = !!state.showReviewPanels[annotation.id];
             reviewPanelHTML = `
@@ -2187,10 +2730,10 @@ function renderAnnotations() {
                         ${dimsHTML}
                         <div class="review-actions">
                             <button class="btn edit-elicitation-btn" onclick="editElicitation(${annotation.id})">
-                                <i class="fa-solid fa-pencil"></i> Modifier l'élicitation
+                                <i class="fa-solid fa-pencil"></i> ${t('modifyElicitation')}
                             </button>
                             <button class="btn mark-complete-btn ${readyToComplete ? '' : 'disabled'}" onclick="markElicitationComplete(${annotation.id})" ${readyToComplete ? '' : 'disabled'}>
-                                <i class="fa-solid fa-check"></i> Marquer comme complet
+                                <i class="fa-solid fa-check"></i> ${t('markComplete')}
                             </button>
                         </div>
                     </div>
@@ -2207,19 +2750,19 @@ function renderAnnotations() {
                     ${taskBadgeHTML}
                 </div>
                 <div class="annotation-actions">
-                    <button class="btn btn-icon btn-small play-btn" onclick="seekToAnnotation(${annotation.start_time})" title="Jump to time">
+                    <button class="btn btn-icon btn-small play-btn" onclick="seekToAnnotation(${annotation.start_time})" title="${t('jumpToTime')}">
                         <i class="fas fa-play"></i>
                     </button>
-                    <button class="btn btn-icon btn-small" onclick="startEditTranscription(${annotation.id})" title="Edit transcription">
+                    <button class="btn btn-icon btn-small" onclick="startEditTranscription(${annotation.id})" title="${t('editTranscription')}">
                         <i class="fas fa-pencil-alt"></i>
                     </button>
-                    <button class="btn btn-icon btn-small" onclick="deleteAnnotation(${annotation.id})" title="Delete">
+                    <button class="btn btn-icon btn-small" onclick="deleteAnnotation(${annotation.id})" title="${t('deleteAnnotation')}">
                         <i class="fas fa-trash"></i>
                     </button>
                 </div>
             </div>
             <div class="annotation-transcription">
-                ${annotation.transcription || '<em>Transcription pending...</em>'}
+                ${annotation.transcription || `<em>${t('transcriptionPending')}</em>`}
             </div>
             <div class="annotation-status-row">
                 <div class="annotation-status ${statusClass}">
@@ -2300,6 +2843,91 @@ async function deleteTag(event, annotationId, tagIndex) {
     }
 }
 
+const TAG_CATEGORIES = ['tool', 'material', 'technique', 'handling', 'action'];
+
+function openAddTagInline(event, annotationId) {
+    const tagsContainer = document.getElementById(`annotation-tags-${annotationId}`);
+    if (!tagsContainer) return;
+
+    // Build inline form
+    const form = document.createElement('div');
+    form.className = 'add-tag-inline-form';
+    form.id = `add-tag-form-${annotationId}`;
+    form.onclick = e => e.stopPropagation();
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = 'Tag name';
+    input.className = 'add-tag-input';
+    input.maxLength = 40;
+
+    const select = document.createElement('select');
+    select.className = 'add-tag-category';
+    TAG_CATEGORIES.forEach(cat => {
+        const opt = document.createElement('option');
+        opt.value = cat;
+        opt.textContent = cat.charAt(0).toUpperCase() + cat.slice(1);
+        select.appendChild(opt);
+    });
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.type = 'button';
+    confirmBtn.className = 'add-tag-confirm-btn';
+    confirmBtn.innerHTML = '<i class="fas fa-arrow-right"></i>';
+    confirmBtn.title = 'Add tag';
+    confirmBtn.onclick = e => { e.stopPropagation(); submitNewTag(annotationId, input.value, select.value); };
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'add-tag-cancel-btn';
+    cancelBtn.innerHTML = '<i class="fas fa-times"></i>';
+    cancelBtn.title = 'Cancel';
+    cancelBtn.onclick = e => { e.stopPropagation(); renderAnnotations(); };
+
+    input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); submitNewTag(annotationId, input.value, select.value); }
+        if (e.key === 'Escape') { e.preventDefault(); renderAnnotations(); }
+    });
+
+    form.appendChild(input);
+    form.appendChild(select);
+    form.appendChild(confirmBtn);
+    form.appendChild(cancelBtn);
+
+    // Replace the tags container contents with the form
+    tagsContainer.innerHTML = '';
+    tagsContainer.appendChild(form);
+    input.focus();
+}
+
+async function submitNewTag(annotationId, tagName, category) {
+    tagName = tagName.trim();
+    if (!tagName) return;
+
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (!annotation) return;
+
+    const existingTags = annotation.tags || [];
+    if (existingTags.some(t => t.name.toLowerCase() === tagName.toLowerCase())) {
+        renderAnnotations();
+        return;
+    }
+
+    const newTags = [...existingTags, { name: tagName, category }];
+    try {
+        const response = await fetch(`${API_BASE}/api/annotations/${annotationId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tags: JSON.stringify(newTags) })
+        });
+        if (!response.ok) throw new Error('Failed to add tag');
+        annotation.tags = newTags;
+    } catch (err) {
+        showToast('Error', err.message, 'error');
+    }
+    renderAnnotations();
+}
+
 function startEditTask(annotationId) {
     const display = document.getElementById(`task-display-${annotationId}`);
     if (!display) return;
@@ -2349,32 +2977,64 @@ function editElicitation(annotationId) {
     let review = annotation.review_results;
     if (typeof review === 'string') { try { review = JSON.parse(review); } catch(e) { review = null; } }
 
-    const priorityPromptsHTML = review && review.priority_prompts && review.priority_prompts.length > 0
-        ? `<div class="elicitation-priority-prompts">
-            <strong>Points à adresser en priorité :</strong>
-            <ul>${review.priority_prompts.map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ul>
-        </div>` : '';
+    // Collect questions: priority_prompts first, then per-dimension prompts from incomplete dims.
+    // This ensures we capture every prompt-item the user sees in the review panel.
+    let questions = [];
+    if (review) {
+        if (Array.isArray(review.priority_prompts) && review.priority_prompts.length > 0) {
+            questions = review.priority_prompts.slice();
+        }
+        // Also gather dim.prompts from every incomplete dimension not already covered
+        const dims = review.dimensions || {};
+        ['HOW', 'EVALUATION', 'FEEDBACK'].forEach(key => {
+            const dim = dims[key];
+            if (dim && !dim.covered && Array.isArray(dim.prompts)) {
+                dim.prompts.forEach(p => {
+                    if (!questions.includes(p)) questions.push(p);
+                });
+            }
+        });
+    }
 
+    if (questions.length > 0) {
+        // --- Guided Q&A: render in-place inside the annotation card ---
+        state.guidedQA.annotationId = annotationId;
+        state.guidedQA.questions = questions;
+        state.guidedQA.currentIndex = 0;
+        state.guidedQA.originalTranscript = annotation.transcription || '';
+        state.guidedQA.updatedTranscript = '';
+        state.guidedQA.isRecording = false;
+        state.guidedQA.mediaRecorder = null;
+        state.guidedQA.audioChunks = [];
+        renderAnnotations();
+        // Scroll the activated card into view
+        setTimeout(() => {
+            const card = document.querySelector(`.annotation-item[data-id="${annotationId}"]`);
+            if (card) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }, 50);
+        return;
+    }
+
+    // --- Fallback: simple textarea mode (no priority prompts) ---
     const modal = document.createElement('div');
     modal.className = 'modal';
     modal.id = 'editElicitationModal';
     modal.innerHTML = `
         <div class="modal-content elicitation-modal-content">
             <div class="elicitation-modal-header">
-                <h2 class="elicitation-modal-title">Modifier l'élicitation</h2>
-                <button class="elicitation-modal-close" onclick="closeEditElicitationModal()" title="Fermer" aria-label="Fermer">
+                <h2 class="elicitation-modal-title">${t('modifyElicitation')}</h2>
+                <button class="elicitation-modal-close" onclick="closeEditElicitationModal()" title="${currentLang === 'fr' ? 'Fermer' : 'Close'}" aria-label="${currentLang === 'fr' ? 'Fermer' : 'Close'}">
                     <i class="fa-solid fa-xmark"></i>
                 </button>
             </div>
             <div class="elicitation-modal-body">
-                ${priorityPromptsHTML}
-                <label class="elicitation-textarea-label" for="elicitationTextEdit">Transcription</label>
+                <label class="elicitation-textarea-label" for="elicitationTextEdit">${currentLang === 'fr' ? 'Transcription' : 'Transcription'}</label>
                 <textarea id="elicitationTextEdit" rows="10">${escapeHtml(annotation.transcription || '')}</textarea>
             </div>
             <div class="elicitation-modal-footer">
-                <button class="btn btn-secondary" onclick="closeEditElicitationModal()">Annuler</button>
+                <button class="btn btn-secondary" onclick="closeEditElicitationModal()">${t('cancel')}</button>
                 <button class="btn btn-primary" onclick="saveElicitationEdit(${annotationId})">
-                    <i class="fa-solid fa-rotate-right"></i> Enregistrer et re-analyser
+                    <i class="fa-solid fa-rotate-right"></i> ${currentLang === 'fr' ? 'Enregistrer et re-analyser' : 'Save & re-analyze'}
                 </button>
             </div>
         </div>
@@ -2390,9 +3050,435 @@ function closeEditElicitationModal() {
     if (modal) modal.remove();
 }
 
-async function saveElicitationEdit(annotationId) {
-    const textarea = document.getElementById('elicitationTextEdit');
-    const newTranscription = textarea ? textarea.value.trim() : '';
+// ─────────────────────────────────────────────────────────────────────────────
+// Guided Q&A voice enrichment mode
+// ─────────────────────────────────────────────────────────────────────────────
+
+function openGuidedQAModal(annotationId, questions, originalTranscript) {
+    // Init guided Q&A state
+    state.guidedQA.annotationId = annotationId;
+    state.guidedQA.questions = questions;
+    state.guidedQA.currentIndex = 0;
+    state.guidedQA.originalTranscript = originalTranscript;
+    state.guidedQA.updatedTranscript = '';
+    state.guidedQA.isRecording = false;
+    state.guidedQA.mediaRecorder = null;
+    state.guidedQA.audioChunks = [];
+
+    const annotation = state.annotations.find(a => a.id === annotationId);
+
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.id = 'guidedQAModal';
+    modal.innerHTML = `
+        <div class="modal-content guided-qa-modal-content">
+            <div class="elicitation-modal-header">
+                <div class="qa-header-left">
+                    <h2 class="elicitation-modal-title">${currentLang === 'fr' ? "Enrichir l'élicitation" : 'Enrich elicitation'}</h2>
+                    <span class="qa-progress" id="qaProgress">${currentLang === 'fr' ? 'Question' : 'Question'} 1 / ${questions.length}</span>
+                </div>
+                <button class="elicitation-modal-close" onclick="closeGuidedQAModal()" title="${t('close')}" aria-label="${t('close')}">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div class="qa-replay-bar">
+                <button class="btn btn-icon qa-replay-btn" onclick="replaySegmentOnce()" title="${t('replaySegment')}">
+                    <i class="fa-solid fa-rotate-right"></i>
+                </button>
+                <span class="qa-replay-label">${t('replaySegmentFor')}</span>
+            </div>
+            <div class="elicitation-modal-body qa-modal-body">
+                <div class="qa-question-card" id="qaQuestionCard">
+                    <div class="qa-question-text" id="qaQuestionText"></div>
+                </div>
+                <div class="qa-voice-area">
+                    <button class="qa-record-btn" id="qaRecordBtn" onclick="toggleGuidedRecording()">
+                        <i class="fa-solid fa-microphone" id="qaRecordIcon"></i>
+                        <span id="qaRecordLabel">${t('answerByVoice')}</span>
+                    </button>
+                    <div class="qa-transcript-preview" id="qaTranscriptPreview"></div>
+                </div>
+            </div>
+            <div class="elicitation-modal-footer qa-modal-footer">
+                <button class="btn btn-secondary" onclick="closeGuidedQAModal()">${t('cancel')}</button>
+                <button class="qa-skip-btn" onclick="skipCurrentQuestion()">
+                    ${currentLang === 'fr' ? 'Passer' : 'Skip'} <i class="fa-solid fa-arrow-right"></i>
+                </button>
+                <button class="btn btn-primary" onclick="finishGuidedQA()">
+                    <i class="fa-solid fa-check"></i> ${currentLang === 'fr' ? 'Terminer' : 'Finish'}
+                </button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    modal.style.display = 'flex';
+
+    // Start looping the segment
+    if (annotation) startSegmentLoop(annotation);
+
+    // Show first question
+    showQAQuestion(0);
+}
+
+function showQAQuestion(index) {
+    const qa = state.guidedQA;
+    const total = qa.questions.length;
+    const questionText = document.getElementById('qaQuestionText');
+    const progress = document.getElementById('qaProgress');
+    const card = document.getElementById('qaQuestionCard');
+    const preview = document.getElementById('qaTranscriptPreview');
+    const recordBtn = document.getElementById('qaRecordBtn');
+    const recordLabel = document.getElementById('qaRecordLabel');
+
+    if (!questionText || !card) return;
+
+    // Reset voice area
+    if (preview) preview.textContent = '';
+    if (recordBtn) {
+        recordBtn.classList.remove('recording', 'processing', 'answered');
+    }
+    if (recordLabel) recordLabel.textContent = t('answerByVoice');
+
+    // Update progress
+    if (progress) progress.textContent = `Question ${index + 1} / ${total}`;
+
+    // Animate card in
+    card.classList.remove('qa-fade-in', 'qa-slide-out', 'answered');
+    void card.offsetWidth; // force reflow
+    questionText.textContent = qa.questions[index];
+    card.classList.add('qa-fade-in');
+}
+
+async function toggleGuidedRecording() {
+    if (state.guidedQA.isRecording) {
+        await stopGuidedRecording();
+    } else {
+        await startGuidedRecording();
+    }
+}
+
+async function startGuidedRecording() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        state.guidedQA.mediaRecorder = new MediaRecorder(stream);
+        state.guidedQA.audioChunks = [];
+
+        state.guidedQA.mediaRecorder.ondataavailable = (event) => {
+            if (event.data.size > 0) state.guidedQA.audioChunks.push(event.data);
+        };
+        state.guidedQA.mediaRecorder.onstop = handleGuidedRecordingStop;
+        state.guidedQA.mediaRecorder.start();
+        state.guidedQA.isRecording = true;
+
+        const btn = document.getElementById('qaRecordBtn');
+        const label = document.getElementById('qaRecordLabel');
+        if (btn) btn.classList.add('recording');
+        if (label) label.textContent = 'Arrêter l\'enregistrement';
+    } catch (error) {
+        showToast('Erreur micro', 'Impossible d\'accéder au microphone', 'error');
+    }
+}
+
+async function stopGuidedRecording() {
+    if (!state.guidedQA.mediaRecorder || !state.guidedQA.isRecording) return;
+    state.guidedQA.isRecording = false;
+    state.guidedQA.mediaRecorder.stop();
+    state.guidedQA.mediaRecorder.stream.getTracks().forEach(t => t.stop());
+
+    const btn = document.getElementById('qaRecordBtn');
+    const label = document.getElementById('qaRecordLabel');
+    if (btn) { btn.classList.remove('recording'); btn.classList.add('processing'); btn.disabled = true; }
+    if (label) label.textContent = t('transcribingInProgress');
+}
+
+async function handleGuidedRecordingStop() {
+    const audioBlob = new Blob(state.guidedQA.audioChunks, { type: 'audio/wav' });
+    const formData = new FormData();
+    formData.append('audio_blob', audioBlob, 'answer.wav');
+
+    const btn = document.getElementById('qaRecordBtn');
+    const label = document.getElementById('qaRecordLabel');
+    const preview = document.getElementById('qaTranscriptPreview');
+
+    try {
+        const headers = {};
+        if (MOODLE_JWT) headers['Authorization'] = `Bearer ${MOODLE_JWT}`;
+        const resp = await fetch(`${API_BASE}/api/annotations/transcribe-only`, {
+            method: 'POST',
+            headers,
+            body: formData
+        });
+
+        if (!resp.ok) throw new Error('Transcription échouée');
+        const data = await resp.json();
+        const transcription = (data.transcription || '').trim();
+
+        // Heuristic: ≥ 3 words = valid answer
+        const wordCount = transcription.split(/\s+/).filter(w => w.length > 0).length;
+        if (wordCount < 3) {
+            if (preview) preview.textContent = transcription ? `"${transcription}" — trop court, réessayez.` : 'Aucune parole détectée.';
+            if (btn) { btn.classList.remove('processing'); btn.disabled = false; }
+            if (label) label.textContent = t('answerByVoice');
+            return;
+        }
+
+        // Show preview
+        if (preview) preview.textContent = `"${transcription}"`;
+
+        // Append to updated transcript
+        state.guidedQA.updatedTranscript += (state.guidedQA.updatedTranscript ? '\n\n' : '') + transcription;
+
+        // Mark question as answered visually
+        const card = document.getElementById('qaQuestionCard');
+        if (card) {
+            card.classList.add('answered');
+            card.classList.add('qa-slide-out');
+        }
+
+        // Advance after animation
+        setTimeout(() => advanceQAQuestion(), 600);
+
+    } catch (err) {
+        if (preview) preview.textContent = 'Erreur de transcription — réessayez.';
+        if (btn) { btn.classList.remove('processing'); btn.disabled = false; }
+        if (label) label.textContent = 'Répondre par la voix';
+    }
+}
+
+function advanceQAQuestion() {
+    state.guidedQA.currentIndex++;
+    if (state.guidedQA.currentIndex < state.guidedQA.questions.length) {
+        const btn = document.getElementById('qaRecordBtn');
+        if (btn) { btn.classList.remove('processing'); btn.disabled = false; }
+        showQAQuestion(state.guidedQA.currentIndex);
+    } else {
+        finishGuidedQA();
+    }
+}
+
+function skipCurrentQuestion() {
+    // Skip without appending transcript
+    advanceQAQuestion();
+}
+
+async function finishGuidedQA() {
+    stopSegmentLoop();
+    closeGuidedQAModal();
+
+    const qa = state.guidedQA;
+    if (!qa.updatedTranscript) {
+        // Nothing was recorded — just close
+        return;
+    }
+
+    const combined = qa.originalTranscript.trim()
+        ? qa.originalTranscript.trim() + '\n\n' + qa.updatedTranscript.trim()
+        : qa.updatedTranscript.trim();
+
+    await saveElicitationEdit(qa.annotationId, combined);
+}
+
+function closeGuidedQAModal() {
+    stopSegmentLoop();
+    // Stop any ongoing guided recording
+    if (state.guidedQA.isRecording && state.guidedQA.mediaRecorder) {
+        state.guidedQA.isRecording = false;
+        try { state.guidedQA.mediaRecorder.stop(); } catch(e) {}
+        try { state.guidedQA.mediaRecorder.stream.getTracks().forEach(t => t.stop()); } catch(e) {}
+    }
+    const modal = document.getElementById('guidedQAModal');
+    if (modal) modal.remove();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// In-place annotation Q&A functions (replaces modal-based guided QA)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function cancelInPlaceQA(annotationId) {
+    if (state.guidedQA.isRecording && state.guidedQA.mediaRecorder) {
+        state.guidedQA.isRecording = false;
+        try { state.guidedQA.mediaRecorder.stop(); } catch(e) {}
+        try { state.guidedQA.mediaRecorder.stream.getTracks().forEach(t => t.stop()); } catch(e) {}
+    }
+    state.guidedQA.annotationId = null;
+    state.guidedQA.questions = [];
+    renderAnnotations();
+}
+
+async function toggleInPlaceRecording(annotationId) {
+    if (state.guidedQA.isRecording) {
+        await stopInPlaceRecording(annotationId);
+    } else {
+        await startInPlaceRecording(annotationId);
+    }
+}
+
+async function startInPlaceRecording(annotationId) {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        state.guidedQA.mediaRecorder = new MediaRecorder(stream);
+        state.guidedQA.audioChunks = [];
+
+        state.guidedQA.mediaRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0) state.guidedQA.audioChunks.push(e.data);
+        };
+        state.guidedQA.mediaRecorder.onstop = () => handleInPlaceRecordingStop(annotationId);
+        state.guidedQA.mediaRecorder.start();
+        state.guidedQA.isRecording = true;
+
+        const btn = document.getElementById(`eip-record-btn-${annotationId}`);
+        if (btn) btn.classList.add('recording');
+    } catch (error) {
+        showToast('Erreur micro', 'Impossible d\'accéder au microphone', 'error');
+    }
+}
+
+async function stopInPlaceRecording(annotationId) {
+    if (!state.guidedQA.mediaRecorder || !state.guidedQA.isRecording) return;
+    state.guidedQA.isRecording = false;
+    state.guidedQA.mediaRecorder.stop();
+    state.guidedQA.mediaRecorder.stream.getTracks().forEach(t => t.stop());
+
+    const btn = document.getElementById(`eip-record-btn-${annotationId}`);
+    if (btn) { btn.classList.remove('recording'); btn.classList.add('processing'); btn.disabled = true; }
+
+    const hint = document.getElementById(`eip-hint-${annotationId}`);
+    if (hint) hint.style.display = 'flex';
+}
+
+async function handleInPlaceRecordingStop(annotationId) {
+    const audioBlob = new Blob(state.guidedQA.audioChunks, { type: 'audio/wav' });
+    const formData = new FormData();
+    formData.append('audio_blob', audioBlob, 'answer.wav');
+
+    const btn = document.getElementById(`eip-record-btn-${annotationId}`);
+    const hint = document.getElementById(`eip-hint-${annotationId}`);
+    const textarea = document.getElementById(`eip-transcript-${annotationId}`);
+
+    try {
+        const resp = await fetch(`${API_BASE}/api/annotations/transcribe-only`, {
+            method: 'POST',
+            body: formData
+        });
+        if (!resp.ok) throw new Error('Transcription failed');
+        const data = await resp.json();
+        const transcription = (data.transcription || '').trim();
+
+        if (hint) hint.style.display = 'none';
+
+        const wordCount = transcription.split(/\s+/).filter(w => w.length > 0).length;
+        if (wordCount < 3) {
+            if (textarea) textarea.value = transcription ? `"${transcription}" — trop court, réessayez.` : 'Aucune parole détectée.';
+            if (btn) { btn.classList.remove('processing'); btn.disabled = false; }
+            return;
+        }
+
+        // Show in textarea
+        if (textarea) textarea.value = transcription;
+
+        // Accumulate transcript
+        state.guidedQA.updatedTranscript += (state.guidedQA.updatedTranscript ? '\n\n' : '') + transcription;
+
+        // Animate question card as answered (green bg, fade out, scroll down)
+        const card = document.getElementById(`eip-question-card-${annotationId}`);
+        if (card) {
+            card.classList.add('eip-answered');
+            setTimeout(() => {
+                card.classList.add('eip-slide-out');
+                setTimeout(() => advanceInPlaceQuestion(annotationId), 500);
+            }, 400);
+        } else {
+            advanceInPlaceQuestion(annotationId);
+        }
+
+    } catch (err) {
+        if (hint) hint.style.display = 'none';
+        if (textarea) textarea.value = 'Erreur de transcription — réessayez.';
+        if (btn) { btn.classList.remove('processing'); btn.disabled = false; }
+    }
+}
+
+function advanceInPlaceQuestion(annotationId) {
+    state.guidedQA.currentIndex++;
+    if (state.guidedQA.currentIndex < state.guidedQA.questions.length) {
+        // Re-render to show next question with fresh state
+        renderAnnotations();
+        requestAnimationFrame(() => {
+            const card = document.getElementById(`eip-question-card-${annotationId}`);
+            if (card) card.classList.add('eip-slide-in');
+        });
+    } else {
+        finishInPlaceQA(annotationId);
+    }
+}
+
+async function finishInPlaceQA(annotationId) {
+    const qa = state.guidedQA;
+    const combined = qa.originalTranscript.trim()
+        ? qa.originalTranscript.trim() + '\n\n' + qa.updatedTranscript.trim()
+        : qa.updatedTranscript.trim();
+
+    state.guidedQA.annotationId = null;
+    state.guidedQA.questions = [];
+    renderAnnotations();
+
+    if (combined) {
+        await saveElicitationEdit(annotationId, combined);
+    }
+}
+
+function skipInPlaceQuestion(annotationId) {
+    advanceInPlaceQuestion(annotationId);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+function startSegmentLoop(annotation) {
+    stopSegmentLoop();
+    const videoPlayer = document.getElementById('videoPlayer');
+    if (!videoPlayer || annotation.start_time == null || annotation.end_time == null) return;
+
+    // Seek to start of segment immediately
+    videoPlayer.currentTime = annotation.start_time;
+    videoPlayer.play().catch(() => {});
+
+    state.guidedQA.loopInterval = setInterval(() => {
+        if (!document.getElementById('guidedQAModal')) {
+            stopSegmentLoop();
+            return;
+        }
+        if (videoPlayer.currentTime >= annotation.end_time) {
+            videoPlayer.currentTime = annotation.start_time;
+        }
+    }, 150);
+}
+
+function stopSegmentLoop() {
+    if (state.guidedQA.loopInterval) {
+        clearInterval(state.guidedQA.loopInterval);
+        state.guidedQA.loopInterval = null;
+    }
+}
+
+function replaySegmentOnce() {
+    const annotation = state.annotations.find(a => a.id === state.guidedQA.annotationId);
+    if (!annotation) return;
+    const videoPlayer = document.getElementById('videoPlayer');
+    if (!videoPlayer) return;
+    videoPlayer.currentTime = annotation.start_time;
+    videoPlayer.play().catch(() => {});
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function saveElicitationEdit(annotationId, transcriptionOverride = null) {
+    let newTranscription;
+    if (transcriptionOverride !== null) {
+        newTranscription = transcriptionOverride.trim();
+    } else {
+        const textarea = document.getElementById('elicitationTextEdit');
+        newTranscription = textarea ? textarea.value.trim() : '';
+    }
     if (!newTranscription) {
         showToast('Erreur', 'La transcription ne peut pas être vide', 'error');
         return;
@@ -2415,7 +3501,7 @@ async function saveElicitationEdit(annotationId) {
 
         await fetch(`${API_BASE}/api/annotations/${annotationId}/review`, { method: 'POST' });
 
-        closeEditElicitationModal();
+        if (!transcriptionOverride) closeEditElicitationModal();
         showToast('Succès', 'Élicitation mise à jour, re-analyse en cours', 'success');
         renderAnnotations();
     } catch (error) {
@@ -2664,19 +3750,19 @@ function startEditTranscription(annotationId) {
 
     const textarea = document.createElement('textarea');
     textarea.className = 'transcription-textarea';
-    textarea.value = (originalText === 'Transcription pending...' || originalText === '') ? '' : originalText;
+    textarea.value = (originalText === TRANSLATIONS.en.transcriptionPending || originalText === TRANSLATIONS.fr.transcriptionPending || originalText === '') ? '' : originalText;
 
     const actions = document.createElement('div');
     actions.className = 'transcription-editor-actions';
 
     const saveBtn = document.createElement('button');
     saveBtn.className = 'btn btn-primary btn-small';
-    saveBtn.textContent = 'Save';
+    saveBtn.textContent = t('save');
     saveBtn.addEventListener('click', () => saveTranscriptionEdit(annotationId, textarea.value, item));
 
     const cancelBtn = document.createElement('button');
     cancelBtn.className = 'btn btn-secondary btn-small';
-    cancelBtn.textContent = 'Cancel';
+    cancelBtn.textContent = t('cancel');
     cancelBtn.addEventListener('click', () => cancelTranscriptionEdit(item, transcriptionDiv, originalText));
 
     actions.appendChild(saveBtn);
@@ -2875,10 +3961,10 @@ function formatFileSize(bytes) {
 
 function getStatusText(status) {
     const statusMap = {
-        'pending': '<i class="fas fa-hourglass-half"></i> Transcription pending...',
-        'processing': '<i class="fas fa-spinner fa-spin"></i> Transcribing audio...',
-        'completed': '<i class="fas fa-check-circle"></i> Transcription complete',
-        'failed': '<i class="fas fa-exclamation-circle"></i> Transcription failed'
+        'pending': `<i class="fas fa-hourglass-half"></i> ${t('transcriptionPending')}`,
+        'processing': `<i class="fas fa-spinner fa-spin"></i> ${t('transcribingAudio')}`,
+        'completed': `<i class="fas fa-check-circle"></i> ${t('transcriptionComplete')}`,
+        'failed': `<i class="fas fa-exclamation-circle"></i> ${t('transcriptionFailed')}`
     };
 
     return statusMap[status] || status;
@@ -3068,18 +4154,20 @@ function showFeedbackModal(annotationId, feedbackValue) {
     modal.innerHTML = `
         <div class="feedback-modal-content">
             <div class="feedback-modal-header">
-                <h3>Merci pour votre avis</h3>
+                <h3>${currentLang === 'fr' ? 'Merci pour votre avis' : 'Thank you for your feedback'}</h3>
                 <button class="feedback-modal-close">&times;</button>
             </div>
             <div class="feedback-modal-body">
-                <p class="feedback-intro">Veuillez sélectionner ce qui vous a ${isPositive ? 'plu' : 'déplu'} :</p>
+                <p class="feedback-intro">${currentLang === 'fr'
+                    ? `Veuillez sélectionner ce qui vous a ${isPositive ? 'plu' : 'déplu'} :`
+                    : `Please select what you ${isPositive ? 'liked' : 'disliked'} :`}</p>
                 <div class="feedback-choices">
                     ${choicesHTML}
                 </div>
             </div>
             <div class="feedback-modal-footer">
-                <button class="btn btn-secondary" onclick="closeFeedbackModal()">Annuler</button>
-                <button class="btn btn-primary" onclick="submitFeedbackModal(${annotationId}, ${feedbackValue})">Soumettre</button>
+                <button class="btn btn-secondary" onclick="closeFeedbackModal()">${t('cancel')}</button>
+                <button class="btn btn-primary" onclick="submitFeedbackModal(${annotationId}, ${feedbackValue})">${currentLang === 'fr' ? 'Soumettre' : 'Submit'}</button>
             </div>
         </div>
     `;
@@ -3339,12 +4427,21 @@ function initializeSegmentSlider() {
         rangeEl.style.width = `${Math.max(0, ep - sp)}%`;
         const sdisp = document.getElementById('segmentStartDisplay');
         const edisp = document.getElementById('segmentEndDisplay');
-        if (sdisp) sdisp.textContent = `Start: ${formatTime(s)}`;
-        if (edisp) edisp.textContent = `End: ${formatTime(e)}`;
+        if (sdisp) sdisp.textContent = `${t('segmentStartPrefix')}: ${formatTime(s)}`;
+        if (edisp) edisp.textContent = `${t('segmentEndPrefix')}: ${formatTime(e)}`;
     }
 
     // Pointer/drag handling
+    // Seeks are deferred to mouseup/touchend only — writing currentTime on every
+    // mousemove fires a new HTTP range request even on a paused video (the browser
+    // must fetch+decode the new frame), which floods the server under fast scrubbing.
     let activeHandle = null;
+    let dragWasPlaying = false;
+
+    function getVid() {
+        return document.getElementById('segmentPlayer') || document.getElementById('videoPlayer');
+    }
+
     function onPointerMove(ev) {
         if (!activeHandle) return;
         ev.preventDefault();
@@ -3353,41 +4450,70 @@ function initializeSegmentSlider() {
         let pct = ((clientX - rect.left) / rect.width) * 100;
         pct = Math.max(0, Math.min(100, pct));
         const t = percentToTime(pct);
+        const vid = getVid();
         if (activeHandle === 'start') {
-            const maxStart = (state.segmentEndTime != null) ? state.segmentEndTime - 0.1 : (document.getElementById('segmentPlayer') || document.getElementById('videoPlayer')).duration - 0.1;
+            const maxStart = (state.segmentEndTime != null) ? state.segmentEndTime - 0.1 : vid.duration - 0.1;
             state.segmentStartTime = Math.min(maxStart, Math.max(0, t));
         } else {
             const minEnd = (state.segmentStartTime != null) ? state.segmentStartTime + 0.1 : 0.1;
-            const dur = (document.getElementById('segmentPlayer') || document.getElementById('videoPlayer')).duration || 1;
+            const dur = vid ? vid.duration || 1 : 1;
             state.segmentEndTime = Math.max(minEnd, Math.min(dur, t));
         }
         updateUI();
     }
+
+    function startDrag(handle) {
+        activeHandle = handle;
+        const vid = getVid();
+        if (vid) { dragWasPlaying = !vid.paused; vid.pause(); }
+        document.addEventListener('mousemove', onPointerMove);
+        document.addEventListener('mouseup', onPointerUp);
+    }
+
     function onPointerUp() {
+        const handle = activeHandle;
         activeHandle = null;
         document.removeEventListener('mousemove', onPointerMove);
         document.removeEventListener('mouseup', onPointerUp);
         document.removeEventListener('touchmove', onPointerMove);
         document.removeEventListener('touchend', onPointerUp);
+        // Single seek after drag ends — one request, not dozens
+        const vid = getVid();
+        if (vid) {
+            const t = (handle === 'start') ? state.segmentStartTime : state.segmentEndTime;
+            if (t != null) vid.currentTime = t;
+            if (dragWasPlaying) vid.play().catch(() => {});
+        }
     }
 
-    handleStart.addEventListener('mousedown', (e) => { activeHandle = 'start'; document.addEventListener('mousemove', onPointerMove); document.addEventListener('mouseup', onPointerUp); });
-    handleEnd.addEventListener('mousedown', (e) => { activeHandle = 'end'; document.addEventListener('mousemove', onPointerMove); document.addEventListener('mouseup', onPointerUp); });
-    handleStart.addEventListener('touchstart', (e) => { activeHandle = 'start'; document.addEventListener('touchmove', onPointerMove, {passive:false}); document.addEventListener('touchend', onPointerUp); }, {passive:false});
-    handleEnd.addEventListener('touchstart', (e) => { activeHandle = 'end'; document.addEventListener('touchmove', onPointerMove, {passive:false}); document.addEventListener('touchend', onPointerUp); }, {passive:false});
+    handleStart.addEventListener('mousedown', () => startDrag('start'));
+    handleEnd.addEventListener('mousedown', () => startDrag('end'));
+    handleStart.addEventListener('touchstart', () => {
+        activeHandle = 'start';
+        const vid = getVid();
+        if (vid) { dragWasPlaying = !vid.paused; vid.pause(); }
+        document.addEventListener('touchmove', onPointerMove, {passive:false});
+        document.addEventListener('touchend', onPointerUp);
+    }, {passive:false});
+    handleEnd.addEventListener('touchstart', () => {
+        activeHandle = 'end';
+        const vid = getVid();
+        if (vid) { dragWasPlaying = !vid.paused; vid.pause(); }
+        document.addEventListener('touchmove', onPointerMove, {passive:false});
+        document.addEventListener('touchend', onPointerUp);
+    }, {passive:false});
 
-    // Click on track sets nearest handle
+    // Click on track sets nearest handle and seeks to that position
     track.addEventListener('click', (e) => {
         const rect = track.getBoundingClientRect();
         const pct = ((e.clientX - rect.left) / rect.width) * 100;
         const sPct = timeToPercent(state.segmentStartTime || 0);
-        const ePct = timeToPercent(state.segmentEndTime || (document.getElementById('segmentPlayer') || document.getElementById('videoPlayer')).duration || 1);
+        const ePct = timeToPercent(state.segmentEndTime || getVid().duration || 1);
         const distStart = Math.abs(pct - sPct);
         const distEnd = Math.abs(pct - ePct);
-        const which = (distStart <= distEnd) ? 'start' : 'end';
-        activeHandle = which;
+        activeHandle = (distStart <= distEnd) ? 'start' : 'end';
         onPointerMove(e);
-        activeHandle = null;
+        onPointerUp();
     });
 
     // Keyboard accessibility: arrow keys adjust handles
@@ -3408,8 +4534,24 @@ function initializeSegmentSlider() {
         });
     });
 
-    // Expose small updater used elsewhere
+    // Expose updater and highlight helper used elsewhere
     window.updateSegmentSliderUI = updateUI;
+    window.highlightSegmentOnTrack = function(startTime, endTime) {
+        let hl = document.getElementById('segmentHighlight');
+        if (!hl) {
+            hl = document.createElement('div');
+            hl.id = 'segmentHighlight';
+            hl.className = 'segment-highlight';
+            track.appendChild(hl);
+        }
+        const sp = timeToPercent(startTime);
+        const ep = timeToPercent(endTime);
+        hl.style.left = `${sp}%`;
+        hl.style.width = `${Math.max(0, ep - sp)}%`;
+        hl.style.display = 'block';
+        // Remove previous active-card highlight
+        document.querySelectorAll('.segment-item.active').forEach(el => el.classList.remove('active'));
+    };
 
     // When segment player loads metadata, reset handles to 0 → full duration
     const segPlayer = document.getElementById('segmentPlayer');
@@ -3447,8 +4589,8 @@ function renderSegmentVideoSelector() {
         container.innerHTML = `
             <div class="empty-state">
                 <i class="fas fa-film empty-icon"></i>
-                <h3>No Video Loaded</h3>
-                <p>Use "Upload to OwnCloud" then "Select Video" to add videos.</p>
+                <h3>${t('noVideoLoaded')}</h3>
+                <p>${t('noVideoHint')}</p>
             </div>
         `;
         return;
@@ -3476,7 +4618,8 @@ function loadSegmentPlayer(videoId) {
     if (!player || !src) return;
 
     state.currentVideoId = videoId;
-    src.src = `${API_BASE}/api/videos/${videoId}/file`;
+    const tokenParam2 = MOODLE_JWT ? `?token=${encodeURIComponent(MOODLE_JWT)}` : '';
+    src.src = `${API_BASE}/api/videos/${videoId}/file${tokenParam2}`;
     player.load();
 
     // Show player container and reset start/end to 0 → full (loadedmetadata will refine)
@@ -3494,10 +4637,10 @@ async function loadSegments() {
     const list = document.getElementById('segmentsList');
     if (!list) return;
 
-    list.innerHTML = '<div class="empty-state"><p>Loading segments…</p></div>';
+    list.innerHTML = `<div class="empty-state"><p>${currentLang === 'fr' ? 'Chargement des segments…' : 'Loading segments…'}</p></div>`;
 
     if (!state.currentVideoId) {
-        list.innerHTML = '<div class="empty-state"><p>Load a video first to see segments.</p></div>';
+        list.innerHTML = `<div class="empty-state"><p>${t('loadVideoFirst')}</p></div>`;
         return;
     }
 
@@ -3510,7 +4653,7 @@ async function loadSegments() {
         refreshSegmentSelector();
     } catch (err) {
         console.error('Failed to load segments', err);
-        list.innerHTML = '<div class="empty-state"><p>Failed to load segments</p></div>';
+        list.innerHTML = `<div class="empty-state"><p>${currentLang === 'fr' ? 'Échec du chargement des segments' : 'Failed to load segments'}</p></div>`;
     }
 }
 
@@ -3519,25 +4662,56 @@ function renderSegments() {
     if (!list) return;
 
     if (!state.segments || state.segments.length === 0) {
-        list.innerHTML = '<div class="empty-state"><p>No segments for this video</p></div>';
+        list.innerHTML = `<div class="empty-state"><p>${t('noSegmentsForVideo')}</p></div>`;
         return;
     }
 
     list.innerHTML = '';
     state.segments.forEach(seg => {
+        const duration = seg.end_time - seg.start_time;
         const item = document.createElement('div');
         item.className = 'segment-item';
-        item.innerHTML = `
-            <div class="segment-meta">
-                <strong>${seg.name || `Segment ${seg.id}`}</strong>
-                <div class="segment-times">${formatTime(seg.start_time)} → ${formatTime(seg.end_time)}</div>
-            </div>
-            <div class="segment-actions">
-                <button class="btn btn-small btn-icon" data-start="${seg.start_time}" onclick="loadVideoSegment(${seg.start_time})"><i class="fas fa-play"></i> Load</button>
-                <button class="btn btn-small" onclick="editSegment(${seg.id})">Edit</button>
-                <button class="btn btn-small btn-danger" onclick="deleteSegment(${seg.id})"><i class="fas fa-trash"></i></button>
+        item.title = t('previewSegment');
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'segment-card-name';
+        nameSpan.textContent = seg.name || `Segment ${seg.id}`;
+        nameSpan.title = 'Double-click to rename';
+
+        nameSpan.addEventListener('dblclick', e => {
+            e.stopPropagation();
+            startInlineRename(nameSpan, seg);
+        });
+
+        const cardBody = document.createElement('div');
+        cardBody.className = 'segment-card-body';
+        cardBody.innerHTML = `
+            <div class="segment-card-times">
+                <span><i class="fas fa-clock"></i> ${formatTime(seg.start_time)} – ${formatTime(seg.end_time)}</span>
+                <span class="segment-card-duration">${formatTime(duration)}</span>
             </div>
         `;
+        cardBody.insertBefore(nameSpan, cardBody.firstChild);
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'segment-card-delete';
+        deleteBtn.title = t('deleteSegment');
+        deleteBtn.innerHTML = '<i class="fas fa-trash"></i>';
+        deleteBtn.addEventListener('click', e => { e.stopPropagation(); deleteSegment(seg.id); });
+
+        item.appendChild(cardBody);
+        item.appendChild(deleteBtn);
+
+        item.addEventListener('click', () => {
+            // Seek video to segment start
+            const vid = document.getElementById('segmentPlayer') || document.getElementById('videoPlayer');
+            if (vid) { vid.pause(); vid.currentTime = seg.start_time; }
+            // Highlight range on track
+            if (window.highlightSegmentOnTrack) window.highlightSegmentOnTrack(seg.start_time, seg.end_time);
+            // Mark card as active
+            document.querySelectorAll('.segment-item.active').forEach(el => el.classList.remove('active'));
+            item.classList.add('active');
+        });
         list.appendChild(item);
     });
 }
@@ -3558,7 +4732,7 @@ function setSegmentStart() {
     if (!videoPlayer || isNaN(videoPlayer.currentTime)) return;
     state.segmentStartTime = videoPlayer.currentTime;
     const disp = document.getElementById('segmentStartDisplay');
-    if (disp) disp.textContent = `Start: ${formatTime(state.segmentStartTime)}`;
+    if (disp) disp.textContent = `${t('segmentStartPrefix')}: ${formatTime(state.segmentStartTime)}`;
     if (window.updateSegmentSliderUI) window.updateSegmentSliderUI();
 }
 
@@ -3568,7 +4742,7 @@ function setSegmentEnd() {
     if (!videoPlayer || isNaN(videoPlayer.currentTime)) return;
     state.segmentEndTime = videoPlayer.currentTime;
     const disp = document.getElementById('segmentEndDisplay');
-    if (disp) disp.textContent = `End: ${formatTime(state.segmentEndTime)}`;
+    if (disp) disp.textContent = `${t('segmentEndPrefix')}: ${formatTime(state.segmentEndTime)}`;
     if (window.updateSegmentSliderUI) window.updateSegmentSliderUI();
 }
 
@@ -3610,17 +4784,59 @@ async function deleteSegment(id) {
     }
 }
 
-async function editSegment(id) {
-    const newName = prompt('Segment name:');
-    if (newName === null) return;
+function startInlineRename(nameSpan, seg) {
+    const original = seg.name || `Segment ${seg.id}`;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'segment-card-name-input';
+    input.value = original;
+
+    nameSpan.replaceWith(input);
+    input.focus();
+    input.select();
+
+    let committed = false;
+    const commit = async () => {
+        if (committed) return;
+        committed = true;
+        const newName = input.value.trim() || original;
+        input.replaceWith(nameSpan);
+        if (newName !== original) {
+            nameSpan.textContent = newName;
+            await renameSegment(seg.id, newName);
+        }
+    };
+    const cancel = () => {
+        if (committed) return;
+        committed = true;
+        input.replaceWith(nameSpan);
+    };
+
+    input.addEventListener('blur', commit);
+    input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); commit(); }
+        if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+    });
+}
+
+async function renameSegment(id, newName) {
     try {
-        const resp = await fetch(`${API_BASE}/api/segments/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newName }) });
+        const resp = await fetch(`${API_BASE}/api/segments/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: newName })
+        });
         if (!resp.ok) throw new Error('Update failed');
-        await loadSegments();
-        showToast('Updated', 'Segment name updated', 'success');
+        // Update local state so selector and modal reflect the new name without full reload
+        const seg = state.segments.find(s => s.id === id);
+        if (seg) seg.name = newName;
+        refreshSegmentSelector();
+        showToast('Renamed', 'Segment name updated', 'success');
     } catch (err) {
         console.error(err);
-        showToast('Error', 'Failed to update segment', 'error');
+        showToast('Error', 'Failed to rename segment', 'error');
+        // Re-render to restore old name
+        renderSegments();
     }
 }
 
@@ -3828,18 +5044,18 @@ async function deleteVideo(videoId) {
             try { localStorage.removeItem('currentVideoId'); } catch (e) { console.error('Failed to clear video state:', e); }
             document.getElementById('videoPlayerContainer').style.display = 'none';
             document.getElementById('recordingControls').style.display = 'none';
-            document.getElementById('videoSelector').style.display = 'flex';
+            document.getElementById('videoSelector').style.display = 'block';
             document.getElementById('videoInfo').style.display = 'none';
         }
 
         await loadVideos();
+        showVideoModal();
         showToast('Removed', willDeleteRemote ? 'Plugin record removed (OwnCloud file untouched)' : 'Video and elicitations deleted', 'success');
     } catch (error) {
         console.error('Error deleting video:', error);
         showToast('Error', 'Failed to delete video', 'error');
     } finally {
         hideLoading();
-        closeVideoModal();
     }
 }
 
@@ -4171,6 +5387,10 @@ window.deleteTag = deleteTag;
 window.startEditTask = startEditTask;
 window.editElicitation = editElicitation;
 window.closeEditElicitationModal = closeEditElicitationModal;
+window.cancelInPlaceQA = cancelInPlaceQA;
+window.toggleInPlaceRecording = toggleInPlaceRecording;
+window.skipInPlaceQuestion = skipInPlaceQuestion;
+window.finishInPlaceQA = finishInPlaceQA;
 window.saveElicitationEdit = saveElicitationEdit;
 window.markElicitationComplete = markElicitationComplete;
 window.registerLocalVideo = registerLocalVideo;

@@ -94,6 +94,63 @@ body {
     align-items: center;
 }
 
+/* Back to Moodle button */
+.back-to-moodle-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.75rem;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    font-weight: 500;
+    text-decoration: none;
+    border: 1px solid var(--border-color);
+    transition: var(--transition);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.back-to-moodle-btn:hover {
+    background: rgba(0, 0, 0, 0.06);
+    color: var(--text-primary);
+    border-color: var(--text-muted);
+}
+
+.back-to-moodle-btn i {
+    font-size: 0.75rem;
+}
+
+/* Language toggle button */
+.btn-lang {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.3rem 0.65rem;
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, 0.7);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+    white-space: nowrap;
+    letter-spacing: 0.03em;
+}
+
+.btn-lang:hover {
+    background: rgba(255, 255, 255, 0.95);
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+.lang-flag {
+    font-size: 1rem;
+    line-height: 1;
+}
+
 
 /* Main Content */
 .main-content {
@@ -221,6 +278,106 @@ body {
     margin-top: 8px;
     font-size: 0.875rem;
     color: var(--text-secondary);
+}
+
+/* Segment highlight overlay on the track (gold, shown on card click) */
+.segment-highlight {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background: rgba(234, 179, 8, 0.45);
+    border-radius: 8px;
+    pointer-events: none;
+    display: none;
+    z-index: 5;
+}
+
+/* Segment list cards */
+#segmentsList {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+}
+.segment-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #cbecff;
+    border: 1.5px solid #9dd6f8;
+    border-radius: 10px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: box-shadow 0.15s, border-color 0.15s, background 0.15s;
+}
+.segment-item:hover {
+    background: #b8e4fc;
+    border-color: #62bff5;
+    box-shadow: 0 2px 8px rgba(0,120,200,0.12);
+}
+.segment-item.active {
+    border-color: #eab308;
+    box-shadow: 0 0 0 2px rgba(234,179,8,0.35);
+    background: #d6f0ff;
+}
+.segment-card-body {
+    flex: 1;
+    min-width: 0;
+}
+.segment-card-name {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: #1a4a6e;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: text;
+}
+.segment-card-name-input {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: #1a4a6e;
+    border: none;
+    border-bottom: 2px solid #2d7ab5;
+    background: transparent;
+    outline: none;
+    width: 100%;
+    padding: 0;
+    font-family: inherit;
+}
+.segment-card-times {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 4px;
+    font-size: 0.8rem;
+    color: #2d7ab5;
+    gap: 8px;
+}
+.segment-card-times i {
+    margin-right: 4px;
+    opacity: 0.7;
+}
+.segment-card-duration {
+    font-size: 0.75rem;
+    color: #5a9ec7;
+    white-space: nowrap;
+}
+.segment-card-delete {
+    flex-shrink: 0;
+    background: transparent;
+    border: 1.5px solid transparent;
+    border-radius: 6px;
+    color: #c0392b;
+    padding: 5px 7px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: background 0.15s, border-color 0.15s;
+    line-height: 1;
+}
+.segment-card-delete:hover {
+    background: rgba(192,57,43,0.1);
+    border-color: rgba(192,57,43,0.3);
 }
 
 /* Video modal: nested segments list */
@@ -960,8 +1117,8 @@ body {
 /* Toast Notifications */
 .toast-container {
     position: fixed;
-    top: var(--spacing-xl);
-    right: var(--spacing-xl);
+    bottom: var(--spacing-xl);
+    left: var(--spacing-xl);
     z-index: 3000;
     display: flex;
     flex-direction: column;
@@ -2138,9 +2295,13 @@ body {
     color: var(--text-primary);
     border: 1px solid var(--border-color);
     transition: var(--transition);
+    cursor: pointer;
 }
 
 .annotation-tag:hover {
+    background: #dc2626 !important;
+    border-color: #b91c1c !important;
+    color: #ffffff !important;
     transform: scale(1.05);
     box-shadow: var(--shadow-sm);
 }
@@ -2175,6 +2336,98 @@ body {
     border-color: rgba(239, 68, 68, 0.4);
     color: #b91c1c;
 }
+
+/* Add-tag button */
+.add-tag-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 1.5px dashed var(--border-color);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    transition: var(--transition);
+    padding: 0;
+    flex-shrink: 0;
+}
+.add-tag-btn:hover {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #fff;
+    border-style: solid;
+}
+
+/* Inline add-tag form */
+.add-tag-inline-form {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    width: 100%;
+}
+.add-tag-input {
+    flex: 1;
+    min-width: 90px;
+    max-width: 180px;
+    padding: 3px 8px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    font-size: 0.78rem;
+    background: var(--surface);
+    color: var(--text-primary);
+    outline: none;
+}
+.add-tag-input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.15);
+}
+.add-tag-category {
+    padding: 3px 6px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    font-size: 0.78rem;
+    background: var(--surface);
+    color: var(--text-primary);
+    cursor: pointer;
+}
+.add-tag-confirm-btn {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: none;
+    background: #0066cc;
+    color: #fff;
+    font-size: 0.8rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.15s;
+}
+.add-tag-confirm-btn:hover { background: #0052a3; }
+.add-tag-cancel-btn {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: var(--transition);
+}
+.add-tag-cancel-btn:hover { background: var(--surface-hover); }
 
 /* Tagging progress indicator */
 /* AI pipeline status badges */
@@ -2411,8 +2664,9 @@ body {
     border-radius: var(--radius-sm);
     margin-bottom: var(--spacing-xs);
     overflow: hidden;
-    cursor: pointer;
+    cursor: default;
 }
+.dimension-card.incomplete { cursor: pointer; }
 .dimension-card.complete { border-left: 3px solid #22c55e; }
 .dimension-card.incomplete { border-left: 3px solid #f59e0b; }
 
@@ -2581,4 +2835,364 @@ body {
     outline: none;
     border-color: #5aafde;
     box-shadow: 0 0 0 3px rgba(203, 236, 255, 0.6);
+}
+
+/* ===== Guided Q&A voice enrichment modal ===== */
+.guided-qa-modal-content {
+    max-width: 680px;
+    width: 92%;
+    overflow: hidden;
+}
+
+.qa-header-left {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.qa-progress {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+    letter-spacing: 0.02em;
+}
+
+/* Segment replay bar */
+.qa-replay-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm) var(--spacing-lg);
+    background: #f1f8ff;
+    border-bottom: 1px solid #c8e4f8;
+}
+
+.qa-replay-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #cbecff;
+    border: 1px solid #a8d8f5;
+    color: var(--primary-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.15s, transform 0.15s;
+}
+.qa-replay-btn:hover {
+    background: #a8d8f5;
+    transform: rotate(-15deg);
+}
+
+.qa-replay-label {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+/* Modal body */
+.qa-modal-body {
+    gap: var(--spacing-lg);
+    padding: var(--spacing-lg) var(--spacing-lg) var(--spacing-md);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   In-place elicitation Q&A (replaces modal-based guided QA)
+   ═══════════════════════════════════════════════════════════════ */
+
+.annotation-item.elicit-inplace-active {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+    padding: var(--spacing-md);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+}
+
+/* Question area — fixed height so the card scroll animation stays contained */
+.elicit-inplace-question-area {
+    overflow: hidden;
+    min-height: 80px;
+}
+
+.elicit-inplace-question-card {
+    background: #f8fbff;
+    border: 1px solid #c8e4f8;
+    border-left: 4px solid var(--primary-color);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-sm) var(--spacing-md);
+    transition: background 0.35s ease, border-color 0.35s ease, opacity 0.4s ease, transform 0.45s ease;
+    opacity: 0;
+    transform: translateY(-16px);
+}
+
+.elicit-inplace-question-card.eip-slide-in {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Answered state: green tint, then slide down and fade */
+.elicit-inplace-question-card.eip-answered {
+    background: rgba(34, 197, 94, 0.10);
+    border-left-color: #22c55e;
+}
+
+.elicit-inplace-question-card.eip-slide-out {
+    opacity: 0;
+    transform: translateY(24px);
+    pointer-events: none;
+}
+
+.eip-question-progress {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.3rem;
+}
+
+.eip-question-text {
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    line-height: 1.5;
+}
+
+/* Transcription area */
+.elicit-inplace-transcription-area {
+    position: relative;
+}
+
+.eip-transcription-textarea {
+    width: 100%;
+    min-height: 70px;
+    padding: 0.5rem 0.6rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    resize: none;
+    background: var(--surface-hover);
+    color: var(--text-primary);
+    line-height: 1.5;
+    box-sizing: border-box;
+}
+
+.eip-transcribing-hint {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    font-style: italic;
+    margin-top: 0.3rem;
+}
+
+.eip-spinner {
+    width: 12px;
+    height: 12px;
+    border: 2px solid var(--border-color);
+    border-top-color: var(--primary-color);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Record area */
+.elicit-inplace-record-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+/* Medium mic button — icon only */
+.eip-record-btn {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    border: 2.5px solid var(--record-idle);
+    background: rgba(239, 68, 68, 0.07);
+    color: var(--record-idle);
+    font-size: 1.4rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, border-color 0.2s, transform 0.15s;
+    padding: 0;
+}
+
+.eip-record-btn:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.13);
+    transform: scale(1.06);
+}
+
+.eip-record-btn.recording {
+    border-color: var(--record-active);
+    background: rgba(220, 38, 38, 0.14);
+    color: var(--record-active);
+    animation: qaPulseRing 1.2s ease-in-out infinite;
+}
+
+.eip-record-btn.processing {
+    border-color: var(--record-processing);
+    background: rgba(245, 158, 11, 0.08);
+    color: var(--record-processing);
+    cursor: not-allowed;
+}
+
+.eip-record-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.eip-record-actions {
+    display: flex;
+    gap: var(--spacing-xs);
+}
+
+/* Question card */
+.qa-question-card {
+    background: #f8fbff;
+    border: 1px solid #c8e4f8;
+    border-left: 4px solid var(--primary-color);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md) var(--spacing-lg);
+    min-height: 60px;
+    opacity: 1;
+    transform: translateX(0);
+    transition: opacity 0.35s ease, transform 0.35s ease, border-color 0.3s ease, background 0.3s ease;
+}
+
+.qa-question-card.answered {
+    border-left-color: var(--accent-color);
+    background: #f0fdf4;
+}
+
+.qa-question-card.qa-fade-in {
+    animation: qaFadeIn 0.35s ease forwards;
+}
+
+.qa-question-card.qa-slide-out {
+    animation: qaSlideOut 0.5s ease forwards;
+}
+
+.qa-question-text {
+    font-size: 1rem;
+    color: var(--text-primary);
+    line-height: 1.55;
+    font-weight: 450;
+}
+
+/* Voice area */
+.qa-voice-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+/* Large mic button */
+.qa-record-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 130px;
+    height: 130px;
+    border-radius: 50%;
+    border: 3px solid var(--record-idle);
+    background: rgba(239, 68, 68, 0.08);
+    color: var(--record-idle);
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s, transform 0.15s;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    padding: 0;
+    position: relative;
+}
+.qa-record-btn i {
+    font-size: 2rem;
+}
+.qa-record-btn:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.14);
+    transform: scale(1.04);
+}
+.qa-record-btn.recording {
+    border-color: var(--record-active);
+    background: rgba(220, 38, 38, 0.15);
+    color: var(--record-active);
+    animation: qaPulseRing 1.2s ease-in-out infinite;
+}
+.qa-record-btn.processing {
+    border-color: var(--record-processing);
+    background: rgba(245, 158, 11, 0.1);
+    color: var(--record-processing);
+}
+.qa-record-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.qa-transcript-preview {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    font-style: italic;
+    text-align: center;
+    max-width: 420px;
+    min-height: 1.2em;
+    line-height: 1.5;
+}
+
+/* Footer */
+.qa-modal-footer {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.qa-skip-btn {
+    margin-right: auto;
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 0.83rem;
+    padding: 6px 12px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.qa-skip-btn:hover {
+    background: var(--surface-hover);
+    color: var(--text-primary);
+}
+
+/* Animations */
+@keyframes qaFadeIn {
+    from { opacity: 0; transform: translateX(18px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes qaSlideOut {
+    0%   { opacity: 1; transform: translateX(0); }
+    60%  { opacity: 0.3; }
+    100% { opacity: 0; transform: translateX(-30px); }
+}
+
+@keyframes qaPulseRing {
+    0%   { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); }
+    60%  { box-shadow: 0 0 0 14px rgba(220, 38, 38, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
 }

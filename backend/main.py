@@ -256,7 +256,7 @@ async def list_videos(
         response_videos = []
         for video in videos:
             video_response = models.VideoResponse.model_validate(video)
-            video_response.annotation_count = len(video.annotations)
+            video_response.annotation_count = await db.get_annotation_count(session, video.id)
             response_videos.append(video_response)
 
         return response_videos
@@ -288,7 +288,7 @@ async def get_video(video_id: int, session: AsyncSession = Depends(db.get_sessio
 
 @app.get("/api/videos/{video_id}/file")
 async def get_video_file(
-    video_id: int, request: Request, session: AsyncSession = Depends(db.get_session)
+    video_id: int, request: Request, token: str = None, session: AsyncSession = Depends(db.get_session)
 ):
     """Serve video file with HTTP Range request support for streaming"""
     try:
@@ -296,16 +296,33 @@ async def get_video_file(
         if not video:
             raise HTTPException(status_code=404, detail="Video not found")
 
-        # For WebDAV videos, redirect to the Moodle stream.php URL
+        # For WebDAV videos, redirect to the Moodle stream.php URL.
+        # Pass filesize so stream.php can skip the blocking HEAD request to OwnCloud.
+        # Pass the JWT token so stream.php can authenticate without a Moodle session
+        # (the SPA runs on a different origin and has no Moodle session cookie).
         if video.source_type == "webdav":
-            # Use the filepath if it already looks like a stream.php URL
-            # Otherwise construct one from MOODLE_ORIGIN and the video ID
             fp = video.filepath or ""
             if "stream.php" in fp:
                 stream_url = fp
             else:
                 origin = MOODLE_ORIGIN.rstrip("/")
                 stream_url = f"{origin}/local/videoelicit/stream.php?videoid={video.id}"
+            # Append filesize param to eliminate the per-request HEAD round-trip
+            filesize = getattr(video, 'file_size', None)
+            if filesize:
+                sep = "&" if "?" in stream_url else "?"
+                stream_url = f"{stream_url}{sep}filesize={filesize}"
+            # Forward the JWT token so stream.php can authenticate the browser redirect.
+            # The token arrives either as ?token= query param (from <video> src) or
+            # as Authorization: Bearer header (from fetch() calls).
+            jwt_token = token or ""
+            if not jwt_token:
+                auth_header = request.headers.get("authorization", "")
+                if auth_header.startswith("Bearer "):
+                    jwt_token = auth_header[len("Bearer "):]
+            if jwt_token:
+                sep = "&" if "?" in stream_url else "?"
+                stream_url = f"{stream_url}{sep}token={jwt_token}"
             return RedirectResponse(url=stream_url, status_code=302)
 
         if not os.path.exists(str(video.filepath)):
@@ -333,14 +350,14 @@ async def get_video_file(
 
             chunk_size = end - start + 1
 
-            # Stream the requested chunk
-            def iter_range():
-                with open(str(video.filepath), "rb") as f:
-                    f.seek(start)
+            # Stream the requested chunk using async I/O to avoid blocking the event loop
+            async def iter_range():
+                async with aiofiles.open(str(video.filepath), "rb") as f:
+                    await f.seek(start)
                     remaining = chunk_size
                     while remaining > 0:
-                        read_size = min(8192, remaining)
-                        data = f.read(read_size)
+                        read_size = min(1048576, remaining)
+                        data = await f.read(read_size)
                         if not data:
                             break
                         remaining -= len(data)
@@ -357,10 +374,10 @@ async def get_video_file(
                 iter_range(), status_code=206, headers=headers  # Partial Content
             )
         else:
-            # No range header - stream entire file
-            def iter_full():
-                with open(str(video.filepath), "rb") as f:
-                    while chunk := f.read(8192):
+            # No range header - stream entire file using async I/O
+            async def iter_full():
+                async with aiofiles.open(str(video.filepath), "rb") as f:
+                    while chunk := await f.read(1048576):
                         yield chunk
 
             headers = {
@@ -1112,6 +1129,68 @@ async def delete_task(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+async def push_annotation_to_rag(annotation_id: int, transcription: str) -> None:
+    """Fire-and-forget: push a completed annotation to the CraftPilot RAG backend.
+
+    Called after transcription_status is set to 'completed' so that every new
+    elicitation is immediately searchable without waiting for a manual sync.
+    Errors are logged but never propagate — the transcription pipeline must not
+    be affected by RAG availability.
+    """
+    import urllib.request
+    import urllib.error
+
+    RAG_INGEST_URL = "http://127.0.0.1:8000/api/ingest-annotation"
+
+    try:
+        async with db.AsyncSessionLocal() as session:
+            annotation = await db.get_annotation(session, annotation_id)
+            if not annotation:
+                logger.warning(f"push_annotation_to_rag: annotation {annotation_id} not found")
+                return
+
+            video_id = annotation.get("video_id") or annotation.get("videoid")
+            video = await db.get_video(session, video_id) if video_id else None
+            project_name = "unknown"
+            if video and video.get("project_id"):
+                project = await db.get_project(session, video["project_id"])
+                if project:
+                    project_name = project.get("name", "unknown")
+
+        payload = json.dumps({
+            "annotation_id": annotation_id,
+            "video_id":       video_id or 0,
+            "transcription":  transcription,
+            "start_time":     float(annotation.get("start_time") or annotation.get("starttime") or 0),
+            "end_time":       float(annotation.get("end_time")   or annotation.get("endtime")   or 0),
+            "video_filename": (video or {}).get("filename", "unknown.mp4"),
+            "video_filepath": (video or {}).get("filepath", ""),
+            "source_type":    (video or {}).get("source_type", "local"),
+            "project_name":   project_name,
+            "audio_filepath": annotation.get("audio_filepath") or annotation.get("audiofilepath") or "",
+        }).encode()
+
+        def _post():
+            req = urllib.request.Request(
+                RAG_INGEST_URL,
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                return resp.status
+
+        import asyncio
+        loop = asyncio.get_running_loop()
+        status = await loop.run_in_executor(None, _post)
+        logger.info(f"Annotation {annotation_id} pushed to RAG backend (HTTP {status})")
+
+    except urllib.error.URLError as e:
+        logger.warning(f"RAG backend unreachable for annotation {annotation_id}: {e.reason}")
+    except Exception as e:
+        logger.error(f"push_annotation_to_rag failed for annotation {annotation_id}: {e}")
+
+
 async def process_transcription(annotation_id: int, audio_path: str):
     """Background task to process transcription"""
     try:
@@ -1136,6 +1215,24 @@ async def process_transcription(annotation_id: int, audio_path: str):
 
         # Perform transcription
         transcription = await transcribe_audio_simple(audio_path)
+
+        # Guard: treat empty transcription as a failure so the pipeline doesn't run
+        if not transcription or not transcription.strip():
+            logger.warning(f"Empty transcription for annotation {annotation_id} — microphone may be muted")
+            async with db.AsyncSessionLocal() as session:
+                await db.update_annotation(
+                    session,
+                    annotation_id,
+                    models.AnnotationUpdate(transcription_status="failed"),
+                )
+            await manager.broadcast(
+                {
+                    "type": "transcription_error",
+                    "annotation_id": annotation_id,
+                    "error": "Transcription vide — vérifiez que le microphone n'est pas coupé.",
+                }
+            )
+            return
 
         # Update annotation with transcription
         async with db.AsyncSessionLocal() as session:
@@ -1163,6 +1260,9 @@ async def process_transcription(annotation_id: int, audio_path: str):
 
         asyncio.create_task(process_judge(annotation_id, transcription, None))
 
+        # Push to CraftPilot RAG backend so the elicitation is immediately searchable
+        asyncio.create_task(push_annotation_to_rag(annotation_id, transcription))
+
     except Exception as e:
         logger.error(f"Transcription error for annotation {annotation_id}: {e}")
 
@@ -1184,6 +1284,46 @@ async def process_transcription(annotation_id: int, audio_path: str):
             )
         except:
             pass
+
+
+@app.post("/api/annotations/transcribe-only")
+async def transcribe_only(
+    audio_blob: UploadFile = File(...),
+    current_user: MoodleUser = Depends(verify_moodle_jwt),
+):
+    """
+    Lightweight transcription endpoint for the guided Q&A voice enrichment flow.
+    Accepts a raw audio blob, transcribes it, and returns the text.
+    Does NOT create any annotation record or trigger any pipeline.
+    """
+    import tempfile
+
+    tmp_path = None
+    try:
+        suffix = Path(audio_blob.filename or "audio.wav").suffix or ".wav"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp_path = tmp.name
+            content = await audio_blob.read()
+            tmp.write(content)
+
+        transcription = await transcribe_audio_simple(tmp_path)
+
+        if not transcription or not transcription.strip():
+            raise HTTPException(status_code=400, detail="Empty transcription — check microphone")
+
+        return {"transcription": transcription.strip()}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"transcribe-only error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
 
 
 @app.post("/api/annotations/{annotation_id}/review")
@@ -2395,6 +2535,128 @@ async def deduplicate_tags_maintenance(
 
     except Exception as e:
         logger.error(f"Error in deduplicate-tags maintenance: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/export/corpus")
+async def export_corpus(
+    craft: Optional[str] = None,
+    only_transcribed: bool = True,
+    only_salient: bool = False,
+    session: AsyncSession = Depends(db.get_session),
+):
+    """
+    Bulk export of all annotations across all videos for RAG evaluation.
+
+    Query params:
+      craft           – filter by craft domain (e.g. 'glassblowing')
+      only_transcribed – skip annotations with no transcription (default True)
+      only_salient     – restrict to is_salient=1 annotations (default False)
+
+    Returns a single JSON document shaped for direct use as a retrieval corpus:
+      {
+        "export_timestamp": "...",
+        "total_annotations": N,
+        "filters": {...},
+        "corpus": [
+          {
+            "id": 1,
+            "video_id": 10,
+            "video_filename": "GX010225_etirage.MP4",
+            "start_time": 5.0,
+            "end_time": 15.0,
+            "duration": 10.0,
+            "transcription": "...",
+            "craft": "glassblowing",
+            "detected_task": "...",
+            "detected_task_confidence": 0.87,
+            "tags": [{"name": "...", "category": "..."}],
+            "is_salient": true,
+            "review_results": {...},
+            "judge_decision": {...},
+            "feedback": 1,
+            "created_at": "..."
+          },
+          ...
+        ]
+      }
+    """
+    try:
+        videos = await db.get_all_videos(session, skip=0, limit=10000)
+        corpus = []
+
+        for video in videos:
+            video_id = video.id
+            annotations = await db.get_annotations_by_video(session, video_id, skip=0, limit=10000)
+            for ann in annotations:
+                if only_transcribed and not ann.transcription:
+                    continue
+                if only_salient and not getattr(ann, "is_salient", 0):
+                    continue
+                if craft and getattr(ann, "craft", None) != craft:
+                    continue
+
+                def _json_or_none(val):
+                    if val is None:
+                        return None
+                    try:
+                        return json.loads(str(val))
+                    except (json.JSONDecodeError, TypeError):
+                        return val
+
+                corpus.append({
+                    "id": ann.id,
+                    "video_id": video_id,
+                    "video_filename": video.filename,
+                    "start_time": ann.start_time,
+                    "end_time": ann.end_time,
+                    "duration": ann.end_time - ann.start_time,
+                    "transcription": ann.transcription,
+                    "transcription_status": getattr(ann, "transcription_status", None),
+                    "craft": getattr(ann, "craft", None),
+                    "detected_task": getattr(ann, "detected_task", None),
+                    "detected_task_confidence": getattr(ann, "detected_task_confidence", None),
+                    "tags": _json_or_none(getattr(ann, "tags", None)),
+                    "is_salient": bool(getattr(ann, "is_salient", 0)),
+                    "judge_decision": _json_or_none(getattr(ann, "judge_decision", None)),
+                    "review_status": getattr(ann, "review_status", None),
+                    "review_results": _json_or_none(getattr(ann, "review_results", None)),
+                    "feedback": ann.feedback,
+                    "created_at": ann.created_at.isoformat() if hasattr(ann.created_at, "isoformat") else ann.created_at,
+                })
+
+        export_data = {
+            "export_timestamp": datetime.now(timezone.utc).isoformat(),
+            "total_annotations": len(corpus),
+            "filters": {
+                "craft": craft,
+                "only_transcribed": only_transcribed,
+                "only_salient": only_salient,
+            },
+            "corpus": corpus,
+        }
+
+        from decimal import Decimal as _Decimal
+
+        def _default_serializer(obj):
+            if isinstance(obj, _Decimal):
+                return float(obj)
+            raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+
+        export_filename = f"corpus_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.json"
+        export_path = EXPORTS_DIR / export_filename
+
+        async with aiofiles.open(export_path, "w", encoding="utf-8") as f:
+            await f.write(json.dumps(export_data, indent=2, ensure_ascii=False, default=_default_serializer))
+
+        logger.info(f"Corpus export created: {export_filename} ({len(corpus)} annotations)")
+
+        return FileResponse(
+            export_path, media_type="application/json", filename=export_filename
+        )
+
+    except Exception as e:
+        logger.error(f"Error exporting corpus: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

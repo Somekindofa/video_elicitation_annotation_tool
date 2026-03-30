@@ -55,6 +55,7 @@ class Video(Base):
         Integer, default=0
     )  # 0 for uploaded (copied), 1 for local (streaming)
     source_type = Column(String, default="uploaded")  # "uploaded", "local", "gdrive"
+    external_url = Column(String, nullable=True)  # OwnCloud/WebDAV direct URL
     uploaded_at = Column(DateTime, default=datetime.now(timezone.utc))
 
     # Relationships

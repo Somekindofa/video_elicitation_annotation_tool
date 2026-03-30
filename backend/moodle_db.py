@@ -563,8 +563,10 @@ class MoodleDBAdapter:
         """Get count of annotations for a video"""
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute(f"SELECT COUNT(*) FROM {self._table('annotations')} WHERE videoid = %s", (video_id,))
-            return cursor.fetchone()[0]
+            cursor.execute(f"SELECT COUNT(*) AS cnt FROM {self._table('annotations')} WHERE videoid = %s", (video_id,))
+            row = cursor.fetchone()
+            # DictCursor returns a dict; plain cursor returns a tuple
+            return row['cnt'] if isinstance(row, dict) else row[0]
     
     async def get_annotation_count(self, video_id: int) -> int:
         """Async wrapper for get_annotation_count"""

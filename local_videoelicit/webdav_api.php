@@ -109,14 +109,14 @@ function webdav_credentials(): array {
     $username   = get_config('local_videoelicit', 'webdav_username')    ?: '';
     $password   = get_config('local_videoelicit', 'webdav_password')    ?: '';
     $user_uuid  = get_config('local_videoelicit', 'webdav_user_id')     ?: '';
-    $base_folder= get_config('local_videoelicit', 'webdav_base_folder') ?: '';
+    $base_folder= get_config('local_videoelicit', 'webdav_shared_folder') ?: '';
 
     // Hard-coded fallback (matches backend/.env)
     if (empty($base_url))    $base_url    = 'https://cloud.minesparis.psl.eu';
     if (empty($username))    $username    = 'theo.akbas';
     if (empty($password))    $password    = 'minesparistechTetonet90!';
     if (empty($user_uuid))   $user_uuid   = 'aadda5c2-2019-103f-8e2d-bb8e1f6141ce';
-    if (empty($base_folder)) $base_folder = 'aadda5c2-2019-103f-8e2d-bb8e1f6141ce/David_CERFAV_Partage';
+    if (empty($base_folder)) $base_folder = 'craftpilot_shared';
 
     // Sanitize base_folder: strip a leading user UUID (avoid duplicated UUID in URLs)
     $base_folder = trim($base_folder, "/ ");
@@ -203,7 +203,7 @@ function handle_browse(string $path): void {
     // Important: if the incoming $path already references the storage root (e.g. starts with
     // 'Moodle_OwnCloud_Storage' or with the configured base_folder) we MUST NOT prefix the
     // configured `base_folder` again — that was causing lookups like
-    // 'David_CERFAV_Partage/Moodle_OwnCloud_Storage/Users/280' which do not exist.
+    // 'craftpilot_shared/Moodle_OwnCloud_Storage/Users/280' which do not exist.
     $rawpath = ltrim($path, '/');
     $candidates = [];
 
