@@ -118,6 +118,7 @@ const TRANSLATIONS = {
         craft_scientific_glassblowing: 'Scientific Glassblowing',
         craft_jewelry: 'Jewelry',
         craft_glovemaking: 'Glovemaking',
+        craft_saddlery: 'Upholstery',
 
         // Annotation card dynamic text
         jumpToTime: 'Jump to time',
@@ -272,6 +273,7 @@ const TRANSLATIONS = {
         craft_scientific_glassblowing: 'Verrerie scientifique',
         craft_jewelry: 'Joaillerie',
         craft_glovemaking: 'Ganterie',
+        craft_saddlery: 'Scellerie',
 
         // Annotation card dynamic text
         jumpToTime: 'Aller au moment',
@@ -744,6 +746,7 @@ function createElicitControlsUI() {
             { value: 'scientific_glassblowing', key: 'craft_scientific_glassblowing' },
             { value: 'jewelry', key: 'craft_jewelry' },
             { value: 'glovemaking', key: 'craft_glovemaking' },
+            { value: 'saddlery', key: 'craft_saddlery' },
         ].forEach(o => {
             const option = document.createElement('option');
             option.value = o.value;
