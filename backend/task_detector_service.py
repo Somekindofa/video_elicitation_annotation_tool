@@ -19,43 +19,36 @@ from config import (
     FIREWORKS_LLM_TEMPERATURE,
 )
 
-TASK_DETECTION_SYSTEM_PROMPT = """Tu es un expert en analyse de descriptions de tâches artisanales.
+TASK_DETECTION_SYSTEM_PROMPT = """Tu es un extracteur de tâches artisanales ULTRA-CONSERVATEUR.
 
-Ton rôle est d'identifier UNIQUEMENT le nom concis de la tâche PRINCIPALE si et seulement si:
-1. La description EST performative (décrit une action/technique concrète qui est réalisée)
-2. La tâche est claire et explicite (pas d'ambiguïté)
-3. Ce n'est pas une description générale, historique ou conceptuelle
-4. La tâche est identifiable par un NOM COURT (2-4 mots maximum)
+RÈGLE ABSOLUE : Tu dois retourner DETECTED_TASK: null dans la GRANDE MAJORITÉ des cas.
+Ne retourne un nom de tâche QUE si toutes ces conditions sont réunies simultanément :
+1. La description est entièrement et uniquement focalisée sur UNE SEULE technique nommée
+2. La technique est explicitement nommée ou très clairement identifiable avec un terme du métier
+3. Il n'y a AUCUNE ambiguïté sur le nom de la tâche
+4. Ce n'est PAS : préparation, sécurité, positionnement, description générale, histoire, explication contextuelle, réglage d'outil, observation
 
-Si la description est:
-- Trop vague ou ambiguë
-- Descriptive mais non-performative (explication générale, histoire, contexte)
-- Une combinaison de plusieurs tâches
-- Purement conceptuelle ou théorique
+Si la description mélange plusieurs actions, parle de réglage/setup, ou si tu as le moindre doute → DETECTED_TASK: null
 
-RÉPONDS: DETECTED_TASK: null
-CONFIDENCE: 0.0
-REASONING: [courte explication]
+EXEMPLES → null (ne pas détecter de tâche) :
+- Allumer/régler un outil (chalumeau, flamme, four) → null
+- Mettre des équipements de protection → null
+- Se positionner, vérifier la sécurité → null
+- Décrire l'histoire ou le contexte du métier → null
+- Décrire plusieurs étapes différentes d'un processus → null
+- Régler l'intensité, la température, la couleur d'une flamme → null
+- "J'allume la flamme et je règle son intensité pour qu'elle devienne bleue" → null
+- "Je chauffe, je martèle, puis je trempe" (multi-étapes) → null
 
-Si tu identifies une tâche claire et performative:
+EXEMPLES → tâche (retourner le nom UNIQUEMENT si c'est évident) :
+- "Je souffle dans la canne pour former la bulle de verre" → soufflage
+- "Je polis les arêtes avec du papier émeri" → polissage
+- "Je montre la technique du pointillé" → pointillé
 
-RÉPONDS UNIQUEMENT:
-DETECTED_TASK: [nom_de_la_tâche_court]
+Format de réponse OBLIGATOIRE (pas d'autre texte) :
+DETECTED_TASK: [nom_court ou null]
 CONFIDENCE: [0.0-1.0]
-REASONING: [brève justification]
-
-EXEMPLES:
-"L'expert explique comment on polit les arêtes avec du papier émeri après la soudure" → soudure / polissage
-"Je vous montre la technique du pointillé qui demande une grande concentration" → pointillé
-"Historiquement, la joaillerie vient de l'Égypte ancienne où..." → null (trop conceptuel)
-"Voilà, on doit bien chercher l'équilibre du feu pour avoir une belle teinte" → chauffage / fusion (si explicite)
-"C'est un peu compliqué de différencier les types de pierres précieuses" → null (trop vague)
-
-Format obligatoire de réponse - pas de texte avant ou après:
-DETECTED_TASK: [résultat]
-CONFIDENCE: [nombre]
-REASONING: [explication]
-"""
+REASONING: [une phrase]"""
 
 
 async def detect_task(transcription: str, craft: str = "jewelry") -> dict:
@@ -85,23 +78,22 @@ async def detect_task(transcription: str, craft: str = "jewelry") -> dict:
         "Content-Type": "application/json",
     }
 
-    user_prompt = f"""Analyse cette description d'une tâche artisanale ({craft}):
-
-"{transcription}"
-
-Détermine si c'est une description performative d'une tâche concrète. Si oui, donne le nom court de la tâche."""
+    user_prompt = f'Transcript ({craft}): "{transcription}"\n\nQuelle est la tâche ? (null dans la plupart des cas)'
 
     payload = {
         "model": FIREWORKS_LLM_MODEL,
-        "prompt": f"{TASK_DETECTION_SYSTEM_PROMPT}\n\nUser: {user_prompt}\n\nAssistant:",
-        "max_tokens": 256,
-        "temperature": 1,
+        "messages": [
+            {"role": "system", "content": TASK_DETECTION_SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ],
+        "max_tokens": 128,
+        "temperature": 0,
     }
 
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(
-                "https://api.fireworks.ai/inference/v1/completions",
+                "https://api.fireworks.ai/inference/v1/chat/completions",
                 headers=headers,
                 json=payload,
                 timeout=aiohttp.ClientTimeout(total=30),
@@ -113,7 +105,7 @@ Détermine si c'est une description performative d'une tâche concrète. Si oui,
                     )
 
                 result = await response.json()
-                response_text = result.get("choices", [{}])[0].get("text", "").strip()
+                response_text = result.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
 
                 # Parse key-value output format
                 parsed = _parse_task_output(response_text)

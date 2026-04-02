@@ -102,11 +102,26 @@ function stream_webdav_video($video) {
         header('HTTP/1.1 500 Internal Server Error');
         die('WebDAV video URL not configured');
     }
-    
+
+    // If `external_url` is a relative path (no scheme), prefix the configured WebDAV base URL
+    // so entries that store "/remote.php/dav/..." or other relative paths still stream correctly.
+    $parsed_scheme = parse_url($external_url, PHP_URL_SCHEME);
+    if ($parsed_scheme === null) {
+        $webdav_base = get_config('local_videoelicit', 'webdav_base_url') ?: '';
+        if (!empty($webdav_base)) {
+            if (strpos($external_url, '/') === 0) {
+                $external_url = rtrim($webdav_base, '/') . $external_url;
+            } else {
+                $external_url = rtrim($webdav_base, '/') . '/' . ltrim($external_url, '/');
+            }
+        }
+    }
+
     // Parse range header if present
     $range = isset($_SERVER['HTTP_RANGE']) ? $_SERVER['HTTP_RANGE'] : '';
     
-    // Initialize cURL for HEAD request to get file metadata
+    // Log resolved WebDAV URL for debugging and Initialize cURL for HEAD request to get file metadata
+    error_log('local_videoelicit: resolved WebDAV external_url=' . $external_url);
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $external_url);
     curl_setopt($ch, CURLOPT_USERPWD, "$webdav_username:$webdav_password");

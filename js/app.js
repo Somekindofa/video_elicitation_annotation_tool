@@ -3,6 +3,463 @@
  * Main JavaScript file handling all client-side functionality
  */
 
+// ─────────────────────────────────────────────────────────────
+// Internationalisation (i18n)
+// ─────────────────────────────────────────────────────────────
+const TRANSLATIONS = {
+    en: {
+        // Header / nav
+        backToMoodle: 'Back to Moodle',
+        headerSubtitle: 'ReSource Project - Expert Knowledge Capture',
+        uploadToOwnCloud: 'Upload to OwnCloud',
+        selectVideo: 'Select Video',
+        tabElicit: 'Elicit',
+        tabSegment: 'Segment',
+        tabProjects: 'Projects',
+
+        // Empty states
+        noVideoLoaded: 'No Video Loaded',
+        noVideoHint: 'Click "Upload to OwnCloud" then "Select Video" to get started',
+        segmentNoVideoHint: 'Open a video from the selector to view or create segments',
+        noAnnotationsYet: 'No annotations yet',
+        noAnnotationsHint: 'Start recording to create your first elicitation',
+        noSegmentsYet: 'No segments yet',
+        noProjectsYet: 'No Projects Yet',
+        noProjectsHint: 'Create a project to organize your videos for batch elicitation',
+
+        // Recording controls
+        skipBack10: 'Skip back 10 seconds',
+        skipForward10: 'Skip forward 10 seconds',
+        startRecording: 'Start Recording',
+        statusReady: 'Ready',
+        browserNoVideo: 'Your browser does not support the video tag.',
+
+        // Video info bar
+        videoLabel: 'Video:',
+        elicitationsLabel: 'Elicitations:',
+        exportAnnotations: 'Export Annotations',
+
+        // Annotations panel
+        panelElicitations: 'Elicitations',
+        sort: 'Sort',
+        refresh: 'Refresh',
+        sortTimelyAsc: 'Timely (Asc)',
+        sortTimelyDesc: 'Timely (Desc)',
+        sortNewest: 'Newest',
+
+        // Segment panel
+        panelSegments: 'Segments',
+        segmentStart: 'Segment start',
+        segmentEnd: 'Segment end',
+        segmentStartPrefix: 'Start',
+        segmentEndPrefix: 'End',
+        createSegment: 'Create segment',
+        openInMainPlayer: 'Open in main player',
+
+        // Projects panel
+        newProject: 'New Project',
+
+        // Video list modal
+        modalSelectVideo: 'Select Video',
+        ownCloudFiles: 'OwnCloud files',
+        ownCloudTip: 'Tip: click a file to link & load it into the player.',
+
+        // OwnCloud modal
+        uploadVideoToOwnCloud: 'Upload video to OwnCloud',
+        uploadSecureHint: 'Uploads via secure server proxy (supports large files)',
+        ownCloudNotConfigured: 'OwnCloud is not configured. Please contact your administrator.',
+        loadingFiles: 'Loading files...',
+
+        // Project modal
+        createProject: 'Create Project',
+        editProject: 'Edit Project',
+        projectNameLabel: 'Project Name *',
+        projectNamePlaceholder: 'Enter project name',
+        projectDescLabel: 'Description',
+        projectDescPlaceholder: 'Optional description',
+        saveProject: 'Save Project',
+
+        // Assign videos modal
+        assignVideosTo: 'Assign Videos to',
+        availableVideos: 'Available Videos',
+        videosInProject: 'Videos in Project (Drag to reorder)',
+
+        // Local folder modal
+        browseLocalFolder: 'Browse Local Video Folder',
+        folderPathLabel: 'Folder Path *',
+        folderPathHint: 'Enter the absolute path to your video folder (Windows: C:\\path\\to\\folder, Linux/Mac: /path/to/folder)',
+        browseFolder: 'Browse Folder',
+        foundVideos: 'Found Videos',
+
+        // Shared buttons
+        cancel: 'Cancel',
+        close: 'Close',
+        save: 'Save',
+
+        // Loading / processing
+        processing: 'Processing...',
+        loadingEllipsis: 'Loading...',
+
+        // Tutorial
+        guideTitle: 'Usage Guide',
+
+        // Dynamic JS strings (recording status)
+        statusRecording: 'Recording...',
+        statusReadyToRecord: 'Ready to Record',
+        statusProcessing: 'Processing...',
+
+        // Elicit controls
+        craftDomainLabel: 'Select your craft domain',
+        segmentSelectorLabel: 'Select segment',
+        segmentSelectorPlaceholder: '— choose a segment —',
+
+        // Craft names
+        craft_glassblowing: 'Glassblowing',
+        craft_scientific_glassblowing: 'Scientific Glassblowing',
+        craft_jewelry: 'Jewelry',
+        craft_glovemaking: 'Glovemaking',
+        craft_saddlery: 'Upholstery',
+
+        // Annotation card dynamic text
+        jumpToTime: 'Jump to time',
+        editTranscription: 'Edit transcription',
+        deleteAnnotation: 'Delete',
+        markComplete: 'Mark as complete',
+        relaunchTagging: 'Relaunch tagging',
+        relaunchReview: 'Relaunch AI Review',
+        modifyElicitation: 'Modify elicitation',
+        recordAnswer: 'Record an answer',
+
+        // Video list items
+        removeFromPlugin: 'Remove from plugin (does not delete OwnCloud file)',
+        deleteFromOwnCloud: 'Delete from OwnCloud (permanent)',
+
+        // Segment cards
+        deleteSegment: 'Delete segment',
+        previewSegment: 'Click to preview this segment',
+
+        // Transcription status
+        transcriptionPending: 'Transcription pending...',
+        transcribingAudio: 'Transcribing audio...',
+        transcriptionComplete: 'Transcription complete',
+        transcriptionFailed: 'Transcription failed',
+
+        // Toast titles
+        toastError: 'Error',
+        toastSuccess: 'Success',
+        toastWarning: 'Warning',
+
+        // Inline recording / guided QA
+        answerByVoice: 'Answer by voice',
+        stopRecording: 'Stop recording',
+        transcribingInProgress: 'Transcribing...',
+        replaySegment: 'Replay the segment',
+        replaySegmentFor: 'Replay segment to recall',
+
+        // No video in list
+        noVideosLoaded: 'No videos loaded yet. Click an OwnCloud file below to load it.',
+        noOwnCloudFiles: 'No video files found in your OwnCloud folder.',
+        noSegmentsForVideo: 'No segments for this video',
+        loadVideoFirst: 'Load a video first to see segments.',
+    },
+    fr: {
+        // Header / nav
+        backToMoodle: 'Vers Moodle',
+        headerSubtitle: 'Projet ReSource - Capture de savoirs experts',
+        uploadToOwnCloud: 'Déposer sur OwnCloud',
+        selectVideo: 'Choisir une vidéo',
+        tabElicit: 'Éliciter',
+        tabSegment: 'Segmenter',
+        tabProjects: 'Projets',
+
+        // Empty states
+        noVideoLoaded: 'Aucune vidéo chargée',
+        noVideoHint: 'Cliquez sur "Déposer sur OwnCloud" puis "Choisir une vidéo" pour démarrer',
+        segmentNoVideoHint: 'Ouvrez une vidéo depuis le sélecteur pour voir ou créer des segments',
+        noAnnotationsYet: 'Aucune annotation pour l\'instant',
+        noAnnotationsHint: 'Commencez un enregistrement pour créer votre première élicitation',
+        noSegmentsYet: 'Aucun segment pour l\'instant',
+        noProjectsYet: 'Aucun projet pour l\'instant',
+        noProjectsHint: 'Créez un projet pour organiser vos vidéos en élicitation par lots',
+
+        // Recording controls
+        skipBack10: 'Reculer de 10 secondes',
+        skipForward10: 'Avancer de 10 secondes',
+        startRecording: 'Démarrer l\'enregistrement',
+        statusReady: 'Prêt',
+        browserNoVideo: 'Votre navigateur ne supporte pas la lecture vidéo.',
+
+        // Video info bar
+        videoLabel: 'Vidéo :',
+        elicitationsLabel: 'Élicitations :',
+        exportAnnotations: 'Exporter les annotations',
+
+        // Annotations panel
+        panelElicitations: 'Élicitations',
+        sort: 'Trier',
+        refresh: 'Rafraîchir',
+        sortTimelyAsc: 'Chronologique (croissant)',
+        sortTimelyDesc: 'Chronologique (décroissant)',
+        sortNewest: 'Plus récent',
+
+        // Segment panel
+        panelSegments: 'Segments',
+        segmentStart: 'Début du segment',
+        segmentEnd: 'Fin du segment',
+        segmentStartPrefix: 'Début',
+        segmentEndPrefix: 'Fin',
+        createSegment: 'Créer un segment',
+        openInMainPlayer: 'Ouvrir dans le lecteur principal',
+
+        // Projects panel
+        newProject: 'Nouveau projet',
+
+        // Video list modal
+        modalSelectVideo: 'Choisir une vidéo',
+        ownCloudFiles: 'Fichiers OwnCloud',
+        ownCloudTip: 'Astuce : cliquez sur un fichier pour le lier et le charger dans le lecteur.',
+
+        // OwnCloud modal
+        uploadVideoToOwnCloud: 'Déposer une vidéo sur OwnCloud',
+        uploadSecureHint: 'Envoi via proxy sécurisé côté serveur (supporte les gros fichiers)',
+        ownCloudNotConfigured: 'OwnCloud n\'est pas configuré. Contactez votre administrateur.',
+        loadingFiles: 'Chargement des fichiers...',
+
+        // Project modal
+        createProject: 'Créer un projet',
+        editProject: 'Modifier le projet',
+        projectNameLabel: 'Nom du projet *',
+        projectNamePlaceholder: 'Saisir le nom du projet',
+        projectDescLabel: 'Description',
+        projectDescPlaceholder: 'Description optionnelle',
+        saveProject: 'Enregistrer le projet',
+
+        // Assign videos modal
+        assignVideosTo: 'Assigner des vidéos à',
+        availableVideos: 'Vidéos disponibles',
+        videosInProject: 'Vidéos du projet (glisser pour réordonner)',
+
+        // Local folder modal
+        browseLocalFolder: 'Parcourir le dossier vidéo local',
+        folderPathLabel: 'Chemin du dossier *',
+        folderPathHint: 'Entrez le chemin absolu vers votre dossier vidéo (Windows : C:\\chemin\\vers\\dossier, Linux/Mac : /chemin/vers/dossier)',
+        browseFolder: 'Parcourir',
+        foundVideos: 'Vidéos trouvées',
+
+        // Shared buttons
+        cancel: 'Annuler',
+        close: 'Fermer',
+        save: 'Enregistrer',
+
+        // Loading / processing
+        processing: 'Traitement en cours...',
+        loadingEllipsis: 'Chargement...',
+
+        // Tutorial
+        guideTitle: 'Guide d\'utilisation',
+
+        // Dynamic JS strings (recording status)
+        statusRecording: 'Enregistrement…',
+        statusReadyToRecord: 'Prêt à enregistrer',
+        statusProcessing: 'Traitement…',
+
+        // Elicit controls
+        craftDomainLabel: 'Sélectionnez votre domaine artisanal',
+        segmentSelectorLabel: 'Choisir un segment',
+        segmentSelectorPlaceholder: '— choisir un segment —',
+
+        // Craft names
+        craft_glassblowing: 'Soufflage de verre',
+        craft_scientific_glassblowing: 'Verrerie scientifique',
+        craft_jewelry: 'Joaillerie',
+        craft_glovemaking: 'Ganterie',
+        craft_saddlery: 'Scellerie',
+
+        // Annotation card dynamic text
+        jumpToTime: 'Aller au moment',
+        editTranscription: 'Modifier la transcription',
+        deleteAnnotation: 'Supprimer',
+        markComplete: 'Marquer comme complet',
+        relaunchTagging: 'Relancer le balisage',
+        relaunchReview: 'Relancer la revue IA',
+        modifyElicitation: 'Modifier l\'élicitation',
+        recordAnswer: 'Enregistrer une réponse',
+
+        // Video list items
+        removeFromPlugin: 'Retirer du plugin (ne supprime pas le fichier OwnCloud)',
+        deleteFromOwnCloud: 'Supprimer d\'OwnCloud (définitif)',
+
+        // Segment cards
+        deleteSegment: 'Supprimer le segment',
+        previewSegment: 'Cliquer pour prévisualiser ce segment',
+
+        // Transcription status
+        transcriptionPending: 'Transcription en attente…',
+        transcribingAudio: 'Transcription en cours…',
+        transcriptionComplete: 'Transcription terminée',
+        transcriptionFailed: 'Échec de la transcription',
+
+        // Toast titles
+        toastError: 'Erreur',
+        toastSuccess: 'Succès',
+        toastWarning: 'Avertissement',
+
+        // Inline recording / guided QA
+        answerByVoice: 'Répondre par la voix',
+        stopRecording: 'Arrêter l\'enregistrement',
+        transcribingInProgress: 'Transcription…',
+        replaySegment: 'Rejouer le segment',
+        replaySegmentFor: 'Rejouer le segment pour vous remémorer',
+
+        // No video in list
+        noVideosLoaded: 'Aucune vidéo chargée. Cliquez sur un fichier OwnCloud ci-dessous pour le charger.',
+        noOwnCloudFiles: 'Aucun fichier vidéo trouvé dans votre dossier OwnCloud.',
+        noSegmentsForVideo: 'Aucun segment pour cette vidéo',
+        loadVideoFirst: 'Chargez d\'abord une vidéo pour voir les segments.',
+    },
+};
+
+// Current language – persisted across page reloads
+let currentLang = (() => {
+    try { return localStorage.getItem('appLang') || 'en'; } catch (e) { return 'en'; }
+})();
+
+/**
+ * Returns the translated string for `key` in the current language.
+ * Falls back to English, then to the raw key.
+ */
+function t(key) {
+    return (TRANSLATIONS[currentLang] && TRANSLATIONS[currentLang][key]) ||
+           (TRANSLATIONS.en && TRANSLATIONS.en[key]) ||
+           key;
+}
+
+/**
+ * Apply translations to all elements that carry a data-i18n* attribute,
+ * and update the lang toggle button.
+ */
+function applyLanguage() {
+    // Text content
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        el.textContent = t(key);
+    });
+
+    // title attributes
+    document.querySelectorAll('[data-i18n-title]').forEach(el => {
+        const key = el.getAttribute('data-i18n-title');
+        el.title = t(key);
+    });
+
+    // placeholder attributes
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+        const key = el.getAttribute('data-i18n-placeholder');
+        el.placeholder = t(key);
+    });
+
+    // aria-label attributes
+    document.querySelectorAll('[data-i18n-aria-label]').forEach(el => {
+        const key = el.getAttribute('data-i18n-aria-label');
+        el.setAttribute('aria-label', t(key));
+    });
+
+    // Update <html lang>
+    document.documentElement.lang = currentLang;
+
+    // Update lang toggle button
+    const langFlag = document.getElementById('langFlag');
+    const langLabel = document.getElementById('langLabel');
+    if (langFlag) langFlag.textContent = currentLang === 'fr' ? '🇫🇷' : '🇬🇧';
+    if (langLabel) langLabel.textContent = currentLang === 'fr' ? 'FR' : 'EN';
+
+    // Refresh dynamic UI areas that build their own HTML
+    // (these functions read t() at build time so they just need to be re-called)
+    refreshDynamicUIStrings();
+}
+
+/**
+ * Refresh UI areas whose content is generated by JS functions.
+ * Called after a language switch.
+ */
+function refreshDynamicUIStrings() {
+    // Recording status indicator (if not actively recording)
+    if (!state.isRecording) {
+        const statusTextEl = document.getElementById('statusText');
+        if (statusTextEl && (
+            statusTextEl.textContent === TRANSLATIONS.en.statusReady ||
+            statusTextEl.textContent === TRANSLATIONS.fr.statusReady ||
+            statusTextEl.textContent === 'Ready'
+        )) {
+            statusTextEl.textContent = t('statusReady');
+        }
+    }
+
+    // Elicit controls (craft label + segment selector placeholder)
+    const craftLabelEl = document.querySelector('.elicit-controls > div');
+    if (craftLabelEl && !craftLabelEl.id) {
+        craftLabelEl.textContent = t('craftDomainLabel');
+    }
+    // Update craft option labels for current language
+    const craftSelector = document.getElementById('craftSelector');
+    if (craftSelector) {
+        Array.from(craftSelector.options).forEach(opt => {
+            const key = opt.getAttribute('data-craft-key');
+            if (key) opt.textContent = t(key);
+        });
+    }
+    const segLabelEl = document.querySelector('#segmentSelectorWrapper > div');
+    if (segLabelEl) segLabelEl.textContent = t('segmentSelectorLabel');
+    const segPlaceholder = document.querySelector('#segmentSelector option[disabled]');
+    if (segPlaceholder) segPlaceholder.textContent = t('segmentSelectorPlaceholder');
+
+    // Empty-state messages injected by resetInterface() / loadAnnotations()
+    // Rebuild them only when appropriate
+    if (!state.currentVideoId) {
+        const videoSelector = document.getElementById('videoSelector');
+        if (videoSelector && videoSelector.querySelector('.empty-state')) {
+            videoSelector.querySelector('.empty-state h3').textContent = t('noVideoLoaded');
+            videoSelector.querySelector('.empty-state p').textContent = t('noVideoHint');
+        }
+    }
+
+    const annotsList = document.getElementById('annotationsList');
+    if (annotsList && annotsList.querySelector('.empty-state')) {
+        const p1 = annotsList.querySelector('.empty-state p:first-of-type');
+        const p2 = annotsList.querySelector('.empty-state p.hint');
+        if (p1) p1.textContent = t('noAnnotationsYet');
+        if (p2) p2.textContent = t('noAnnotationsHint');
+    }
+
+    // Segment start/end display (prefix only)
+    refreshSegmentDisplayPrefixes();
+}
+
+/** Keep "Start: X" / "End: X" labels translated when the user switches language. */
+function refreshSegmentDisplayPrefixes() {
+    const startEl = document.getElementById('segmentStartDisplay');
+    const endEl   = document.getElementById('segmentEndDisplay');
+    if (startEl) {
+        const raw = startEl.textContent;
+        const colonIdx = raw.indexOf(':');
+        const timeStr = colonIdx !== -1 ? raw.slice(colonIdx) : ': -';
+        startEl.textContent = t('segmentStartPrefix') + timeStr;
+    }
+    if (endEl) {
+        const raw = endEl.textContent;
+        const colonIdx = raw.indexOf(':');
+        const timeStr = colonIdx !== -1 ? raw.slice(colonIdx) : ': -';
+        endEl.textContent = t('segmentEndPrefix') + timeStr;
+    }
+}
+
+/** Toggle between EN and FR */
+function toggleLanguage() {
+    currentLang = currentLang === 'en' ? 'fr' : 'en';
+    try { localStorage.setItem('appLang', currentLang); } catch (e) {}
+    applyLanguage();
+}
+
+// ─────────────────────────────────────────────────────────────
 // Application State
 const state = {
     currentVideo: null,
@@ -23,19 +480,74 @@ const state = {
     tasks: [],
     task: '',
     sortBy: 'newest',
-    showReviewPanels: {},  // Track which annotation review panels are visible (defaults to hidden)
-    // Segmentation state
-    segmentVideoId: null,
-    segmentVideoElement: null,
-    segments: [],
+    storageMode: 'server',
+    // Segment-specific state
     segmentStartTime: null,
-    segmentEndTime: null
+    segmentEndTime: null,
+    segments: [],
+    // Cached list of files found in the user's OwnCloud personal folder (populated on select)
+    ownCloudFiles: [],
+    // Tracks which annotation review panels are open { [annotationId]: boolean }
+    showReviewPanels: {},
+    // Guided Q&A voice enrichment session
+    guidedQA: {
+        annotationId: null,
+        questions: [],          // array of strings (priority_prompts)
+        currentIndex: 0,
+        originalTranscript: '',
+        updatedTranscript: '',  // accumulates appended answer transcriptions
+        isRecording: false,
+        mediaRecorder: null,
+        audioChunks: [],
+        loopInterval: null,
+    }
 };
 
-// API Base URL
-const API_BASE = window.location.origin === 'null'
-    ? 'http://localhost:8005'
-    : window.location.origin;
+// API Base URL and JWT token from iframe query
+const TOKEN_PARAM = new URLSearchParams(window.location.search).get('token');
+const MOODLE_JWT = TOKEN_PARAM || '';
+
+// Decode JWT payload (lightweight) so we can access `userid` for OwnCloud discovery fallbacks
+function parseJwtPayload(token) {
+    try {
+        const payload = token.split('.')[1];
+        const json = decodeURIComponent(atob(payload).split('').map(function(c) {
+            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
+        return JSON.parse(json);
+    } catch (e) {
+        return null;
+    }
+}
+const _JWT_PAYLOAD = parseJwtPayload(MOODLE_JWT) || {};
+window.USER_ID = _JWT_PAYLOAD.userid || _JWT_PAYLOAD.user_id || null;
+
+const APP_BASE_PATH = (() => {
+    let path = window.location.pathname || '';
+    if (path.endsWith('/index.html')) {
+        path = path.slice(0, -'/index.html'.length);
+    }
+    if (path.endsWith('/')) {
+        path = path.slice(0, -1);
+    }
+    return path;
+})();
+
+const API_BASE = window.location.origin + APP_BASE_PATH;
+
+// Inject Authorization header for same-origin API requests
+const originalFetch = window.fetch.bind(window);
+window.fetch = (input, init = {}) => {
+    const headers = new Headers(init.headers || {});
+    const url = typeof input === 'string' ? input : input.url;
+    const isSameOrigin = url.startsWith('/') || url.startsWith(window.location.origin);
+
+    if (MOODLE_JWT && isSameOrigin) {
+        headers.set('Authorization', `Bearer ${MOODLE_JWT}`);
+    }
+
+    return originalFetch(input, { ...init, headers });
+};
 
 // Initialize Application
 document.addEventListener('DOMContentLoaded', () => {
@@ -72,8 +584,8 @@ function resetInterface() {
     videoSelector.innerHTML = `
         <div class="empty-state">
             <i class="fas fa-film empty-icon"></i>
-            <h3>No Video Loaded</h3>
-            <p>Click "Add Local Videos" to get started</p>
+            <h3>${t('noVideoLoaded')}</h3>
+            <p>${t('noVideoHint')}</p>
         </div>
     `;
 
@@ -82,8 +594,8 @@ function resetInterface() {
     annotationsList.innerHTML = `
         <div class="empty-state">
             <i class="fas fa-pen-to-square empty-icon"></i>
-            <p>No annotations yet</p>
-            <p class="hint">Start recording to create your first elicitation</p>
+            <p>${t('noAnnotationsYet')}</p>
+            <p class="hint">${t('noAnnotationsHint')}</p>
         </div>
     `;
 
@@ -115,6 +627,29 @@ function mdToHtml(text) {
     }
 }
 
+async function loadStorageMode() {
+    if (!MOODLE_JWT) {
+        state.storageMode = 'server';
+        // updateTestModeBanner();
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE}/api/storage-mode`);
+        if (!response.ok) {
+            throw new Error(`Storage mode check failed: ${response.status}`);
+        }
+        const data = await response.json();
+        state.storageMode = data.mode === 'webdav' ? 'webdav' : 'server';
+    } catch (error) {
+        console.warn('Falling back to server storage mode:', error);
+        state.storageMode = 'server';
+    }
+
+    // updateTestModeBanner();
+}
+
+
 async function initializeApp() {
     console.log('Initializing Video Elicitation Tool...');
 
@@ -129,16 +664,30 @@ async function initializeApp() {
         });
     }
 
+    // "Back to Moodle" button: navigate the top-level window, not just the iframe.
+    // Without this, clicking the link updates the iframe's URL but leaves the parent
+    // page's address bar stuck on /local/videoelicit/index.php.
+    const backBtn = document.getElementById('backToMoodleBtn');
+    if (backBtn) {
+        backBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            window.top.location.href = backBtn.href;
+        });
+    }
+
     // Connect WebSocket
     connectWebSocket();
 
     // Check microphone permissions
     checkMicrophonePermission();
 
+    // Load storage mode and update banner
+    await loadStorageMode();
+
     // Load craft selection from localStorage (default to glassblowing)
     state.craft = localStorage.getItem('craft') || 'glassblowing';
-    // Create selectors UI
-    createCraftSelectorUI();
+    // Create craft selector UI only (task selector removed)
+    createElicitControlsUI();
 
     // Load existing videos
     await loadVideos();
@@ -158,82 +707,241 @@ async function initializeApp() {
         }
     }
 
+    // Show tutorial automatically for newcomers (non-blocking)
+    maybeShowTutorialForNewcomer().catch(() => {});
+
+    // Check for any uploads interrupted by a previous page navigation (non-blocking)
+    if (_webdavApiUrl) checkAndOfferResumeUploads().catch(e => console.warn('Resume check:', e));
+
+    // Apply language (reads localStorage preference or defaults to 'en')
+    applyLanguage();
+
     console.log('Application initialized successfully');
 }
 
 // Create a small craft selector UI under the recording controls
-function createCraftSelectorUI() {
+function createElicitControlsUI() {
     try {
         const controls = document.getElementById('recordingControls');
         if (!controls) return;
 
-        // Create container
         const wrapper = document.createElement('div');
-        wrapper.className = 'craft-selector';
+        wrapper.className = 'elicit-controls';
         wrapper.style.margin = '10px 0';
 
-        const label = document.createElement('div');
-        label.textContent = 'Select your craft domain';
-        label.style.fontSize = '0.9rem';
-        label.style.marginBottom = '6px';
+        // --- Craft domain selector ---
+        const craftLabel = document.createElement('div');
+        craftLabel.textContent = t('craftDomainLabel');
+        craftLabel.style.fontSize = '0.9rem';
+        craftLabel.style.marginBottom = '6px';
 
-        const select = document.createElement('select');
-        select.id = 'craftSelector';
-        select.style.padding = '6px 8px';
-        select.style.borderRadius = '4px';
-        select.style.border = '1px solid #ccc';
+        const craftSelect = document.createElement('select');
+        craftSelect.id = 'craftSelector';
+        craftSelect.style.padding = '6px 8px';
+        craftSelect.style.borderRadius = '4px';
+        craftSelect.style.border = '1px solid #ccc';
 
-        const opts = [
-            { value: 'glassblowing', label: 'Glassblowing' },
-            { value: 'scientific_glassblowing', label: 'Scientific Glassblowing' },
-            { value: 'jewelry', label: 'Jewelry' }
-        ];
-
-        opts.forEach(o => {
+        [
+            { value: 'glassblowing', key: 'craft_glassblowing' },
+            { value: 'scientific_glassblowing', key: 'craft_scientific_glassblowing' },
+            { value: 'jewelry', key: 'craft_jewelry' },
+            { value: 'glovemaking', key: 'craft_glovemaking' },
+            { value: 'saddlery', key: 'craft_saddlery' },
+        ].forEach(o => {
             const option = document.createElement('option');
             option.value = o.value;
-            option.textContent = o.label;
-            select.appendChild(option);
+            option.setAttribute('data-craft-key', o.key);
+            option.textContent = t(o.key);
+            craftSelect.appendChild(option);
         });
 
-        // Set current value
-        select.value = state.craft || 'glassblowing';
-
-        // On change, update state and persist
-        select.addEventListener('change', (e) => {
+        craftSelect.value = state.craft || 'glassblowing';
+        craftSelect.addEventListener('change', (e) => {
             state.craft = e.target.value;
             try { localStorage.setItem('craft', state.craft); } catch (e) { }
         });
 
-        wrapper.appendChild(label);
-        wrapper.appendChild(select);
+        wrapper.appendChild(craftLabel);
+        wrapper.appendChild(craftSelect);
+
+        // --- Segment selector ---
+        const segWrapper = document.createElement('div');
+        segWrapper.id = 'segmentSelectorWrapper';
+        segWrapper.style.marginTop = '10px';
+        segWrapper.style.display = 'none'; // hidden until segments exist
+
+        const segLabel = document.createElement('div');
+        segLabel.textContent = t('segmentSelectorLabel');
+        segLabel.style.fontSize = '0.9rem';
+        segLabel.style.marginBottom = '6px';
+
+        const segSelect = document.createElement('select');
+        segSelect.id = 'segmentSelector';
+        segSelect.style.padding = '6px 8px';
+        segSelect.style.borderRadius = '4px';
+        segSelect.style.border = '1px solid #ccc';
+
+        segSelect.addEventListener('change', (e) => {
+            const startTime = parseFloat(e.target.value);
+            if (!isNaN(startTime)) {
+                const videoPlayer = document.getElementById('videoPlayer');
+                if (videoPlayer) {
+                    videoPlayer.pause();
+                    videoPlayer.currentTime = Math.max(0, startTime);
+                }
+            }
+        });
+
+        segWrapper.appendChild(segLabel);
+        segWrapper.appendChild(segSelect);
+        wrapper.appendChild(segWrapper);
 
         // Insert at top of recording controls
         controls.insertBefore(wrapper, controls.firstChild);
     } catch (e) {
-        console.error('Failed to create craft selector UI', e);
+        console.error('Failed to create elicit controls UI', e);
     }
 }
 
+// Update the segment dropdown in the elicit controls to reflect currently loaded segments.
+function refreshSegmentSelector() {
+    const wrapper = document.getElementById('segmentSelectorWrapper');
+    const segSelect = document.getElementById('segmentSelector');
+    if (!wrapper || !segSelect) return;
+
+    const segments = state.segments || [];
+    segSelect.innerHTML = '';
+
+    if (segments.length === 0) {
+        wrapper.style.display = 'none';
+        return;
+    }
+
+    // Placeholder option
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = t('segmentSelectorPlaceholder');
+    placeholder.disabled = true;
+    placeholder.selected = true;
+    segSelect.appendChild(placeholder);
+
+    segments.forEach(seg => {
+        const opt = document.createElement('option');
+        opt.value = seg.start_time;
+        opt.textContent = seg.name
+            ? `${seg.name} (${formatTime(seg.start_time)} → ${formatTime(seg.end_time)})`
+            : `${formatTime(seg.start_time)} → ${formatTime(seg.end_time)}`;
+        segSelect.appendChild(opt);
+    });
+
+    wrapper.style.display = 'block';
+}
+
+// Task selector removed — only craft domain selection is shown in the Elicit tab.
+// These stubs prevent errors if any legacy code path calls them.
+async function initializeTaskSelector() { /* removed */ }
+
+async function loadTasks(selectEl, craft) {
+    try {
+        const craftQuery = craft ? `&craft=${encodeURIComponent(craft)}` : '';
+        const resp = await fetch(`${API_BASE}/api/tasks?published=1${craftQuery}`);
+        if (!resp.ok) throw new Error('Failed to fetch tasks');
+        const tasks = await resp.json();
+        state.tasks = tasks || [];
+    } catch (err) {
+        console.warn('Failed to fetch tasks', err);
+        state.tasks = [];
+    }
+    if (selectEl) {
+        renderTaskOptions(selectEl);
+    }
+}
+
+function renderTaskOptions(selectEl) {
+    if (!selectEl) return;
+    selectEl.innerHTML = '';
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = '-- Select a task --';
+    selectEl.appendChild(placeholder);
+    state.tasks.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.name;
+        opt.textContent = t.name;
+        selectEl.appendChild(opt);
+    });
+    // Reselect previous task if present
+    if (state.task) {
+        selectEl.value = state.task;
+    }
+}
+
+async function createOrSelectTask(taskName) {
+    // If task already in list for this craft, just select it
+    const existing = state.tasks.find(t => t.name === taskName && t.craft === state.craft);
+    if (existing) {
+        state.task = existing.name;
+        try { localStorage.setItem('task', state.task); } catch (_) { }
+        const selectEl = document.getElementById('taskSelect');
+        if (selectEl) {
+            selectEl.value = state.task;
+        }
+        return;
+    }
+
+    // Otherwise create and publish for this craft
+    const resp = await fetch(`${API_BASE}/api/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: taskName, craft: state.craft, description: null, is_published: 1 })
+    });
+    if (!resp.ok) {
+        throw new Error(`Failed to create task: ${resp.status}`);
+    }
+    const created = await resp.json();
+    state.tasks.push(created);
+    state.task = created.name;
+    try { localStorage.setItem('task', state.task); } catch (_) { }
+    const selectEl = document.getElementById('taskSelect');
+    if (selectEl) {
+        renderTaskOptions(selectEl);
+        selectEl.value = created.name;
+    }
+}
 
 // Event Listeners Setup
 function setupEventListeners() {
     console.log('=== Setting up event listeners ===');
 
     // Video selection
-    document.getElementById('selectVideoBtn').addEventListener('click', () => {
-        if (state.videos.length > 0) {
+    document.getElementById('selectVideoBtn').addEventListener('click', async () => {
+        // Offer resume banners for any uploads interrupted since last page load.
+        if (_webdavApiUrl) checkAndOfferResumeUploads().catch(e => console.warn('Resume check:', e));
+
+        // When user opens the video selector, proactively PROPFIND the user's OwnCloud personal folder
+        // so the UI can offer remote files without additional browsing steps.
+        if (_webdavApiUrl) {
+            try {
+                showLoading('Scanning OwnCloud user folder...');
+                await Promise.all([scanUserOwnCloudFolder(), loadVideos()]);
+                hideLoading();
+                showToast('OwnCloud', `Found ${state.ownCloudFiles.length} files in your personal folder`, 'success');
+            } catch (err) {
+                hideLoading();
+                console.error('OwnCloud scan failed:', err);
+                showToast('OwnCloud', `Scan failed: ${err.message}`, 'error');
+            }
+        } else {
+            await loadVideos();
+        }
+
+        // Open the normal video modal if we have any videos (local or linked) or remote OwnCloud files
+        if (state.videos.length > 0 || (state.ownCloudFiles && state.ownCloudFiles.length > 0)) {
             showVideoModal();
         } else {
             showToast('No Videos', 'Please upload videos first', 'info');
         }
     });
-
-    // Add Local Videos - opens file picker for local video registration
-    document.getElementById('addVideosBtn').addEventListener('click', handleAddLocalVideos);
-
-    // Handle video file selection for local registration (not upload)
-    document.getElementById('videoFileInput').addEventListener('change', handleLocalVideoSelection);
 
     // Recording
     document.getElementById('recordBtn').addEventListener('click', toggleRecording);
@@ -272,8 +980,6 @@ function setupEventListeners() {
     document.querySelectorAll('.sort-option').forEach(option => {
         option.addEventListener('click', handleSortChange);
     });
-    // Reload all analyses
-    document.getElementById('reloadAllBtn').addEventListener('click', reloadAllAnalyses);
     // Close sort dropdown when clicking outside
     document.addEventListener('click', (e) => {
         const dropdown = document.getElementById('sortDropdownMenu');
@@ -299,24 +1005,16 @@ function setupEventListeners() {
     document.getElementById('closeAssignVideosModalBtn').addEventListener('click', closeAssignVideosModal);
     document.getElementById('closeAssignVideosBtn').addEventListener('click', closeAssignVideosModal);
 
-    // Local Folder Browser
-    document.getElementById('browseLocalFolderBtn').addEventListener('click', handleBrowseLocalFolder);
-    document.getElementById('closeLocalFolderModalBtn').addEventListener('click', closeLocalFolderModal);
-    document.getElementById('cancelLocalBtn').addEventListener('click', closeLocalFolderModal);
-
-    // Allow Enter key in folder path input to trigger browse
-    document.getElementById('localFolderPath').addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            handleBrowseLocalFolder();
-        }
-    });
+    // OwnCloud Video Browser
+    document.getElementById('linkOwnCloudBtn').addEventListener('click', openOwnCloudModal);
+    document.getElementById('closeOwnCloudModalBtn').addEventListener('click', closeOwnCloudModal);
+    document.getElementById('closeOwnCloudBtn').addEventListener('click', closeOwnCloudModal);
 }
 
 // WebSocket Connection
 function connectWebSocket() {
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${wsProtocol}//${window.location.host}/ws`;
+    const wsUrl = `${wsProtocol}//${window.location.host}${APP_BASE_PATH}/ws`;
 
     state.websocket = new WebSocket(wsUrl);
 
@@ -352,6 +1050,11 @@ function handleWebSocketMessage(message) {
             break;
 
         case 'transcription_complete':
+            if (!message.transcription || !message.transcription.trim()) {
+                showToast('Transcription Failed', 'Transcription was empty — check your microphone.', 'error');
+                updateAnnotationStatus(message.annotation_id, 'failed');
+                break;
+            }
             updateAnnotationTranscription(message.annotation_id, message.transcription);
             showToast('Transcription Complete', 'Audio has been transcribed', 'success');
             if (state.currentVideoId) {
@@ -364,20 +1067,20 @@ function handleWebSocketMessage(message) {
             updateAnnotationStatus(message.annotation_id, 'failed');
             break;
 
-        case 'review_status':
-            updateReviewStatus(message.annotation_id, message.status);
+        case 'extended_transcript_status':
+            updateExtendedTranscriptStatus(message.annotation_id, message.status);
             break;
 
-        case 'review_complete':
-            updateReviewResults(message.annotation_id, message.review_results, message.is_salient);
+        case 'extended_transcript_complete':
+            updateExtendedTranscript(message.annotation_id, message.extended_transcript);
             if (state.currentVideoId) {
                 loadAnnotations(state.currentVideoId);
             }
             break;
 
-        case 'review_error':
-            showToast('AI Review Error', message.error, 'error');
-            updateReviewStatus(message.annotation_id, 'failed');
+        case 'extended_transcript_error':
+            showToast('Extended Transcript Error', message.error, 'error');
+            updateExtendedTranscriptStatus(message.annotation_id, 'failed');
             break;
 
         case 'judge_status':
@@ -386,13 +1089,9 @@ function handleWebSocketMessage(message) {
 
         case 'judge_complete':
             updateJudgeDecision(message.annotation_id, message.judge_decision);
-            if (state.currentVideoId) {
-                loadAnnotations(state.currentVideoId);
-            }
             break;
 
         case 'judge_error':
-            showToast('Judge Error', message.error, 'error');
             updateJudgeStatus(message.annotation_id, 'failed');
             break;
 
@@ -402,39 +1101,34 @@ function handleWebSocketMessage(message) {
 
         case 'tagging_complete':
             updateTags(message.annotation_id, message.tags);
-            if (state.currentVideoId) {
-                loadAnnotations(state.currentVideoId);
-            }
             break;
 
         case 'tagging_error':
-            showToast('Tagging Error', message.error, 'error');
             updateTaggingStatus(message.annotation_id, 'failed');
             break;
 
-        case 'tagging_debug':
-            console.error('[TAGGING DEBUG]', message);
-            break;
-
         case 'task_detection_status':
-            // Handle task detection status updates
-            console.log('[TASK_DETECTION]', message.status);
+            updateTaskDetectionStatus(message.annotation_id, message.status);
             break;
 
         case 'task_detection_complete':
-            // Update annotation with detected task
-            const annotation = state.annotations.find(a => a.id === message.annotation_id);
-            if (annotation) {
-                annotation.detected_task = message.detected_task;
-                annotation.detected_task_confidence = message.confidence;
-            }
-            if (state.currentVideoId) {
-                loadAnnotations(state.currentVideoId);
-            }
+            updateTaskDetected(message.annotation_id, message.detected_task, message.confidence);
             break;
 
         case 'task_detection_error':
-            showToast('Task Detection Error', message.error, 'error');
+            updateTaskDetectionStatus(message.annotation_id, 'failed');
+            break;
+
+        case 'review_status':
+            updateReviewStatus(message.annotation_id, message.status);
+            break;
+
+        case 'review_complete':
+            updateReviewResults(message.annotation_id, message.review_results, message.is_salient);
+            break;
+
+        case 'review_error':
+            updateReviewStatus(message.annotation_id, 'failed');
             break;
 
         case 'annotation_deleted':
@@ -450,198 +1144,165 @@ async function checkMicrophonePermission() {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         stream.getTracks().forEach(track => track.stop());
-        updateRecordingStatus('ready', 'Ready to Record');
+        updateRecordingStatus('ready', t('statusReadyToRecord'));
         console.log('Microphone permission granted');
     } catch (error) {
         console.error('Microphone permission denied:', error);
         showToast('Microphone Access Required', 'Please grant microphone permission to record annotations', 'warning');
-        updateRecordingStatus('error', 'Microphone Access Denied');
+        updateRecordingStatus('error', currentLang === 'fr' ? 'Micro refusé' : 'Microphone Access Denied');
     }
 }
 
-// Handle Add Local Videos button click
-async function handleAddLocalVideos() {
-    // Check if File System Access API is available (for directory picking)
-    if (typeof window.showDirectoryPicker === 'function') {
-        try {
-            // Use modern File System Access API to let user pick a directory
-            const directoryHandle = await window.showDirectoryPicker();
 
-            // Get the directory path - we'll need to reconstruct it
-            // Note: The API doesn't directly give us the full path for security,
-            // but we can prompt the user to confirm/provide it
-            const dirName = directoryHandle.name;
+function ensureUploadPanel() {
+    let panel = document.getElementById('uploadProgressPanel');
+    if (panel) return panel;
 
-            // Prompt user to provide or confirm the full path
-            const folderPath = prompt(
-                `Selected folder: "${dirName}"\n\n` +
-                `Please enter the complete path to this folder:\n` +
-                `(The browser doesn't expose full paths for security)`,
-                `C:\\Users\\dupon\\Documents\\${dirName}`
-            );
+    panel = document.createElement('div');
+    panel.id = 'uploadProgressPanel';
+    panel.style.position = 'fixed';
+    panel.style.right = '24px';
+    panel.style.bottom = '24px';
+    panel.style.width = '360px';
+    panel.style.maxHeight = '50vh';
+    panel.style.overflowY = 'auto';
+    panel.style.background = '#ffffff';
+    panel.style.border = '1px solid #d5d5d5';
+    panel.style.boxShadow = '0 12px 24px rgba(0,0,0,0.12)';
+    panel.style.borderRadius = '8px';
+    panel.style.padding = '12px 14px';
+    panel.style.zIndex = '9999';
 
-            if (!folderPath) {
-                console.log('Folder selection cancelled');
-                return;
+    const title = document.createElement('div');
+    title.textContent = 'Uploading videos';
+    title.style.fontWeight = '600';
+    title.style.marginBottom = '8px';
+    panel.appendChild(title);
+
+    const list = document.createElement('div');
+    list.id = 'uploadProgressList';
+    panel.appendChild(list);
+
+    document.body.appendChild(panel);
+    return panel;
+}
+
+function updateUploadRow(fileName, percent, statusText, isError) {
+    const list = document.getElementById('uploadProgressList');
+    if (!list) return;
+
+    let row = list.querySelector(`[data-file="${CSS.escape(fileName)}"]`);
+    if (!row) {
+        row = document.createElement('div');
+        row.dataset.file = fileName;
+        row.style.marginBottom = '10px';
+
+        const label = document.createElement('div');
+        label.className = 'upload-row-label';
+        label.textContent = fileName;
+        label.style.fontSize = '12px';
+        label.style.marginBottom = '4px';
+        row.appendChild(label);
+
+        const bar = document.createElement('div');
+        bar.className = 'upload-progress-bar';
+        bar.style.height = '6px';
+        bar.style.background = '#e0e0e0';
+        bar.style.borderRadius = '999px';
+        bar.style.overflow = 'hidden';
+
+        const fill = document.createElement('div');
+        fill.className = 'upload-progress-fill';
+        fill.style.height = '100%';
+        fill.style.width = '0%';
+        fill.style.background = '#2a7ae2';
+        bar.appendChild(fill);
+        row.appendChild(bar);
+
+        const status = document.createElement('div');
+        status.className = 'upload-row-status';
+        status.style.fontSize = '11px';
+        status.style.marginTop = '3px';
+        status.style.color = '#666';
+        row.appendChild(status);
+
+        list.appendChild(row);
+    }
+
+    const fill = row.querySelector('.upload-progress-fill');
+    if (fill) {
+        fill.style.width = `${percent}%`;
+        fill.style.background = isError ? '#dc3545' : '#2a7ae2';
+    }
+
+    const status = row.querySelector('.upload-row-status');
+    if (status && statusText !== undefined) {
+        status.textContent = statusText;
+        status.style.color = isError ? '#dc3545' : '#666';
+    }
+}
+
+function removeUploadRow(fileName) {
+    const list = document.getElementById('uploadProgressList');
+    if (!list) return;
+    const row = list.querySelector(`[data-file="${CSS.escape(fileName)}"]`);
+    if (row) row.remove();
+    // Hide the panel if no rows remain
+    if (!list.children.length) {
+        const panel = document.getElementById('uploadProgressPanel');
+        if (panel) panel.remove();
+    }
+}
+
+async function uploadVideos(files) {
+    ensureUploadPanel();
+
+    for (const file of files) {
+        await uploadSingleFile(file);
+    }
+
+    const panel = document.getElementById('uploadProgressPanel');
+    if (panel) {
+        setTimeout(() => panel.remove(), 2000);
+    }
+}
+
+function uploadSingleFile(file) {
+    return new Promise((resolve, reject) => {
+        const isWebDav = state.storageMode === 'webdav';
+        const endpoint = isWebDav ? '/api/uploads' : '/api/videos/upload';
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `${API_BASE}${endpoint}`);
+
+        if (MOODLE_JWT) {
+            xhr.setRequestHeader('Authorization', `Bearer ${MOODLE_JWT}`);
+        }
+
+        xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable) {
+                const percent = Math.round((event.loaded / event.total) * 100);
+                updateUploadRow(file.name, percent);
             }
+        };
 
-            // Now browse and register all videos in that folder
-            await handleBrowseFolder(folderPath);
-
-        } catch (error) {
-            if (error.name === 'AbortError') {
-                // User cancelled the picker
-                console.log('Folder selection cancelled');
+        xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+                updateUploadRow(file.name, 100);
+                resolve();
             } else {
-                console.error('Error selecting folder:', error);
-                showToast('Error', 'Failed to select folder: ' + error.message, 'error');
+                reject(new Error(xhr.responseText || 'Upload failed'));
             }
-        }
-    } else {
-        // Fallback: Open the manual folder path modal
-        // Brave and some browsers disable folder picker for privacy
-        openLocalFolderModal();
-    }
-}
+        };
 
-// Browse folder and register all videos
-async function handleBrowseFolder(folderPath) {
-    try {
-        showLoading('Browsing folder...');
+        xhr.onerror = () => {
+            reject(new Error('Upload failed'));
+        };
 
-        const response = await fetch(`${API_BASE}/api/videos/local/browse?directory=${encodeURIComponent(folderPath)}`);
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Failed to browse folder');
-        }
-
-        const data = await response.json();
-
-        if (data.videos.length === 0) {
-            showToast('No Videos', 'No video files found in this folder', 'info');
-            hideLoading();
-            return;
-        }
-
-        // Register all found videos
-        let successCount = 0;
-        let duplicateCount = 0;
-
-        for (const video of data.videos) {
-            try {
-                const result = await registerLocalVideo(video.filepath, video.filename);
-                if (result) {
-                    successCount++;
-                } else {
-                    duplicateCount++;
-                }
-            } catch (error) {
-                if (error.message.includes('Already Registered') || error.message.includes('UNIQUE constraint')) {
-                    duplicateCount++;
-                } else {
-                    console.error(`Failed to register ${video.filename}:`, error);
-                }
-            }
-        }
-
-        await loadVideos();
-
-        const message = duplicateCount > 0
-            ? `${successCount} video(s) registered, ${duplicateCount} already existed`
-            : `${successCount} video(s) registered successfully`;
-        showToast('Registration Complete', message, 'success');
-
-    } catch (error) {
-        console.error('Error browsing folder:', error);
-        showToast('Error', error.message, 'error');
-    } finally {
-        hideLoading();
-    }
-}
-
-// Local Video Selection - Register local videos without copying
-async function handleLocalVideoSelection(event) {
-    const files = Array.from(event.target.files);
-
-    if (files.length === 0) return;
-
-    showLoading(`Registering ${files.length} video(s)...`);
-
-    try {
-        let successCount = 0;
-        let duplicateCount = 0;
-        let skippedCount = 0;
-        let lastRegisteredVideoId = null;
-
-        for (const file of files) {
-            try {
-                // Browsers don't expose full file paths for security reasons
-                // Try to get path from file object (works in some environments)
-                let filepath = file.path;
-
-                if (!filepath) {
-                    // Prompt user to provide the full path
-                    hideLoading(); // Hide loading while prompting
-                    filepath = prompt(
-                        `Please enter the full path for "${file.name}":\n\n` +
-                        `Example: C:\\Videos\\${file.name}`,
-                        `C:\\Videos\\${file.name}`
-                    );
-                    showLoading(`Registering ${files.length} video(s)...`); // Show loading again
-
-                    if (!filepath) {
-                        console.log(`Skipped ${file.name} - no path provided`);
-                        skippedCount++;
-                        continue;
-                    }
-                }
-
-                const video = await registerLocalVideo(filepath, file.name);
-
-                if (video) {
-                    successCount++;
-                    lastRegisteredVideoId = video.id;
-                } else {
-                    duplicateCount++;
-                }
-            } catch (error) {
-                if (error.message.includes('Already Registered') || error.message.includes('UNIQUE constraint')) {
-                    duplicateCount++;
-                } else {
-                    console.error(`Failed to register ${file.name}:`, error);
-                    showToast('Registration Error', `Failed to register ${file.name}: ${error.message}`, 'error');
-                }
-            }
-        }
-
-        // Reload video list
-        await loadVideos();
-
-        // Show summary message
-        if (successCount > 0) {
-            let message = `${successCount} video(s) registered`;
-            if (duplicateCount > 0) message += `, ${duplicateCount} already existed`;
-            if (skippedCount > 0) message += `, ${skippedCount} skipped`;
-            showToast('Registration Complete', message, 'success');
-
-            // Auto-load the last registered video if only one was added
-            if (successCount === 1 && lastRegisteredVideoId) {
-                await loadVideo(lastRegisteredVideoId);
-            }
-        } else if (duplicateCount > 0) {
-            showToast('Already Registered', `All ${duplicateCount} video(s) were already in your library`, 'info');
-        } else if (skippedCount > 0) {
-            showToast('No Videos Added', 'No videos were registered', 'info');
-        }
-
-    } catch (error) {
-        console.error('Local video registration error:', error);
-        showToast('Registration Error', error.message, 'error');
-    } finally {
-        hideLoading();
-        event.target.value = ''; // Reset input
-    }
+        const formData = new FormData();
+        const fieldName = isWebDav ? 'files' : 'file';
+        formData.append(fieldName, file, file.name);
+        xhr.send(formData);
+    });
 }
 
 // Load Videos
@@ -652,6 +1313,9 @@ async function loadVideos() {
 
         state.videos = await response.json();
 
+        // If Segment tab is initialized, update its selector immediately
+        if (_segmentTabInitialized) renderSegmentVideoSelector();
+
     } catch (error) {
         console.error('Error loading videos:', error);
         showToast('Error', 'Failed to load videos', 'error');
@@ -659,53 +1323,39 @@ async function loadVideos() {
 }
 
 // Video Modal
-async function showVideoModal() {
+function showVideoModal() {
     const modal = document.getElementById('videoListModal');
     const container = document.getElementById('videoListContainer');
 
     container.innerHTML = '';
 
-    if (state.videos.length === 0) {
-        container.innerHTML = '<p class="empty-state">No videos available</p>';
-    } else {
-        // Fetch segments for all videos
-        const segmentsMap = {};
-        for (const video of state.videos) {
-            try {
-                const response = await fetch(`${API_BASE}/api/segments/video/${video.id}`);
-                if (response.ok) {
-                    segmentsMap[video.id] = await response.json();
-                }
-            } catch (error) {
-                console.error(`Failed to load segments for video ${video.id}:`, error);
-                segmentsMap[video.id] = [];
-            }
-        }
+    // Build set of filenames/paths already loaded into the plugin (for greying out OwnCloud items)
+    const loadedFilenames = new Set(state.videos.map(v => v.filename));
 
-        // Render videos with hierarchical segments
+    // ── Loaded videos (plugin-side records) ─────────────────────────────────
+    if (state.videos.length === 0) {
+        container.innerHTML = `<p class="empty-state" style="color:#999;font-size:0.9rem;padding:0.5rem 0;">${t('noVideosLoaded')}</p>`;
+    } else {
         state.videos.forEach(video => {
-            const videoSegments = segmentsMap[video.id] || [];
-            
-            // Parent video item
             const item = document.createElement('div');
-            item.className = 'video-list-item video-parent';
+            item.className = 'video-list-item';
             if (state.currentVideoId === video.id) {
                 item.classList.add('active');
             }
 
             item.innerHTML = `
-                <div class="video-list-name">
-                    <i class="fas fa-video"></i> ${video.filename}
-                </div>
+                <div class="video-list-name">${escapeHtml(video.filename)}</div>
                 <div class="video-list-meta">
                     ${formatFileSize(video.file_size)} • ${video.annotation_count} elicitations
-                    ${videoSegments.length > 0 ? ` • ${videoSegments.length} segments` : ''}
                 </div>
                 <div class="video-list-actions">
-                    <button class="btn btn-icon btn-small btn-danger video-delete-btn" title="Delete video" onclick="event.stopPropagation(); deleteVideo(${video.id})">
+                    <button class="btn btn-icon btn-small btn-danger video-delete-btn"
+                        title="${t('removeFromPlugin')}"
+                        onclick="event.stopPropagation(); deleteVideo(${video.id})">
                         <i class="fas fa-trash"></i>
                     </button>
                 </div>
+                <div id="videoSegments-${video.id}" class="video-segments-placeholder"></div>
             `;
 
             item.addEventListener('click', () => {
@@ -715,40 +1365,903 @@ async function showVideoModal() {
 
             container.appendChild(item);
 
-            // Render segments under parent video
-            if (videoSegments.length > 0) {
-                videoSegments.forEach(segment => {
-                    const segmentItem = document.createElement('div');
-                    segmentItem.className = 'video-list-item video-segment';
-                    
-                    const segmentName = segment.name || 'Unnamed Segment';
-                    const duration = segment.end_time - segment.start_time;
-                    
-                    segmentItem.innerHTML = `
-                        <div class="video-list-name segment-name">
-                            <i class="fas fa-cut"></i> ${segmentName}
+            // Fetch and render segments nested under this video entry
+            (async () => {
+                try {
+                    const resp = await fetch(`${API_BASE}/api/segments/video/${video.id}`);
+                    if (!resp.ok) return;
+                    const segs = await resp.json();
+                    if (!segs || segs.length === 0) return;
+                    const segContainer = document.getElementById(`videoSegments-${video.id}`);
+                    if (!segContainer) return;
+                    segContainer.className = 'video-segments-list';
+                    segContainer.innerHTML = segs.map(seg => `
+                        <div class="video-segment-item">
+                            <button class="btn btn-small" onclick="loadVideoAndSegment(${video.id}, ${seg.start_time})">
+                                <i class="fas fa-play"></i> ${formatTime(seg.start_time)} → ${formatTime(seg.end_time)}
+                            </button>
+                            <span class="segment-name">${escapeHtml(seg.name || '')}</span>
                         </div>
-                        <div class="video-list-meta">
-                            ${formatTime(segment.start_time)} - ${formatTime(segment.end_time)} (${formatTime(duration)})
-                        </div>
-                    `;
-
-                    segmentItem.addEventListener('click', () => {
-                        loadVideoSegment(video.id, segment);
-                        closeVideoModal();
-                    });
-
-                    container.appendChild(segmentItem);
-                });
-            }
+                    `).join('');
+                } catch (err) {
+                    console.warn('Failed to load segments for video', video.id, err);
+                }
+            })();
         });
+    }
+
+    // ── OwnCloud personal folder ─────────────────────────────────────────────
+    const ownCloudArea = document.getElementById('videoModalOwnCloudArea');
+    if (ownCloudArea) {
+        if (state.ownCloudFiles && state.ownCloudFiles.length > 0) {
+            ownCloudArea.style.display = 'block';
+            renderOwnCloudItemsForModal(state.ownCloudFiles, loadedFilenames);
+        } else {
+            ownCloudArea.style.display = 'none';
+        }
     }
 
     modal.classList.add('active');
 }
 
+/**
+ * Render OwnCloud files inside the Select Video modal.
+ * Files already loaded into the plugin are shown greyed-out (not_loadable).
+ * A trash icon on each item deletes the OwnCloud file (permanent).
+ */
+function renderOwnCloudItemsForModal(files, loadedFilenames) {
+    const listEl = document.getElementById('videoModalOwnCloudFilesList');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+
+    const videoFiles = files.filter(f => f.type === 'file');
+
+    if (videoFiles.length === 0) {
+        listEl.innerHTML = `<p style="color:#999;font-size:0.85rem;padding:0.5rem;">${t('noOwnCloudFiles')}</p>`;
+        return;
+    }
+
+    videoFiles.forEach(f => {
+        const alreadyLoaded = loadedFilenames.has(f.name);
+        const item = document.createElement('div');
+        item.style.cssText = `
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0.5rem 0.75rem; border-bottom: 1px solid #eee; gap: 0.5rem;
+            ${alreadyLoaded ? 'opacity:0.45; pointer-events:none;' : 'cursor:pointer;'}
+        `;
+        if (!alreadyLoaded) {
+            item.style.pointerEvents = 'auto';
+            item.addEventListener('click', (e) => {
+                if (e.target.closest('.oc-delete-btn')) return;
+                const videoUrl = f.url || f.href || f.path || f.name;
+                linkOwnCloudVideo(f.name, f.size || 0, videoUrl);
+                closeVideoModal();
+            });
+        }
+
+        item.innerHTML = `
+            <div style="display:flex;align-items:center;gap:0.6rem;min-width:0;flex:1;">
+                <i class="fas fa-video" style="color:${alreadyLoaded ? '#aaa' : '#0066cc'};flex-shrink:0;"></i>
+                <div style="min-width:0;">
+                    <div style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(f.name)}</div>
+                    <div style="font-size:0.8rem;color:#888;">${f.size ? formatFileSize(f.size) : ''}</div>
+                </div>
+                ${alreadyLoaded ? `<span style="font-size:0.75rem;color:#888;margin-left:auto;white-space:nowrap;">${currentLang === 'fr' ? 'déjà chargé' : 'already loaded'}</span>` : ''}
+            </div>
+            <button class="btn btn-icon btn-small btn-danger oc-delete-btn"
+                title="${t('deleteFromOwnCloud')}"
+                style="flex-shrink:0;pointer-events:auto;">
+                <i class="fas fa-trash"></i>
+            </button>
+        `;
+        // Attach delete handler via data attributes (avoids HTML-attribute quoting issues with JSON.stringify)
+        const deleteBtn = item.querySelector('.oc-delete-btn');
+        if (deleteBtn) {
+            deleteBtn._ocName = f.name;
+            deleteBtn._ocPath = f.path || f.href || '';
+            deleteBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                deleteOwnCloudFile(e.currentTarget._ocName, e.currentTarget._ocPath);
+            });
+        }
+
+        listEl.appendChild(item);
+    });
+}
+
+/**
+ * Delete an OwnCloud file via the WebDAV API proxy.
+ * This is the ONLY way users can delete their OwnCloud files from within the plugin.
+ */
+async function deleteOwnCloudFile(filename, path) {
+    if (!confirm(`Delete "${filename}" from OwnCloud?\n\nThis is permanent and cannot be undone.`)) return;
+    if (!_webdavApiUrl) { showToast('Error', 'WebDAV API not configured', 'error'); return; }
+    try {
+        showLoading(`Deleting ${filename} from OwnCloud…`);
+        const resp = await fetch(`${_webdavApiUrl}?action=delete&path=${encodeURIComponent(path || filename)}`, { method: 'GET' });
+        hideLoading();
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || data.error) {
+            throw new Error(data.error || `HTTP ${resp.status}`);
+        }
+        showToast('Deleted', `${filename} removed from OwnCloud`, 'success');
+
+        // Also remove the local plugin record if this file was already registered
+        const linkedVideo = state.videos.find(v => v.filename === filename && v.source_type === 'webdav');
+        if (linkedVideo) {
+            try {
+                await fetch(`${API_BASE}/api/videos/${linkedVideo.id}?force=true`, { method: 'DELETE' });
+            } catch (_) { /* best-effort */ }
+            await loadVideos();
+        }
+
+        // Refresh OwnCloud file list and re-render modal
+        await scanUserOwnCloudFolder();
+        const loadedFilenames = new Set(state.videos.map(v => v.filename));
+        renderOwnCloudItemsForModal(state.ownCloudFiles, loadedFilenames);
+    } catch (err) {
+        hideLoading();
+        console.error('OwnCloud delete failed', err);
+        showToast('Error', `Failed to delete: ${err.message}`, 'error');
+    }
+}
+
 function closeVideoModal() {
     document.getElementById('videoListModal').classList.remove('active');
+}
+
+// OwnCloud Video Browser Functions
+// Resolved once per page load
+const _webdavApiUrl = new URLSearchParams(window.location.search).get('webdav_api_url') || '';
+const _moodleWwwRoot = (() => {
+    // Derive from webdav_api_url: strip path after /local/
+    const u = _webdavApiUrl;
+    const idx = u.indexOf('/local/');
+    return idx !== -1 ? u.slice(0, idx) : window.location.origin;
+})();
+
+async function openOwnCloudModal() {
+    const modal = document.getElementById('ownCloudModal');
+
+    // Clear previous state (upload-only modal — do not show file browser here)
+    const cfgWarn = document.getElementById('ownCloudConfigWarning'); if (cfgWarn) cfgWarn.style.display = 'none';
+    const uploadArea = document.getElementById('ownCloudUploadArea'); if (uploadArea) uploadArea.style.display = 'none';
+    const loadingEl = document.getElementById('ownCloudLoading'); if (loadingEl) loadingEl.style.display = 'block';
+
+    modal.classList.add('active');
+
+    // Check if OwnCloud is configured
+    try {
+        if (!_webdavApiUrl) throw new Error('WebDAV API URL not configured');
+
+        const response = await fetch(`${_webdavApiUrl}?action=checkconfig`);
+        const data = await response.json();
+
+        if (!data.configured) {
+            document.getElementById('ownCloudLoading').style.display = 'none';
+            document.getElementById('ownCloudConfigWarning').style.display = 'block';
+            return;
+        }
+
+        // Show upload area and wire up file input
+        const uploadAreaEl = document.getElementById('ownCloudUploadArea');
+        if (uploadAreaEl) uploadAreaEl.style.display = 'block';
+        const fileInput = document.getElementById('ownCloudFileInput');
+        fileInput.onchange = null; // clear old listener
+        fileInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (file) await uploadToOwnCloud(file);
+            fileInput.value = '';
+        });
+
+        // ownCloudModal is upload-only: do not list/browse files here.
+        if (loadingEl) loadingEl.style.display = 'none';
+    } catch (error) {
+        console.error('Error checking OwnCloud config:', error);
+        document.getElementById('ownCloudLoading').style.display = 'none';
+        document.getElementById('ownCloudConfigWarning').style.display = 'block';
+        showToast('Error', 'Failed to access OwnCloud', 'error');
+    }
+}
+
+// ── Resumable Upload State ────────────────────────────────────────────────────
+// Persists chunked-upload progress to localStorage so a page navigation mid-upload
+// does not lose everything. The OwnCloud session folder (MKCOL'd under /uploads/)
+// survives page close; on return the client can verify it and resume from last offset.
+//
+// localStorage key: oc_pending_upload_{encodeURIComponent(filename)}
+// Value JSON: { uploadId, filename, filesize, nextOffset, startedAt }
+// nextOffset is written BEFORE each chunk PUT — if the page closes during a PUT,
+// the worst case is that chunk is re-sent (OwnCloud PUT is idempotent by offset).
+
+function saveUploadState(filename, uploadId, filesize, nextOffset) {
+    try {
+        localStorage.setItem(
+            'oc_pending_upload_' + encodeURIComponent(filename),
+            JSON.stringify({ uploadId, filename, filesize, nextOffset, startedAt: Date.now() })
+        );
+    } catch (e) { console.warn('saveUploadState failed', e); }
+}
+
+function clearUploadState(filename) {
+    try { localStorage.removeItem('oc_pending_upload_' + encodeURIComponent(filename)); }
+    catch (e) { console.warn('clearUploadState failed', e); }
+}
+
+function loadPendingUploads() {
+    const pending = [];
+    try {
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith('oc_pending_upload_')) {
+                try {
+                    const val = JSON.parse(localStorage.getItem(key));
+                    if (val && val.uploadId && val.filename) pending.push(val);
+                } catch (_) { localStorage.removeItem(key); }
+            }
+        }
+    } catch (e) { console.warn('loadPendingUploads failed', e); }
+    return pending;
+}
+
+/**
+ * Check localStorage for interrupted uploads, verify each against OwnCloud via
+ * chunkstatus, and show a resume banner for any that still have a live session.
+ * Called from initializeApp() and from the selectVideoBtn click handler.
+ */
+async function checkAndOfferResumeUploads() {
+    if (!_webdavApiUrl) return;
+    const pending = loadPendingUploads();
+    for (const saved of pending) {
+        try {
+            const params = new URLSearchParams({ action: 'chunkstatus', upload_id: saved.uploadId });
+            const res  = await fetch(`${_webdavApiUrl}?${params}`, { method: 'GET' });
+            const data = await res.json();
+            if (!data.exists) { clearUploadState(saved.filename); continue; }
+
+            // Compute resume offset from what OwnCloud has confirmed
+            let resumeOffset = saved.nextOffset;
+            if (data.chunks && data.chunks.length > 0) {
+                const ocNext = Math.max(...data.chunks) + CHUNK_SIZE;
+                resumeOffset = Math.min(Math.max(ocNext, saved.nextOffset), saved.filesize);
+            }
+            _showResumeBanner(saved.filename, saved.filesize,
+                { uploadId: saved.uploadId, nextOffset: resumeOffset });
+        } catch (e) { console.warn('Resume check error for', saved.filename, e); }
+    }
+}
+
+/**
+ * Render a "resume upload" banner inside the floating upload panel.
+ * The user must re-select the file (browser security: File objects don't survive navigation).
+ */
+function _showResumeBanner(filename, filesize, resumeState) {
+    const bannerId = 'resume-banner-' + encodeURIComponent(filename);
+    if (document.getElementById(bannerId)) return;
+
+    ensureUploadPanel();
+    const list = document.getElementById('uploadProgressList');
+    if (!list) return;
+
+    const resumedMB = (resumeState.nextOffset / 1048576).toFixed(1);
+    const totalMB   = (filesize / 1048576).toFixed(1);
+    const shortName = filename.length > 35 ? filename.slice(0, 32) + '...' : filename;
+
+    const banner = document.createElement('div');
+    banner.id = bannerId;
+    banner.style.cssText = 'margin-bottom:10px;padding:8px;background:#fff3cd;border:1px solid #ffc107;border-radius:6px;font-size:0.85rem;';
+
+    const msg = document.createElement('div');
+    msg.style.marginBottom = '4px';
+    msg.textContent = `Incomplete upload: ${shortName} (${resumedMB} / ${totalMB} MB done)`;
+    banner.appendChild(msg);
+
+    const hint = document.createElement('div');
+    hint.style.cssText = 'color:#6c757d;font-size:0.78rem;margin-bottom:6px;';
+    hint.textContent = 'Select the same file again to resume from where it stopped.';
+    banner.appendChild(hint);
+
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex;gap:6px;';
+
+    const resumeBtn = document.createElement('button');
+    resumeBtn.textContent = 'Resume';
+    resumeBtn.style.cssText = 'padding:4px 10px;background:#0066cc;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.82rem;';
+    resumeBtn.addEventListener('click', () => {
+        const fi = document.createElement('input');
+        fi.type = 'file';
+        fi.accept = 'video/*';
+        fi.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            if (file.name !== filename) {
+                showToast('Resume', `Please select "${filename}" to resume.`, 'error'); return;
+            }
+            if (file.size !== filesize) {
+                showToast('Resume', 'File size mismatch — select the exact same file.', 'error'); return;
+            }
+            banner.remove();
+            uploadToOwnCloud(file, resumeState);
+        });
+        fi.click();
+    });
+
+    const dismissBtn = document.createElement('button');
+    dismissBtn.textContent = 'Dismiss';
+    dismissBtn.style.cssText = 'padding:4px 10px;background:#6c757d;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.82rem;';
+    dismissBtn.addEventListener('click', () => {
+        clearUploadState(filename);
+        banner.remove();
+        const l = document.getElementById('uploadProgressList');
+        if (l && !l.children.length) {
+            const panel = document.getElementById('uploadProgressPanel');
+            if (panel) panel.remove();
+        }
+    });
+
+    btnRow.appendChild(resumeBtn);
+    btnRow.appendChild(dismissBtn);
+    banner.appendChild(btnRow);
+    list.appendChild(banner);
+}
+// ── End Resumable Upload State ─────────────────────────────────────────────────
+
+/**
+ * Upload a file to OwnCloud via the PHP proxy using OwnCloud DAV chunking 1.0.
+ * Chunks are sent sequentially (10 MB each) so no single request exceeds OwnCloud's
+ * per-request body limit. Progress is shown in the fixed upload panel; the upload
+ * button stays enabled so the user can start additional uploads concurrently.
+ * Pass resumeState = { uploadId, nextOffset } to resume an interrupted upload.
+ */
+const CHUNK_SIZE = 10 * 1024 * 1024; // 10 MB per chunk
+
+async function uploadToOwnCloud(file, resumeState = null) {
+    if (!_webdavApiUrl) { showToast('Error', 'WebDAV API not configured', 'error'); return; }
+
+    // Dismiss any existing resume banner for this file (fresh start or user-initiated resume).
+    const _existBanner = document.getElementById('resume-banner-' + encodeURIComponent(file.name));
+    if (_existBanner) _existBanner.remove();
+
+    // Each upload gets its own row in the floating panel — button stays enabled.
+    ensureUploadPanel();
+    // Reuse the existing OwnCloud session when resuming; generate a new one otherwise.
+    const sessionUploadId = resumeState
+        ? resumeState.uploadId
+        : ('oc-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8));
+    updateUploadRow(file.name, 0, resumeState ? 'Resuming…' : 'Preparing…');
+
+    // Per-file row in the inline modal upload list.
+    const uploadList = document.getElementById('ownCloudUploadList');
+    let inlineRow = null;
+    let inlineBar = null;
+    let inlinePct = null;
+    let inlineStatus = null;
+
+    if (uploadList) {
+        uploadList.style.display = 'block';
+        inlineRow = document.createElement('div');
+        inlineRow.dataset.file = file.name;
+        inlineRow.style.cssText = 'margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid #e9ecef;';
+
+        const header = document.createElement('div');
+        header.style.cssText = 'display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:3px;';
+        const nameEl = document.createElement('span');
+        nameEl.style.cssText = 'overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:75%;';
+        nameEl.textContent = file.name.length > 40 ? file.name.slice(0, 37) + '…' : file.name;
+        inlinePct = document.createElement('span');
+        inlinePct.style.fontWeight = '600';
+        inlinePct.textContent = '0%';
+        header.appendChild(nameEl);
+        header.appendChild(inlinePct);
+        inlineRow.appendChild(header);
+
+        const barTrack = document.createElement('div');
+        barTrack.style.cssText = 'height:6px; background:#dee2e6; border-radius:999px; overflow:hidden;';
+        inlineBar = document.createElement('div');
+        inlineBar.style.cssText = 'height:100%; width:0; background:#0066cc; transition:width 0.2s;';
+        barTrack.appendChild(inlineBar);
+        inlineRow.appendChild(barTrack);
+
+        inlineStatus = document.createElement('div');
+        inlineStatus.style.cssText = 'font-size:0.8rem; color:#666; margin-top:3px;';
+        inlineRow.appendChild(inlineStatus);
+
+        uploadList.appendChild(inlineRow);
+    }
+
+    const updateProgress = (pct, statusText) => {
+        updateUploadRow(file.name, pct, statusText);
+        if (inlineBar) inlineBar.style.width = pct + '%';
+        if (inlinePct) inlinePct.textContent = pct + '%';
+        if (inlineStatus) inlineStatus.textContent = statusText || '';
+    };
+
+    const setError = (msg) => {
+        updateUploadRow(file.name, 0, '✗ ' + msg, true);
+        if (inlineStatus) { inlineStatus.textContent = '✗ ' + msg; inlineStatus.style.color = '#dc3545'; }
+        if (inlineBar) inlineBar.style.background = '#dc3545';
+    };
+
+    try {
+        // Step 1: Ensure destination folder exists on OwnCloud.
+        await fetch(`${_webdavApiUrl}?action=ensureuserfolder`, { method: 'GET' });
+
+        // Step 2: Create the OwnCloud upload session (MKCOL /uploads/{uuid}/{session_id}/).
+        // Skip when resuming — the session folder already exists on OwnCloud.
+        if (!resumeState) {
+            const startParams = new URLSearchParams({ action: 'chunkstart', upload_id: sessionUploadId, filename: file.name });
+            const startRes = await fetch(`${_webdavApiUrl}?${startParams}`, { method: 'POST' });
+            const startData = await startRes.json();
+            if (!startData.success) throw new Error(startData.error || 'Failed to start chunked upload');
+        }
+
+        // Step 3: Send chunks sequentially, starting from resumeState.nextOffset when resuming.
+        const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+        const startChunk  = resumeState ? Math.floor(resumeState.nextOffset / CHUNK_SIZE) : 0;
+        for (let i = startChunk; i < totalChunks; i++) {
+            const offset = i * CHUNK_SIZE;
+            const chunk  = file.slice(offset, offset + CHUNK_SIZE);
+            const fd     = new FormData();
+            fd.append('chunk', chunk, file.name);
+
+            const chunkParams = new URLSearchParams({ action: 'chunkput', upload_id: sessionUploadId, offset: String(offset) });
+            const pct = Math.round((offset / file.size) * 100);
+            const uploadedMB = (offset / 1048576).toFixed(1);
+            const totalMB    = (file.size  / 1048576).toFixed(1);
+            updateProgress(pct, `${uploadedMB} / ${totalMB} MB`);
+
+            // Persist state BEFORE sending — if the page closes mid-PUT, this offset is recoverable.
+            saveUploadState(file.name, sessionUploadId, file.size, offset);
+
+            await new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', `${_webdavApiUrl}?${chunkParams}`);
+                xhr.addEventListener('load', () => {
+                    try {
+                        const res = JSON.parse(xhr.responseText);
+                        if (xhr.status >= 200 && xhr.status < 300 && res.success) resolve(res);
+                        else reject(new Error(res.error || `Chunk HTTP ${xhr.status}`));
+                    } catch (e) { reject(new Error('Invalid chunk response')); }
+                });
+                xhr.addEventListener('error', () => reject(new Error('Network error on chunk ' + i)));
+                xhr.send(fd);
+            });
+        }
+
+        // Step 4: MOVE assembled chunks to final destination and register in Moodle DB.
+        updateProgress(99, 'Assembling…');
+        if (inlinePct) inlinePct.innerHTML = '<i class="fas fa-spinner fa-spin" style="font-size:0.9em;"></i>';
+
+        const finishParams = new URLSearchParams({
+            action:    'chunkfinish',
+            upload_id: sessionUploadId,
+            filename:  file.name,
+            filesize:  String(file.size),
+        });
+
+        let finishData = null;
+        try {
+            const finishRes = await fetch(`${_webdavApiUrl}?${finishParams}`, { method: 'POST' });
+            const text = await finishRes.text();
+            try { finishData = JSON.parse(text); } catch (_) { /* non-JSON body — see below */ }
+        } catch (netErr) {
+            // network-level failure — fall through to assembly polling
+        }
+
+        // If chunkfinish returned a gateway error (504 etc.) or non-JSON, OwnCloud may still
+        // be assembling chunks. Poll registerupload every 10 s with no cap — assembly of a
+        // 6 GB file can take many minutes. Only give up after 15 min of no progress.
+        if (!finishData?.success) {
+            if (finishData?.error && !finishData.error.match(/gateway|timeout|504/i)) {
+                // Definitive API error — clear state and surface it
+                clearUploadState(file.name);
+                throw new Error(finishData.error);
+            }
+            const assemblyStart   = Date.now();
+            const MAX_ASSEMBLY_MS = 15 * 60 * 1000; // 15 minutes
+            while (true) {
+                await new Promise(r => setTimeout(r, 10_000)); // 10 s between polls
+                const elapsed = Math.round((Date.now() - assemblyStart) / 1000);
+                updateProgress(99, `Assembling… (${elapsed} s)`);
+                if (inlinePct) inlinePct.innerHTML =
+                    `<i class="fas fa-spinner fa-spin" style="font-size:0.9em;"></i> ${elapsed}s`;
+                const checkParams = new URLSearchParams({
+                    action:    'registerupload',
+                    filename:  file.name,
+                    file_path: `Moodle_OwnCloud_Storage/Users/${window.USER_ID || ''}/${file.name}`,
+                    filesize:  String(file.size),
+                });
+                try {
+                    const checkRes  = await fetch(`${_webdavApiUrl}?${checkParams}`, { method: 'GET' });
+                    const checkData = JSON.parse(await checkRes.text());
+                    if (checkData.success) { finishData = checkData; break; }
+                    // 422 = "not found yet" — keep polling
+                    if (checkRes.status !== 422 && checkData.error && !checkData.error.match(/not found/i)) {
+                        clearUploadState(file.name);
+                        throw new Error(checkData.error || `Unexpected status ${checkRes.status}`);
+                    }
+                } catch (pollErr) {
+                    if (pollErr.message?.startsWith('Unexpected')) throw pollErr;
+                    console.warn('Assembly poll transient error:', pollErr.message);
+                }
+                if (Date.now() - assemblyStart > MAX_ASSEMBLY_MS) {
+                    // Do NOT clear state — chunks are on OwnCloud; user can retry on next visit.
+                    throw new Error('Assembly exceeded 15 minutes — check OwnCloud server load');
+                }
+            }
+        }
+
+        const moodleVideoId = finishData.moodle_id;
+
+        // Step 5: Register in FastAPI backend.
+        if (moodleVideoId) {
+            const streamUrl = `${_moodleWwwRoot}/local/videoelicit/stream.php?videoid=${moodleVideoId}`;
+            await fetch(`${API_BASE}/api/videos/webdav/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    stream_url:      streamUrl,
+                    filename:        file.name,
+                    file_size:       file.size,
+                    moodle_video_id: moodleVideoId,
+                }),
+            });
+        }
+
+        // Clear persisted state — upload finished successfully.
+        clearUploadState(file.name);
+
+        updateProgress(100, '✓ Upload complete!');
+        if (inlineStatus) { inlineStatus.textContent = '✓ Upload complete!'; inlineStatus.style.color = '#28a745'; }
+
+        await browseOwnCloudDirectory('/');
+        await loadVideos();
+
+        setTimeout(() => {
+            removeUploadRow(file.name);
+            if (inlineRow && inlineRow.parentNode) {
+                inlineRow.remove();
+                if (uploadList && !uploadList.children.length) uploadList.style.display = 'none';
+            }
+        }, 4000);
+
+    } catch (err) {
+        console.error('OwnCloud upload error:', err);
+        setError(err.message || 'Upload failed');
+    }
+}
+
+function closeOwnCloudModal() {
+    document.getElementById('ownCloudModal').classList.remove('active');
+}
+
+async function browseOwnCloudDirectory(path) {
+    try {
+        const loadingEl = document.getElementById('ownCloudLoading');
+        const browserEl = document.getElementById('ownCloudBrowser');
+        if (loadingEl) loadingEl.style.display = 'block';
+        if (browserEl) browserEl.style.display = 'none';
+        
+        const webdavApiUrl = new URLSearchParams(window.location.search).get('webdav_api_url');
+        if (!webdavApiUrl) {
+            throw new Error('WebDAV API URL not configured');
+        }
+        
+        const response = await fetch(`${webdavApiUrl}?action=browse&path=${encodeURIComponent(path)}`);
+        if (!response.ok) {
+            // Try to extract server-provided error text/json to show a more helpful message
+            let serverMessage = '';
+            try {
+                const text = await response.text();
+                const parsed = text ? JSON.parse(text) : null;
+                serverMessage = parsed && parsed.error ? parsed.error : (text || '');
+            } catch (e) {
+                /* ignore parse errors - fall back to status code */
+            }
+            throw new Error(`Failed to browse directory: ${response.status}${serverMessage ? ' — ' + serverMessage : ''}`);
+        }
+        
+        const data = await response.json();
+        
+        // Update breadcrumb
+        updateOwnCloudBreadcrumb(path);
+        
+        // Choose appropriate container (Select Video modal uses videoModalOwnCloudFilesList)
+        const targetContainer = document.getElementById('videoModalOwnCloudFilesList') ? 'videoModalOwnCloudFilesList' : 'ownCloudFilesList';
+        // Render files and folders into the chosen container
+        renderOwnCloudItems(data.items || [], path, targetContainer);
+        
+        if (loadingEl) loadingEl.style.display = 'none';
+        if (browserEl) browserEl.style.display = 'block';
+    } catch (error) {
+        console.error('Error browsing OwnCloud directory:', error);
+        showToast('Error', `Failed to browse OwnCloud directory: ${error.message}`, 'error');
+        const loadingEl = document.getElementById('ownCloudLoading');
+        if (loadingEl) loadingEl.style.display = 'none';
+    }
+}
+
+// Recursively PROPFIND an OwnCloud path and return all files found (depth-first)
+async function propfindOwnCloudRecursive(startPath = '/', maxDepth = 10, maxFiles = 5000) {
+    if (!_webdavApiUrl) throw new Error('WebDAV API URL not configured');
+
+    const collected = [];
+    let fileCount = 0;
+
+    async function walk(path, depth) {
+        if (depth > maxDepth) return;
+
+        const resp = await fetch(`${_webdavApiUrl}?action=browse&path=${encodeURIComponent(path)}`);
+        if (!resp.ok) {
+            // Try to surface server-provided error payload (JSON or plain text)
+            let body = await resp.text();
+            try { body = JSON.parse(body); } catch (e) { /* keep as text */ }
+            throw new Error(`Browse failed for ${path}: HTTP ${resp.status} - ${typeof body === 'string' ? body : JSON.stringify(body)}`);
+        }
+        const data = await resp.json();
+        const items = data.items || [];
+
+        for (const it of items) {
+            if (it.type === 'folder') {
+                const subpath = path.endsWith('/') ? path + it.name : path + '/' + it.name;
+                await walk(subpath, depth + 1);
+                if (fileCount >= maxFiles) return;
+            } else if (it.type === 'file') {
+                collected.push({ ...it, parentPath: path });
+                fileCount++;
+                if (fileCount >= maxFiles) return;
+            }
+        }
+    }
+
+    await walk(startPath, 0);
+    return collected;
+}
+
+// Ensure and scan the user's personal OwnCloud folder (uses ensureuserfolder endpoint)
+async function scanUserOwnCloudFolder() {
+    if (!_webdavApiUrl) throw new Error('WebDAV API URL not configured');
+
+    // Ensure folder exists and get the relative path
+    const ensureRes = await fetch(`${_webdavApiUrl}?action=ensureuserfolder`);
+    if (!ensureRes.ok) {
+        const txt = await ensureRes.text();
+        throw new Error(`ensureuserfolder failed: ${ensureRes.status} - ${txt}`);
+    }
+    const ensureJson = await ensureRes.json();
+    const folderPath = ensureJson.folder_path ? (`/` + ensureJson.folder_path.replace(/^\//, '')) : '/';
+
+    // Try recursive PROPFIND of the user's folder. If it fails (remote permission/PROPFIND error),
+    // fall back to a conservative scan from root with limited depth so we still discover some files.
+    try {
+        const files = await propfindOwnCloudRecursive(folderPath, 20, 5000);
+        state.ownCloudFiles = files;
+        return files;
+    } catch (err) {
+        console.warn('User-folder PROPFIND failed, attempting discovery fallbacks:', err.message);
+
+        // 1) Try to discover user's folder by scanning the base/root tree shallowly
+        try {
+            const discoveryItems = await propfindOwnCloudRecursive('/', 3, 2000);
+            const userid = (typeof window !== 'undefined' && window.USER_ID) ? window.USER_ID : null;
+
+            // Prefer paths that contain 'Users/{id}' or 'Moodle_OwnCloud_Storage'
+            let candidatePath = null;
+            if (userid) {
+                const match = discoveryItems.find(i => i.path && i.path.includes(`/Users/${userid}`));
+                if (match) candidatePath = match.parentPath || ('/' + match.path.replace(/^\//, ''));
+            }
+
+            if (!candidatePath) {
+                const mos = discoveryItems.find(i => i.name && i.name.toLowerCase().includes('moodle_owncloud_storage'));
+                if (mos) candidatePath = mos.parentPath || ('/' + mos.path.replace(/^\//, ''));
+            }
+
+            if (candidatePath) {
+                try {
+                    const files = await propfindOwnCloudRecursive(candidatePath, 10, 5000);
+                    state.ownCloudFiles = files;
+                    showToast('Warning', `User-folder discovery succeeded (scanned ${candidatePath})`, 'warning');
+                    return files;
+                } catch (e2) {
+                    console.warn('Discovery candidate scan failed:', e2.message);
+                }
+            }
+        } catch (discoveryErr) {
+            console.warn('Discovery scan failed:', discoveryErr.message);
+        }
+
+        // 2) Conservative fallback: scan '/' with small depth to avoid heavy operations
+        try {
+            const fallbackFiles = await propfindOwnCloudRecursive('/', 3, 500);
+            state.ownCloudFiles = fallbackFiles;
+            showToast('Warning', 'Full user-folder scan failed — used limited fallback (root) scan', 'warning');
+            return fallbackFiles;
+        } catch (err2) {
+            console.error('Fallback OwnCloud scan also failed:', err2);
+            throw err; // rethrow original error for caller visibility
+        }
+    }
+}
+
+function updateOwnCloudBreadcrumb(path) {
+    const breadcrumbBtn = document.querySelector('[data-path="/"]');
+    if (breadcrumbBtn) {
+        breadcrumbBtn.addEventListener('click', () => browseOwnCloudDirectory('/'));
+    }
+    
+    const breadcrumbPathEl = document.getElementById('breadcrumbPath');
+    if (breadcrumbPathEl) {
+        if (path !== '/') {
+            const parts = path.split('/').filter(p => p);
+            let html = ' / ';
+            let currentPath = '/';
+            
+            parts.forEach((part, index) => {
+                currentPath += part + (index === parts.length - 1 ? '' : '/');
+                const isLast = index === parts.length - 1;
+                if (isLast) {
+                    html += `<span style="color: #0066cc; font-weight: 600;">${part}</span>`;
+                } else {
+                    html += `<button class="breadcrumb-btn" data-path="${currentPath}" style="margin: 0 0.25rem;">${part}</button>`;
+                }
+            });
+            
+            breadcrumbPathEl.innerHTML = html;
+            
+            // Add click handlers to breadcrumb buttons
+            document.querySelectorAll('[data-path]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const p = btn.dataset.path;
+                    browseOwnCloudDirectory(p);
+                });
+            });
+        } else {
+            breadcrumbPathEl.innerHTML = '';
+        }
+    }
+    
+    const ownCloudBreadcrumbEl = document.getElementById('ownCloudBreadcrumb');
+    if (ownCloudBreadcrumbEl) ownCloudBreadcrumbEl.style.display = 'block';
+}
+
+function renderOwnCloudItems(items, currentPath, containerId) {
+    containerId = containerId || 'ownCloudFilesList';
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = '';
+    
+    if (!items || items.length === 0) {
+        container.innerHTML = '<div style="padding: 1rem; text-align: center; color: #999;">No files or folders found</div>';
+        return;
+    }
+    
+    // Separate folders and files
+    const folders = items.filter(item => item.type === 'folder');
+    const files = items.filter(item => item.type === 'file');
+    
+    // Render folders first
+    folders.forEach(folder => {
+        const item = document.createElement('div');
+        item.className = 'owncloud-item folder-item';
+        item.style.padding = '0.75rem';
+        item.style.borderBottom = '1px solid #eee';
+        item.style.cursor = 'pointer';
+        item.style.display = 'flex';
+        item.style.alignItems = 'center';
+        item.style.gap = '0.75rem';
+        
+        item.innerHTML = `
+            <i class="fas fa-folder" style="color: #ffb81c; font-size: 1.2rem;"></i>
+            <span style="flex-grow: 1; font-weight: 500;">${folder.name}</span>
+        `;
+        
+        item.addEventListener('click', () => {
+            const newPath = currentPath.endsWith('/') ? currentPath + folder.name : currentPath + '/' + folder.name;
+            browseOwnCloudDirectory(newPath);
+        });
+        
+        container.appendChild(item);
+    });
+    
+    // Render video files
+    files.forEach(file => {
+        // Defensive: trim trailing slashes from name provided by server
+        const safeName = (file.name || '').replace(/\/+$/g, '');
+        const isVideo = /\.(mp4|webm|ogg|avi|mov|mkv|flv|wmv|m4v)$/i.test(safeName);
+        
+        const item = document.createElement('div');
+        item.className = 'owncloud-item file-item';
+        item.style.padding = '0.75rem';
+        item.style.borderBottom = '1px solid #eee';
+        item.style.display = 'flex';
+        item.style.alignItems = 'center';
+        item.style.gap = '0.75rem';
+        
+        if (isVideo) {
+            item.style.cursor = 'pointer';
+            item.style.backgroundColor = '#f5f5f5';
+        } else {
+            item.style.opacity = '0.6';
+        }
+        
+        const fileSize = file.size ? formatFileSize(file.size) : 'Unknown';
+        item.innerHTML = `
+            <i class="fas ${isVideo ? 'fa-video' : 'fa-file'}" style="color: ${isVideo ? '#0066cc' : '#999'}; font-size: 1.1rem;"></i>
+            <div style="flex-grow: 1;">
+                <div style="font-weight: ${isVideo ? '500' : '400'}">${safeName}</div>
+                <div style="font-size: 0.85rem; color: #666;">${fileSize}</div>
+            </div>
+        `;
+        
+        if (isVideo) {
+            item.addEventListener('click', () => {
+                const videoUrl = file.url || `${currentPath}${currentPath.endsWith('/') ? '' : '/'}${safeName}`;
+                linkOwnCloudVideo(safeName, file.size, videoUrl);
+            });
+        }
+        
+        container.appendChild(item);
+    });
+}
+
+async function linkOwnCloudVideo(filename, fileSize, videoUrl) {
+    try {
+        showLoading('Linking video…');
+
+        if (!_webdavApiUrl) throw new Error('WebDAV API URL not configured');
+
+        // Step 1: Register in Moodle DB (idempotent)
+        // Send form-encoded POST so Moodle's required_param() picks up values reliably
+        const params = new URLSearchParams();
+        params.append('url', videoUrl);
+        params.append('filename', filename);
+        params.append('filesize', String(fileSize || 0));
+
+        const linkRes = await fetch(`${_webdavApiUrl}?action=link`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: params.toString(),
+        });
+        if (!linkRes.ok) {
+            // try to extract server message
+            let txt = await linkRes.text();
+            try { txt = JSON.parse(txt).error || txt; } catch (e) { /* keep as text */ }
+            throw new Error(`Link failed: HTTP ${linkRes.status} - ${txt}`);
+        }
+        const linkData = await linkRes.json();
+        if (!linkData.success) throw new Error(linkData.error || 'Link failed');
+
+        const moodleVideoId = linkData.video.id;
+
+        // Step 2: Register in FastAPI using stream.php as the filepath
+        const streamUrl = `${_moodleWwwRoot}/local/videoelicit/stream.php?videoid=${moodleVideoId}`;
+        const regRes = await fetch(`${API_BASE}/api/videos/webdav/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                stream_url:      streamUrl,
+                filename,
+                file_size:       fileSize || 0,
+                moodle_video_id: moodleVideoId,
+            }),
+        });
+        const regData = await regRes.json();
+
+        // Step 3: Load the video directly
+        await loadVideos();
+        // close whichever modal was used
+        closeOwnCloudModal();
+        closeVideoModal();
+        await loadVideo(regData.id);
+
+        showToast('Success', `Video "${filename}" linked successfully`, 'success');
+    } catch (error) {
+        console.error('Error linking OwnCloud video:', error);
+        showToast('Error', error.message || 'Failed to link video', 'error');
+    } finally {
+        hideLoading();
+    }
 }
 
 // Load and Play Video
@@ -776,17 +2289,14 @@ async function loadVideo(videoId) {
         document.getElementById('recordingControls').style.display = 'block';
         document.getElementById('videoInfo').style.display = 'flex';
 
-        // Set video source
+        // Set video source. Append JWT token so the Moodle stream.php proxy can
+        // authenticate the browser redirect — <video> src requests don't carry
+        // the Authorization header that our fetch() patch injects.
         const videoPlayer = document.getElementById('videoPlayer');
         const videoSource = document.getElementById('videoSource');
-        videoSource.src = `${API_BASE}/api/videos/${videoId}/file`;
+        const tokenParam = MOODLE_JWT ? `?token=${encodeURIComponent(MOODLE_JWT)}` : '';
+        videoSource.src = `${API_BASE}/api/videos/${videoId}/file${tokenParam}`;
         videoPlayer.load();
-
-        // Remove segment end handler when loading full video
-        if (videoPlayer._segmentEndHandler) {
-            videoPlayer.removeEventListener('timeupdate', videoPlayer._segmentEndHandler);
-            videoPlayer._segmentEndHandler = null;
-        }
 
         // Update video info
         document.getElementById('videoName').textContent = video.filename;
@@ -795,82 +2305,19 @@ async function loadVideo(videoId) {
         // Load annotations
         await loadAnnotations(videoId);
 
+        // Fetch segments and populate the elicit-controls segment selector
+        try {
+            const segResp = await fetch(`${API_BASE}/api/segments/video/${videoId}`);
+            if (segResp.ok) {
+                state.segments = await segResp.json() || [];
+                refreshSegmentSelector();
+            }
+        } catch (_) { /* non-fatal */ }
+
         showToast('Video Loaded', video.filename, 'success');
     } catch (error) {
         console.error('Error loading video:', error);
         showToast('Error', 'Failed to load video', 'error');
-    } finally {
-        hideLoading();
-    }
-}
-
-async function loadVideoSegment(videoId, segment) {
-    try {
-        showLoading('Loading video segment...');
-
-        // First load the video
-        const response = await fetch(`${API_BASE}/api/videos/${videoId}`);
-        if (!response.ok) throw new Error('Failed to load video');
-
-        const video = await response.json();
-        state.currentVideo = video;
-        state.currentVideoId = videoId;
-
-        // Persist current video ID to localStorage
-        try {
-            localStorage.setItem('currentVideoId', videoId);
-        } catch (e) {
-            console.error('Failed to save video state:', e);
-        }
-
-        // Update UI
-        document.getElementById('videoSelector').style.display = 'none';
-        document.getElementById('videoPlayerContainer').style.display = 'block';
-        document.getElementById('recordingControls').style.display = 'block';
-        document.getElementById('videoInfo').style.display = 'flex';
-
-        // Set video source
-        const videoPlayer = document.getElementById('videoPlayer');
-        const videoSource = document.getElementById('videoSource');
-        videoSource.src = `${API_BASE}/api/videos/${videoId}/file`;
-        videoPlayer.load();
-
-        // Update video info
-        const segmentName = segment.name ? ` - ${segment.name}` : '';
-        document.getElementById('videoName').textContent = `${video.filename}${segmentName}`;
-        document.getElementById('annotationCount').textContent = video.annotation_count;
-
-        // Load annotations
-        await loadAnnotations(videoId);
-
-        // Seek to segment start time once video is loaded
-        videoPlayer.addEventListener('loadedmetadata', function seekToSegmentStart() {
-            videoPlayer.currentTime = segment.start_time;
-            videoPlayer.removeEventListener('loadedmetadata', seekToSegmentStart);
-        }, { once: true });
-
-        // Add timeupdate listener to pause at segment end time
-        const handleSegmentEnd = function() {
-            if (videoPlayer.currentTime >= segment.end_time) {
-                videoPlayer.pause();
-                videoPlayer.currentTime = segment.end_time;
-            }
-        };
-        
-        // Remove any existing segment end listener
-        if (videoPlayer._segmentEndHandler) {
-            videoPlayer.removeEventListener('timeupdate', videoPlayer._segmentEndHandler);
-        }
-        
-        // Store the handler reference and add the listener
-        videoPlayer._segmentEndHandler = handleSegmentEnd;
-        videoPlayer.addEventListener('timeupdate', handleSegmentEnd);
-
-        const duration = segment.end_time - segment.start_time;
-        showToast('Segment Loaded', `${segment.name || 'Segment'} (${formatTime(duration)})`, 'success');
-    } catch (error) {
-        console.error('Error loading video segment:', error);
-        showToast('Error', 'Failed to load video segment', 'error');
     } finally {
         hideLoading();
     }
@@ -912,7 +2359,7 @@ async function startRecording() {
         state.recordingStartWallTime = Date.now(); // Track actual recording time
 
         // Update UI
-        updateRecordingStatus('recording', 'Recording...');
+        updateRecordingStatus('recording', t('statusRecording'));
         document.getElementById('recordBtn').classList.add('recording');
         document.getElementById('recordingPulse').style.display = 'block';
 
@@ -951,7 +2398,7 @@ async function handleRecordingStop() {
     if (actualRecordingDuration < 0.5) {
         showToast('Recording Too Short', 'Please record for at least 0.5 seconds', 'warning');
         // Reset UI
-        updateRecordingStatus('ready', 'Ready to Record');
+        updateRecordingStatus('ready', t('statusReadyToRecord'));
         document.getElementById('recordBtn').classList.remove('recording');
         document.getElementById('recordBtn').disabled = false;
         document.getElementById('recordingTimer').style.display = 'none';
@@ -960,7 +2407,7 @@ async function handleRecordingStop() {
     }
 
     // Update UI
-    updateRecordingStatus('processing', 'Processing...');
+    updateRecordingStatus('processing', t('statusProcessing'));
     document.getElementById('recordBtn').classList.remove('recording');
     document.getElementById('recordBtn').classList.add('processing');
     document.getElementById('recordBtn').disabled = true;
@@ -986,7 +2433,14 @@ async function handleRecordingStop() {
         } catch (e) {
             console.warn('Could not append craft to FormData', e);
         }
-
+        // Attach task if provided
+        try {
+            if (state.task && state.task.trim().length > 0) {
+                formData.append('task', state.task.trim());
+            }
+        } catch (e) {
+            console.warn('Could not append task to FormData', e);
+        }
 
         const response = await fetch(`${API_BASE}/api/annotations?video_id=${state.currentVideoId}&start_time=${startTime}&end_time=${endTime}`, {
             method: 'POST',
@@ -1015,6 +2469,10 @@ async function handleRecordingStop() {
         const currentCount = parseInt(document.getElementById('annotationCount').textContent);
         document.getElementById('annotationCount').textContent = currentCount + 1;
 
+        // Keep state.videos in sync so the Select Video modal shows the correct count
+        const vid = state.videos.find(v => v.id === state.currentVideoId);
+        if (vid) vid.annotation_count = (vid.annotation_count || 0) + 1;
+
     } catch (error) {
         console.error('Error saving annotation:', error);
         showToast('Error', 'Failed to save annotation', 'error');
@@ -1022,7 +2480,7 @@ async function handleRecordingStop() {
         hideLoading();
 
         // Reset UI
-        updateRecordingStatus('ready', 'Ready to Record');
+        updateRecordingStatus('ready', t('statusReadyToRecord'));
         document.getElementById('recordBtn').classList.remove('processing');
         document.getElementById('recordBtn').disabled = false;
     }
@@ -1062,7 +2520,14 @@ async function loadAnnotations(videoId) {
         const response = await fetch(`${API_BASE}/api/annotations?video_id=${videoId}`);
         if (!response.ok) throw new Error('Failed to load annotations');
 
-        state.annotations = await response.json();
+        const raw = await response.json();
+        // tags may arrive as a JSON string — parse it to an array for the renderer
+        state.annotations = raw.map(ann => {
+            if (ann.tags && typeof ann.tags === 'string') {
+                try { ann.tags = JSON.parse(ann.tags); } catch (e) { ann.tags = []; }
+            }
+            return ann;
+        });
 
         renderAnnotations();
         renderTimeline();
@@ -1079,8 +2544,8 @@ function renderAnnotations() {
         container.innerHTML = `
             <div class="empty-state">
                 <i class="fas fa-pen-to-square empty-icon"></i>
-                <p>No elicitation yet</p>
-                <p class="hint">Start recording to create your first elicitation</p>
+                <p>${t('noAnnotationsYet')}</p>
+                <p class="hint">${t('noAnnotationsHint')}</p>
             </div>
         `;
         return;
@@ -1091,145 +2556,191 @@ function renderAnnotations() {
     // Sort annotations based on current sort option
     const sortedAnnotations = getSortedAnnotations();
 
-    // Render sorted annotations
     sortedAnnotations.forEach(annotation => {
         const item = document.createElement('div');
         item.className = 'annotation-item';
         item.dataset.id = annotation.id;
 
+        // ── In-place guided Q&A mode ──────────────────────────────────────────
+        if (state.guidedQA.annotationId === annotation.id) {
+            item.classList.add('elicit-inplace-active');
+            item.style.cursor = 'default';
+
+            const qa = state.guidedQA;
+            const qIdx = qa.currentIndex;
+            const questionText = qa.questions[qIdx] || '';
+            const total = qa.questions.length;
+            const annId = annotation.id;
+
+            item.innerHTML = `
+                <div class="elicit-inplace-question-area" id="eip-question-area-${annId}">
+                    <div class="elicit-inplace-question-card" id="eip-question-card-${annId}">
+                        <div class="eip-question-progress">${qIdx + 1} / ${total}</div>
+                        <div class="eip-question-text" id="eip-question-text-${annId}">${escapeHtml(questionText)}</div>
+                    </div>
+                </div>
+                <div class="elicit-inplace-transcription-area">
+                    <textarea class="eip-transcription-textarea" id="eip-transcript-${annId}" readonly placeholder="La transcription apparaîtra ici…"></textarea>
+                    <div class="eip-transcribing-hint" id="eip-hint-${annId}" style="display:none;">
+                        <span class="eip-spinner"></span> Transcription…
+                    </div>
+                </div>
+                <div class="elicit-inplace-record-area">
+                    <button class="eip-record-btn" id="eip-record-btn-${annId}" onclick="toggleInPlaceRecording(${annId})" title="${t('recordAnswer')}">
+                        <i class="fa-solid fa-microphone" id="eip-record-icon-${annId}"></i>
+                    </button>
+                    <div class="eip-record-actions">
+                        <button class="btn btn-small btn-secondary" onclick="skipInPlaceQuestion(${annId})">${currentLang === 'fr' ? 'Passer' : 'Skip'} <i class="fa-solid fa-arrow-right"></i></button>
+                        <button class="btn btn-small btn-danger" onclick="cancelInPlaceQA(${annId})">${t('cancel')}</button>
+                    </div>
+                </div>
+            `;
+
+            container.appendChild(item);
+            // Show the question with slide-in animation
+            requestAnimationFrame(() => {
+                const card = document.getElementById(`eip-question-card-${annId}`);
+                if (card) card.classList.add('eip-slide-in');
+            });
+            return; // skip normal card rendering
+        }
+
         const duration = annotation.end_time - annotation.start_time;
         const statusText = getStatusText(annotation.transcription_status);
         const statusClass = annotation.transcription_status;
 
-        // AI Review Panel UI logic
-        let reviewPanelHTML = '';
-        if (annotation.transcription && annotation.transcription_status === 'completed') {
-            // First check if judge has run and decided review is NOT needed
-            if (annotation.judge_status === 'completed' && annotation.judge_decision) {
-                try {
-                    const judge = typeof annotation.judge_decision === 'string' 
-                        ? JSON.parse(annotation.judge_decision) 
-                        : annotation.judge_decision;
-                    
-                    if (judge.needs_review === false) {
-                        // Judge says review not needed - show manual button with hint
-                        const manualTriggerHtml = `
-                            <div class="judge-decision">
-                                <div class="judge-message">
-                                    <i class="fa-solid fa-check-circle"></i>
-                                    <span>AI found this elicitation complete</span>
-                                </div>
-                                <button class="btn btn-secondary btn-small" onclick="triggerManualReview(${annotation.id}, event)">
-                                    <i class="fa-solid fa-magnifying-glass"></i>
-                                    Force Review
-                                </button>
-                                <div class="judge-reasoning" style="display: none;">
-                                    <strong>Assessment:</strong> ${judge.reasoning}
-                                </div>
-                            </div>
-                        `;
-                        reviewPanelHTML = renderReviewContainer(annotation.id, manualTriggerHtml, 'Complet');
-                    } else if (judge.needs_review === true) {
-                        // Judge says review IS needed - will auto-trigger, so show processing or results
-                        if (annotation.review_status === 'processing') {
-                            const progressHtml = `
-                                <div class="review-progress">
-                                    <i class="fa-solid fa-magnifying-glass"></i>
-                                    <span>AI analyzing elicitation</span>
-                                    <span class="ellipsis">
-                                        <span></span>
-                                        <span></span>
-                                        <span></span>
-                                    </span>
-                                </div>
-                            `;
-                            reviewPanelHTML = renderReviewContainer(annotation.id, progressHtml, 'En cours');
-                        } else if (annotation.review_status === 'completed' && annotation.review_results) {
-                            try {
-                                const review = typeof annotation.review_results === 'string' 
-                                    ? JSON.parse(annotation.review_results) 
-                                    : annotation.review_results;
-                                reviewPanelHTML = renderReviewPanel(annotation.id, review);
-                            } catch (e) {
-                                console.error('Failed to parse review results:', e);
-                            }
-                        }
-                    }
-                } catch (e) {
-                    console.error('Failed to parse judge decision:', e);
-                }
-            } else if (annotation.judge_status === 'processing') {
-                // Judge is running
-                const judgeProgressHtml = `
-                    <div class="judge-progress">
-                        <i class="fa-solid fa-gavel"></i>
-                        <span>AI evaluating elicitation</span>
-                    </div>
-                `;
-                reviewPanelHTML = renderReviewContainer(annotation.id, judgeProgressHtml, 'Évaluation');
-            } else if (annotation.judge_status === 'pending' || annotation.judge_status === 'failed' || !annotation.judge_status) {
-                // Judge failed or hasn't run - fall back to direct review trigger
-                if (annotation.review_status === 'processing') {
-                    const progressHtml = `
-                        <div class="review-progress">
-                            <i class="fa-solid fa-magnifying-glass"></i>
-                            <span>AI analyzing elicitation</span>
-                            <span class="ellipsis">
-                                <span></span>
-                                <span></span>
-                                <span></span>
-                            </span>
-                        </div>
-                    `;
-                    reviewPanelHTML = renderReviewContainer(annotation.id, progressHtml, 'En cours');
-                } else if (annotation.review_status === 'completed' && annotation.review_results) {
-                    try {
-                        const review = typeof annotation.review_results === 'string' 
-                            ? JSON.parse(annotation.review_results) 
-                            : annotation.review_results;
-                        reviewPanelHTML = renderReviewPanel(annotation.id, review);
-                    } catch (e) {
-                        console.error('Failed to parse review results:', e);
-                    }
-                } else if (annotation.review_status === 'pending' || annotation.review_status === 'failed') {
-                    const triggerHtml = `
-                        <div class="review-trigger">
-                            <button class="btn btn-review" onclick="triggerReview(${annotation.id})">
-                                <i class="fa-solid fa-magnifying-glass"></i>
-                                ${annotation.review_status === 'failed' ? 'Retry AI Review' : 'Trigger AI Review'}
-                            </button>
-                        </div>
-                    `;
-                    const statusLabel = annotation.review_status === 'failed' ? 'Échec' : 'En attente';
-                    reviewPanelHTML = renderReviewContainer(annotation.id, triggerHtml, statusLabel);
-                }
+        // --- Task badge: user-set task takes priority, falls back to detected_task ---
+        const displayTask = annotation.task || annotation.detected_task;
+        let taskBadgeHTML = '';
+        if (displayTask) {
+            taskBadgeHTML = `
+                <span class="detected-task-badge editable" onclick="startEditTask(${annotation.id})" title="Click to edit task">
+                    <strong id="task-display-${annotation.id}">${escapeHtml(displayTask)}</strong>
+                    <i class="fas fa-pencil-alt task-edit-icon"></i>
+                </span>`;
+        }
+
+        // --- Tags ---
+        let tagsHTML = '';
+        if (annotation.transcription_status === 'completed') {
+            if (annotation.tagging_status === 'processing') {
+                tagsHTML = `<div class="tagging-progress"><i class="fa-solid fa-tag"></i> <span>Generating tags...</span></div>`;
+            } else {
+                const tagsInner = (annotation.tags || []).map((tag, idx) => {
+                    const cat = tag.category || '';
+                    return `<span class="annotation-tag category-${cat}" title="${escapeHtml(cat)} - Click to delete" onclick="deleteTag(event, ${annotation.id}, ${idx})">${escapeHtml(tag.name)}</span>`;
+                }).join('');
+                const addTagBtn = `<button class="add-tag-btn" onclick="event.stopPropagation(); openAddTagInline(event, ${annotation.id})" title="Add a tag">+</button>`;
+                tagsHTML = `<div class="annotation-tags" id="annotation-tags-${annotation.id}">${tagsInner}${addTagBtn}</div>`;
             }
         }
 
-        // Tags UI logic
-        let tagsHTML = '';
-        if (annotation.review_status === 'completed') {
-            if (annotation.tagging_status === 'processing') {
-                tagsHTML = `
-                    <div class="tagging-progress">
-                        <i class="fa-solid fa-tag"></i>
-                        <span>Tagging in progress...</span>
-                    </div>
-                `;
-            } else if (annotation.tagging_status === 'completed' && annotation.tags && annotation.tags.length > 0) {
-                tagsHTML = `<div class="annotation-tags">`;
+        // --- Relaunch tagging button (shown once transcription done) ---
+        let relaunchTaggingBtn = '';
+        if (annotation.transcription_status === 'completed') {
+            relaunchTaggingBtn = `<button class="btn btn-icon btn-tiny" onclick="event.stopPropagation(); triggerTagging(${annotation.id});" title="${t('relaunchTagging')}"><i class="fa-solid fa-tags"></i></button>`;
+        }
 
-                annotation.tags.forEach((tag, index) => {
-                    const categoryClass = tag.category ? `category-${tag.category}` : '';
-                    tagsHTML += `
-                        <span class="annotation-tag ${categoryClass}" title="${tag.category || 'tag'} - Click to delete" onclick="deleteTag(event, ${annotation.id}, ${index})">
-                            ${tag.name}
+        // --- Review panel ---
+        let reviewPanelHTML = '';
+        if (annotation.review_status === 'processing') {
+            reviewPanelHTML = `<div class="review-panel-container"><div class="ai-pipeline-status"><i class="fa-solid fa-magnifying-glass"></i> <span>AI Review in progress...</span></div></div>`;
+        } else if (annotation.review_status === 'completed' && annotation.review_results) {
+            let rr = annotation.review_results;
+            if (typeof rr === 'string') { try { rr = JSON.parse(rr); } catch(e) { rr = {}; } }
+
+            const tier = rr.completeness_tier || 'MINIMAL';
+            const tierColors = { MINIMAL: '#dc3545', PARTIAL: '#ffc107', SUBSTANTIAL: '#17a2b8', COMPLETE: '#28a745' };
+            const tierLabels = { MINIMAL: 'Minimal', PARTIAL: 'Partiel', SUBSTANTIAL: 'Substantiel', COMPLETE: 'Complet' };
+            const tierColor = tierColors[tier] || '#6c757d';
+            const tierLabel = tierLabels[tier] || tier;
+
+            const sa = rr.sensations_analysis || {};
+            const sensationTypes = [
+                { key: 'visual_mentioned', label: 'Visuel', icon: 'fa-eye', cls: 'visual' },
+                { key: 'tactile_mentioned', label: 'Tactile', icon: 'fa-hand', cls: 'tactile' },
+                { key: 'auditory_mentioned', label: 'Auditif', icon: 'fa-ear-listen', cls: 'auditory' },
+                { key: 'proprioceptive_mentioned', label: 'Proprioceptif', icon: 'fa-person', cls: 'proprioceptive' },
+            ];
+            const sensationBadges = sensationTypes
+                .filter(s => sa[s.key])
+                .map(s => `<span class="sensation-badge ${s.cls}"><i class="fa-solid ${s.icon}"></i> ${s.label}</span>`)
+                .join('');
+
+            const dims = rr.dimensions || {};
+            const dimOrder = ['HOW', 'EVALUATION', 'FEEDBACK'];
+            let dimsHTML = '';
+            dimOrder.forEach(dimKey => {
+                const dim = dims[dimKey];
+                if (!dim) return;
+                const covered = dim.covered;
+                const cardClass = covered ? 'complete' : 'incomplete';
+                const checkIcon = covered ? '✓' : '✗';
+                const statusLabel = covered ? 'Complet' : 'Incomplet';
+
+                let whatIsGoodHTML = '';
+                if (covered && dim.what_is_good && dim.what_is_good.length > 0) {
+                    const items = dim.what_is_good.map(w => `<li>${escapeHtml(w)}</li>`).join('');
+                    whatIsGoodHTML = `<div class="what-is-good"><strong>✓ Ce qui est bien :</strong><ul>${items}</ul></div>`;
+                }
+
+                let missingHTML = '';
+                if (!covered && dim.missing_elements && dim.missing_elements.length > 0) {
+                    missingHTML = `<p class="missing-elements"><em>Manque: ${escapeHtml(dim.missing_elements.join(', '))}</em></p>`;
+                }
+
+                let promptsHTML = '';
+                if (!covered && dim.prompts && dim.prompts.length > 0) {
+                    const promptItems = dim.prompts.map(p => `<div class="prompt-item"><span>${escapeHtml(p)}</span></div>`).join('');
+                    promptsHTML = `<div class="prompts-list">${promptItems}</div>`;
+                }
+
+                const contentStyle = covered ? 'display: none;' : 'display: none;';
+                const clickAttr = covered ? '' : `onclick="toggleDimension(${annotation.id}, '${dimKey}')"`;
+                dimsHTML += `
+                    <div class="dimension-card ${cardClass}" ${clickAttr}>
+                        <div class="dimension-header">
+                            <strong>${checkIcon} ${dimKey}</strong>
+                            <span>${statusLabel}</span>
+                        </div>
+                        <div class="dimension-content" id="dim-${annotation.id}-${dimKey}" style="${contentStyle}">
+                            ${whatIsGoodHTML}${missingHTML}${promptsHTML}
+                        </div>
+                    </div>`;
+            });
+
+            const readyToComplete = rr.ready_to_proceed;
+            const relaunchReviewBtn = `<button class="btn btn-icon btn-tiny" onclick="triggerReview(${annotation.id})" title="${t('relaunchReview')}"><i class="fa-solid fa-arrow-rotate-right"></i></button>`;
+
+            const panelOpen = !!state.showReviewPanels[annotation.id];
+            reviewPanelHTML = `
+                <div class="review-panel-container">
+                    <div class="review-toggle-header" onclick="toggleReviewPanel(${annotation.id})">
+                        <span class="review-toggle-label">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            AI Review
+                            <span class="tier-badge" style="background-color: ${tierColor}">${tierLabel}</span>
                         </span>
-                    `;
-                });
-
-                tagsHTML += `</div>`;
-            }
+                        <span class="review-toggle-indicator"><i class="fa-solid fa-chevron-${panelOpen ? 'up' : 'down'}"></i></span>
+                    </div>
+                    <div class="review-panel ${panelOpen ? 'visible' : ''}" id="review-panel-${annotation.id}">
+                        <div class="review-header-row">
+                            <div class="review-header">
+                                <div class="sensations-badges">${sensationBadges}</div>
+                            </div>
+                            ${relaunchReviewBtn}
+                        </div>
+                        ${dimsHTML}
+                        <div class="review-actions">
+                            <button class="btn edit-elicitation-btn" onclick="editElicitation(${annotation.id})">
+                                <i class="fa-solid fa-pencil"></i> ${t('modifyElicitation')}
+                            </button>
+                            <button class="btn mark-complete-btn ${readyToComplete ? '' : 'disabled'}" onclick="markElicitationComplete(${annotation.id})" ${readyToComplete ? '' : 'disabled'}>
+                                <i class="fa-solid fa-check"></i> ${t('markComplete')}
+                            </button>
+                        </div>
+                    </div>
+                </div>`;
         }
 
         item.innerHTML = `
@@ -1239,63 +2750,785 @@ function renderAnnotations() {
                         ${formatTime(annotation.start_time)} - ${formatTime(annotation.end_time)}
                         (${duration.toFixed(1)}s)
                     </span>
-                    ${annotation.task || annotation.detected_task ? `
-                        <span class="detected-task-badge editable" 
-                              onclick="startEditTask(${annotation.id})"
-                              title="Click to edit task">
-                            <strong id="task-display-${annotation.id}">${annotation.task || annotation.detected_task}</strong>
-                            <i class="fas fa-pencil-alt task-edit-icon"></i>
-                        </span>
-                    ` : ''}
+                    ${taskBadgeHTML}
                 </div>
                 <div class="annotation-actions">
-                    <button class="btn btn-icon btn-small play-btn" onclick="seekToAnnotation(${annotation.start_time})" title="Jump to time">
+                    <button class="btn btn-icon btn-small play-btn" onclick="seekToAnnotation(${annotation.start_time})" title="${t('jumpToTime')}">
                         <i class="fas fa-play"></i>
                     </button>
-                    <button class="btn btn-icon btn-small" onclick="startEditTranscription(${annotation.id})" title="Edit transcription">
+                    <button class="btn btn-icon btn-small" onclick="startEditTranscription(${annotation.id})" title="${t('editTranscription')}">
                         <i class="fas fa-pencil-alt"></i>
                     </button>
-                    <button class="btn btn-icon btn-small" onclick="deleteAnnotation(${annotation.id})" title="Delete">
+                    <button class="btn btn-icon btn-small" onclick="deleteAnnotation(${annotation.id})" title="${t('deleteAnnotation')}">
                         <i class="fas fa-trash"></i>
                     </button>
                 </div>
             </div>
             <div class="annotation-transcription">
-                ${annotation.transcription || '<em>Transcription pending...</em>'}
+                ${annotation.transcription || `<em>${t('transcriptionPending')}</em>`}
             </div>
             <div class="annotation-status-row">
                 <div class="annotation-status ${statusClass}">
                     ${statusText}
                 </div>
-                ${annotation.transcription_status === 'completed' ? `
-                    <button class="btn btn-icon btn-tiny" onclick="event.stopPropagation(); triggerTagging(${annotation.id});" title="Relaunch tagging">
-                        <i class="fa-solid fa-tags"></i>
-                    </button>
-                ` : ''}
+                ${relaunchTaggingBtn}
             </div>
             ${tagsHTML}
             ${reviewPanelHTML}
         `;
 
+        item.addEventListener('click', (e) => {
+            if (!e.target.closest('button') && !e.target.closest('.review-toggle-header') && !e.target.closest('.dimension-card')) {
+                seekToAnnotation(annotation.start_time);
+            }
+        });
+
         container.appendChild(item);
     });
 }
 
-function getFirstTagByCategory(tags, categories) {
-    if (!Array.isArray(tags)) return null;
-    return tags.find(tag => tag && categories.includes(tag.category)) || null;
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function getSalientMetadata(tags) {
-    const gestureTag = getFirstTagByCategory(tags, ['technique', 'handling']);
-    const toolTag = getFirstTagByCategory(tags, ['tool']);
-    const materialTag = getFirstTagByCategory(tags, ['material']);
+function toggleReviewPanel(annotationId) {
+    state.showReviewPanels[annotationId] = !state.showReviewPanels[annotationId];
+    renderAnnotations();
+}
 
-    return {
-        gesture: gestureTag ? gestureTag.name : null,
-        tool: toolTag ? toolTag.name : null,
-        material: materialTag ? materialTag.name : null
-    };
+function toggleDimension(annotationId, dimKey) {
+    const content = document.getElementById(`dim-${annotationId}-${dimKey}`);
+    if (!content) return;
+    content.style.display = content.style.display === 'none' ? 'block' : 'none';
+}
+
+async function triggerTagging(annotationId) {
+    try {
+        const response = await fetch(`${API_BASE}/api/annotations/${annotationId}/tags`, {
+            method: 'POST'
+        });
+        if (!response.ok) throw new Error('Failed to trigger tagging');
+        showToast('Tagging', 'Tag generation started', 'info');
+    } catch (err) {
+        showToast('Error', err.message, 'error');
+    }
+}
+
+async function triggerReview(annotationId) {
+    try {
+        const response = await fetch(`${API_BASE}/api/annotations/${annotationId}/review`, {
+            method: 'POST'
+        });
+        if (!response.ok) throw new Error('Failed to trigger review');
+        showToast('Review', 'AI review started', 'info');
+    } catch (err) {
+        showToast('Error', err.message, 'error');
+    }
+}
+
+async function deleteTag(event, annotationId, tagIndex) {
+    event.stopPropagation();
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (!annotation || !annotation.tags) return;
+    const newTags = annotation.tags.filter((_, i) => i !== tagIndex);
+    try {
+        const response = await fetch(`${API_BASE}/api/annotations/${annotationId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tags: JSON.stringify(newTags) })
+        });
+        if (!response.ok) throw new Error('Failed to delete tag');
+        annotation.tags = newTags;
+        renderAnnotations();
+    } catch (err) {
+        showToast('Error', err.message, 'error');
+    }
+}
+
+const TAG_CATEGORIES = ['tool', 'material', 'technique', 'handling', 'action'];
+
+function openAddTagInline(event, annotationId) {
+    const tagsContainer = document.getElementById(`annotation-tags-${annotationId}`);
+    if (!tagsContainer) return;
+
+    // Build inline form
+    const form = document.createElement('div');
+    form.className = 'add-tag-inline-form';
+    form.id = `add-tag-form-${annotationId}`;
+    form.onclick = e => e.stopPropagation();
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = 'Tag name';
+    input.className = 'add-tag-input';
+    input.maxLength = 40;
+
+    const select = document.createElement('select');
+    select.className = 'add-tag-category';
+    TAG_CATEGORIES.forEach(cat => {
+        const opt = document.createElement('option');
+        opt.value = cat;
+        opt.textContent = cat.charAt(0).toUpperCase() + cat.slice(1);
+        select.appendChild(opt);
+    });
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.type = 'button';
+    confirmBtn.className = 'add-tag-confirm-btn';
+    confirmBtn.innerHTML = '<i class="fas fa-arrow-right"></i>';
+    confirmBtn.title = 'Add tag';
+    confirmBtn.onclick = e => { e.stopPropagation(); submitNewTag(annotationId, input.value, select.value); };
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'add-tag-cancel-btn';
+    cancelBtn.innerHTML = '<i class="fas fa-times"></i>';
+    cancelBtn.title = 'Cancel';
+    cancelBtn.onclick = e => { e.stopPropagation(); renderAnnotations(); };
+
+    input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); submitNewTag(annotationId, input.value, select.value); }
+        if (e.key === 'Escape') { e.preventDefault(); renderAnnotations(); }
+    });
+
+    form.appendChild(input);
+    form.appendChild(select);
+    form.appendChild(confirmBtn);
+    form.appendChild(cancelBtn);
+
+    // Replace the tags container contents with the form
+    tagsContainer.innerHTML = '';
+    tagsContainer.appendChild(form);
+    input.focus();
+}
+
+async function submitNewTag(annotationId, tagName, category) {
+    tagName = tagName.trim();
+    if (!tagName) return;
+
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (!annotation) return;
+
+    const existingTags = annotation.tags || [];
+    if (existingTags.some(t => t.name.toLowerCase() === tagName.toLowerCase())) {
+        renderAnnotations();
+        return;
+    }
+
+    const newTags = [...existingTags, { name: tagName, category }];
+    try {
+        const response = await fetch(`${API_BASE}/api/annotations/${annotationId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tags: JSON.stringify(newTags) })
+        });
+        if (!response.ok) throw new Error('Failed to add tag');
+        annotation.tags = newTags;
+    } catch (err) {
+        showToast('Error', err.message, 'error');
+    }
+    renderAnnotations();
+}
+
+function startEditTask(annotationId) {
+    const display = document.getElementById(`task-display-${annotationId}`);
+    if (!display) return;
+    const current = display.textContent.trim();
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = current;
+    input.className = 'task-edit-input';
+    input.onclick = e => e.stopPropagation();
+
+    const badge = display.closest('.detected-task-badge');
+    badge.replaceWith(input);
+    input.focus();
+
+    async function saveTask() {
+        const newTask = input.value.trim();
+        try {
+            const response = await fetch(`${API_BASE}/api/annotations/${annotationId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ detected_task: newTask || null })
+            });
+            if (!response.ok) throw new Error('Failed to update task');
+            const ann = state.annotations.find(a => a.id === annotationId);
+            if (ann) ann.detected_task = newTask || null;
+            renderAnnotations();
+        } catch (err) {
+            showToast('Error', err.message, 'error');
+            renderAnnotations();
+        }
+    }
+
+    input.addEventListener('blur', saveTask);
+    input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+        if (e.key === 'Escape') { renderAnnotations(); }
+    });
+}
+
+function editElicitation(annotationId) {
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (!annotation) return;
+
+    const existing = document.getElementById('editElicitationModal');
+    if (existing) existing.remove();
+
+    let review = annotation.review_results;
+    if (typeof review === 'string') { try { review = JSON.parse(review); } catch(e) { review = null; } }
+
+    // Collect questions: priority_prompts first, then per-dimension prompts from incomplete dims.
+    // This ensures we capture every prompt-item the user sees in the review panel.
+    let questions = [];
+    if (review) {
+        if (Array.isArray(review.priority_prompts) && review.priority_prompts.length > 0) {
+            questions = review.priority_prompts.slice();
+        }
+        // Also gather dim.prompts from every incomplete dimension not already covered
+        const dims = review.dimensions || {};
+        ['HOW', 'EVALUATION', 'FEEDBACK'].forEach(key => {
+            const dim = dims[key];
+            if (dim && !dim.covered && Array.isArray(dim.prompts)) {
+                dim.prompts.forEach(p => {
+                    if (!questions.includes(p)) questions.push(p);
+                });
+            }
+        });
+    }
+
+    if (questions.length > 0) {
+        // --- Guided Q&A: render in-place inside the annotation card ---
+        state.guidedQA.annotationId = annotationId;
+        state.guidedQA.questions = questions;
+        state.guidedQA.currentIndex = 0;
+        state.guidedQA.originalTranscript = annotation.transcription || '';
+        state.guidedQA.updatedTranscript = '';
+        state.guidedQA.isRecording = false;
+        state.guidedQA.mediaRecorder = null;
+        state.guidedQA.audioChunks = [];
+        renderAnnotations();
+        // Scroll the activated card into view
+        setTimeout(() => {
+            const card = document.querySelector(`.annotation-item[data-id="${annotationId}"]`);
+            if (card) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }, 50);
+        return;
+    }
+
+    // --- Fallback: simple textarea mode (no priority prompts) ---
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.id = 'editElicitationModal';
+    modal.innerHTML = `
+        <div class="modal-content elicitation-modal-content">
+            <div class="elicitation-modal-header">
+                <h2 class="elicitation-modal-title">${t('modifyElicitation')}</h2>
+                <button class="elicitation-modal-close" onclick="closeEditElicitationModal()" title="${currentLang === 'fr' ? 'Fermer' : 'Close'}" aria-label="${currentLang === 'fr' ? 'Fermer' : 'Close'}">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div class="elicitation-modal-body">
+                <label class="elicitation-textarea-label" for="elicitationTextEdit">${currentLang === 'fr' ? 'Transcription' : 'Transcription'}</label>
+                <textarea id="elicitationTextEdit" rows="10">${escapeHtml(annotation.transcription || '')}</textarea>
+            </div>
+            <div class="elicitation-modal-footer">
+                <button class="btn btn-secondary" onclick="closeEditElicitationModal()">${t('cancel')}</button>
+                <button class="btn btn-primary" onclick="saveElicitationEdit(${annotationId})">
+                    <i class="fa-solid fa-rotate-right"></i> ${currentLang === 'fr' ? 'Enregistrer et re-analyser' : 'Save & re-analyze'}
+                </button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    modal.style.display = 'flex';
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeEditElicitationModal(); });
+    document.getElementById('elicitationTextEdit').focus();
+}
+
+function closeEditElicitationModal() {
+    const modal = document.getElementById('editElicitationModal');
+    if (modal) modal.remove();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Guided Q&A voice enrichment mode
+// ─────────────────────────────────────────────────────────────────────────────
+
+function openGuidedQAModal(annotationId, questions, originalTranscript) {
+    // Init guided Q&A state
+    state.guidedQA.annotationId = annotationId;
+    state.guidedQA.questions = questions;
+    state.guidedQA.currentIndex = 0;
+    state.guidedQA.originalTranscript = originalTranscript;
+    state.guidedQA.updatedTranscript = '';
+    state.guidedQA.isRecording = false;
+    state.guidedQA.mediaRecorder = null;
+    state.guidedQA.audioChunks = [];
+
+    const annotation = state.annotations.find(a => a.id === annotationId);
+
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.id = 'guidedQAModal';
+    modal.innerHTML = `
+        <div class="modal-content guided-qa-modal-content">
+            <div class="elicitation-modal-header">
+                <div class="qa-header-left">
+                    <h2 class="elicitation-modal-title">${currentLang === 'fr' ? "Enrichir l'élicitation" : 'Enrich elicitation'}</h2>
+                    <span class="qa-progress" id="qaProgress">${currentLang === 'fr' ? 'Question' : 'Question'} 1 / ${questions.length}</span>
+                </div>
+                <button class="elicitation-modal-close" onclick="closeGuidedQAModal()" title="${t('close')}" aria-label="${t('close')}">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div class="qa-replay-bar">
+                <button class="btn btn-icon qa-replay-btn" onclick="replaySegmentOnce()" title="${t('replaySegment')}">
+                    <i class="fa-solid fa-rotate-right"></i>
+                </button>
+                <span class="qa-replay-label">${t('replaySegmentFor')}</span>
+            </div>
+            <div class="elicitation-modal-body qa-modal-body">
+                <div class="qa-question-card" id="qaQuestionCard">
+                    <div class="qa-question-text" id="qaQuestionText"></div>
+                </div>
+                <div class="qa-voice-area">
+                    <button class="qa-record-btn" id="qaRecordBtn" onclick="toggleGuidedRecording()">
+                        <i class="fa-solid fa-microphone" id="qaRecordIcon"></i>
+                        <span id="qaRecordLabel">${t('answerByVoice')}</span>
+                    </button>
+                    <div class="qa-transcript-preview" id="qaTranscriptPreview"></div>
+                </div>
+            </div>
+            <div class="elicitation-modal-footer qa-modal-footer">
+                <button class="btn btn-secondary" onclick="closeGuidedQAModal()">${t('cancel')}</button>
+                <button class="qa-skip-btn" onclick="skipCurrentQuestion()">
+                    ${currentLang === 'fr' ? 'Passer' : 'Skip'} <i class="fa-solid fa-arrow-right"></i>
+                </button>
+                <button class="btn btn-primary" onclick="finishGuidedQA()">
+                    <i class="fa-solid fa-check"></i> ${currentLang === 'fr' ? 'Terminer' : 'Finish'}
+                </button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    modal.style.display = 'flex';
+
+    // Start looping the segment
+    if (annotation) startSegmentLoop(annotation);
+
+    // Show first question
+    showQAQuestion(0);
+}
+
+function showQAQuestion(index) {
+    const qa = state.guidedQA;
+    const total = qa.questions.length;
+    const questionText = document.getElementById('qaQuestionText');
+    const progress = document.getElementById('qaProgress');
+    const card = document.getElementById('qaQuestionCard');
+    const preview = document.getElementById('qaTranscriptPreview');
+    const recordBtn = document.getElementById('qaRecordBtn');
+    const recordLabel = document.getElementById('qaRecordLabel');
+
+    if (!questionText || !card) return;
+
+    // Reset voice area
+    if (preview) preview.textContent = '';
+    if (recordBtn) {
+        recordBtn.classList.remove('recording', 'processing', 'answered');
+    }
+    if (recordLabel) recordLabel.textContent = t('answerByVoice');
+
+    // Update progress
+    if (progress) progress.textContent = `Question ${index + 1} / ${total}`;
+
+    // Animate card in
+    card.classList.remove('qa-fade-in', 'qa-slide-out', 'answered');
+    void card.offsetWidth; // force reflow
+    questionText.textContent = qa.questions[index];
+    card.classList.add('qa-fade-in');
+}
+
+async function toggleGuidedRecording() {
+    if (state.guidedQA.isRecording) {
+        await stopGuidedRecording();
+    } else {
+        await startGuidedRecording();
+    }
+}
+
+async function startGuidedRecording() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        state.guidedQA.mediaRecorder = new MediaRecorder(stream);
+        state.guidedQA.audioChunks = [];
+
+        state.guidedQA.mediaRecorder.ondataavailable = (event) => {
+            if (event.data.size > 0) state.guidedQA.audioChunks.push(event.data);
+        };
+        state.guidedQA.mediaRecorder.onstop = handleGuidedRecordingStop;
+        state.guidedQA.mediaRecorder.start();
+        state.guidedQA.isRecording = true;
+
+        const btn = document.getElementById('qaRecordBtn');
+        const label = document.getElementById('qaRecordLabel');
+        if (btn) btn.classList.add('recording');
+        if (label) label.textContent = 'Arrêter l\'enregistrement';
+    } catch (error) {
+        showToast('Erreur micro', 'Impossible d\'accéder au microphone', 'error');
+    }
+}
+
+async function stopGuidedRecording() {
+    if (!state.guidedQA.mediaRecorder || !state.guidedQA.isRecording) return;
+    state.guidedQA.isRecording = false;
+    state.guidedQA.mediaRecorder.stop();
+    state.guidedQA.mediaRecorder.stream.getTracks().forEach(t => t.stop());
+
+    const btn = document.getElementById('qaRecordBtn');
+    const label = document.getElementById('qaRecordLabel');
+    if (btn) { btn.classList.remove('recording'); btn.classList.add('processing'); btn.disabled = true; }
+    if (label) label.textContent = t('transcribingInProgress');
+}
+
+async function handleGuidedRecordingStop() {
+    const audioBlob = new Blob(state.guidedQA.audioChunks, { type: 'audio/wav' });
+    const formData = new FormData();
+    formData.append('audio_blob', audioBlob, 'answer.wav');
+
+    const btn = document.getElementById('qaRecordBtn');
+    const label = document.getElementById('qaRecordLabel');
+    const preview = document.getElementById('qaTranscriptPreview');
+
+    try {
+        const headers = {};
+        if (MOODLE_JWT) headers['Authorization'] = `Bearer ${MOODLE_JWT}`;
+        const resp = await fetch(`${API_BASE}/api/annotations/transcribe-only`, {
+            method: 'POST',
+            headers,
+            body: formData
+        });
+
+        if (!resp.ok) throw new Error('Transcription échouée');
+        const data = await resp.json();
+        const transcription = (data.transcription || '').trim();
+
+        // Heuristic: ≥ 3 words = valid answer
+        const wordCount = transcription.split(/\s+/).filter(w => w.length > 0).length;
+        if (wordCount < 3) {
+            if (preview) preview.textContent = transcription ? `"${transcription}" — trop court, réessayez.` : 'Aucune parole détectée.';
+            if (btn) { btn.classList.remove('processing'); btn.disabled = false; }
+            if (label) label.textContent = t('answerByVoice');
+            return;
+        }
+
+        // Show preview
+        if (preview) preview.textContent = `"${transcription}"`;
+
+        // Append to updated transcript
+        state.guidedQA.updatedTranscript += (state.guidedQA.updatedTranscript ? '\n\n' : '') + transcription;
+
+        // Mark question as answered visually
+        const card = document.getElementById('qaQuestionCard');
+        if (card) {
+            card.classList.add('answered');
+            card.classList.add('qa-slide-out');
+        }
+
+        // Advance after animation
+        setTimeout(() => advanceQAQuestion(), 600);
+
+    } catch (err) {
+        if (preview) preview.textContent = 'Erreur de transcription — réessayez.';
+        if (btn) { btn.classList.remove('processing'); btn.disabled = false; }
+        if (label) label.textContent = 'Répondre par la voix';
+    }
+}
+
+function advanceQAQuestion() {
+    state.guidedQA.currentIndex++;
+    if (state.guidedQA.currentIndex < state.guidedQA.questions.length) {
+        const btn = document.getElementById('qaRecordBtn');
+        if (btn) { btn.classList.remove('processing'); btn.disabled = false; }
+        showQAQuestion(state.guidedQA.currentIndex);
+    } else {
+        finishGuidedQA();
+    }
+}
+
+function skipCurrentQuestion() {
+    // Skip without appending transcript
+    advanceQAQuestion();
+}
+
+async function finishGuidedQA() {
+    stopSegmentLoop();
+    closeGuidedQAModal();
+
+    const qa = state.guidedQA;
+    if (!qa.updatedTranscript) {
+        // Nothing was recorded — just close
+        return;
+    }
+
+    const combined = qa.originalTranscript.trim()
+        ? qa.originalTranscript.trim() + '\n\n' + qa.updatedTranscript.trim()
+        : qa.updatedTranscript.trim();
+
+    await saveElicitationEdit(qa.annotationId, combined);
+}
+
+function closeGuidedQAModal() {
+    stopSegmentLoop();
+    // Stop any ongoing guided recording
+    if (state.guidedQA.isRecording && state.guidedQA.mediaRecorder) {
+        state.guidedQA.isRecording = false;
+        try { state.guidedQA.mediaRecorder.stop(); } catch(e) {}
+        try { state.guidedQA.mediaRecorder.stream.getTracks().forEach(t => t.stop()); } catch(e) {}
+    }
+    const modal = document.getElementById('guidedQAModal');
+    if (modal) modal.remove();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// In-place annotation Q&A functions (replaces modal-based guided QA)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function cancelInPlaceQA(annotationId) {
+    if (state.guidedQA.isRecording && state.guidedQA.mediaRecorder) {
+        state.guidedQA.isRecording = false;
+        try { state.guidedQA.mediaRecorder.stop(); } catch(e) {}
+        try { state.guidedQA.mediaRecorder.stream.getTracks().forEach(t => t.stop()); } catch(e) {}
+    }
+    state.guidedQA.annotationId = null;
+    state.guidedQA.questions = [];
+    renderAnnotations();
+}
+
+async function toggleInPlaceRecording(annotationId) {
+    if (state.guidedQA.isRecording) {
+        await stopInPlaceRecording(annotationId);
+    } else {
+        await startInPlaceRecording(annotationId);
+    }
+}
+
+async function startInPlaceRecording(annotationId) {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        state.guidedQA.mediaRecorder = new MediaRecorder(stream);
+        state.guidedQA.audioChunks = [];
+
+        state.guidedQA.mediaRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0) state.guidedQA.audioChunks.push(e.data);
+        };
+        state.guidedQA.mediaRecorder.onstop = () => handleInPlaceRecordingStop(annotationId);
+        state.guidedQA.mediaRecorder.start();
+        state.guidedQA.isRecording = true;
+
+        const btn = document.getElementById(`eip-record-btn-${annotationId}`);
+        if (btn) btn.classList.add('recording');
+    } catch (error) {
+        showToast('Erreur micro', 'Impossible d\'accéder au microphone', 'error');
+    }
+}
+
+async function stopInPlaceRecording(annotationId) {
+    if (!state.guidedQA.mediaRecorder || !state.guidedQA.isRecording) return;
+    state.guidedQA.isRecording = false;
+    state.guidedQA.mediaRecorder.stop();
+    state.guidedQA.mediaRecorder.stream.getTracks().forEach(t => t.stop());
+
+    const btn = document.getElementById(`eip-record-btn-${annotationId}`);
+    if (btn) { btn.classList.remove('recording'); btn.classList.add('processing'); btn.disabled = true; }
+
+    const hint = document.getElementById(`eip-hint-${annotationId}`);
+    if (hint) hint.style.display = 'flex';
+}
+
+async function handleInPlaceRecordingStop(annotationId) {
+    const audioBlob = new Blob(state.guidedQA.audioChunks, { type: 'audio/wav' });
+    const formData = new FormData();
+    formData.append('audio_blob', audioBlob, 'answer.wav');
+
+    const btn = document.getElementById(`eip-record-btn-${annotationId}`);
+    const hint = document.getElementById(`eip-hint-${annotationId}`);
+    const textarea = document.getElementById(`eip-transcript-${annotationId}`);
+
+    try {
+        const resp = await fetch(`${API_BASE}/api/annotations/transcribe-only`, {
+            method: 'POST',
+            body: formData
+        });
+        if (!resp.ok) throw new Error('Transcription failed');
+        const data = await resp.json();
+        const transcription = (data.transcription || '').trim();
+
+        if (hint) hint.style.display = 'none';
+
+        const wordCount = transcription.split(/\s+/).filter(w => w.length > 0).length;
+        if (wordCount < 3) {
+            if (textarea) textarea.value = transcription ? `"${transcription}" — trop court, réessayez.` : 'Aucune parole détectée.';
+            if (btn) { btn.classList.remove('processing'); btn.disabled = false; }
+            return;
+        }
+
+        // Show in textarea
+        if (textarea) textarea.value = transcription;
+
+        // Accumulate transcript
+        state.guidedQA.updatedTranscript += (state.guidedQA.updatedTranscript ? '\n\n' : '') + transcription;
+
+        // Animate question card as answered (green bg, fade out, scroll down)
+        const card = document.getElementById(`eip-question-card-${annotationId}`);
+        if (card) {
+            card.classList.add('eip-answered');
+            setTimeout(() => {
+                card.classList.add('eip-slide-out');
+                setTimeout(() => advanceInPlaceQuestion(annotationId), 500);
+            }, 400);
+        } else {
+            advanceInPlaceQuestion(annotationId);
+        }
+
+    } catch (err) {
+        if (hint) hint.style.display = 'none';
+        if (textarea) textarea.value = 'Erreur de transcription — réessayez.';
+        if (btn) { btn.classList.remove('processing'); btn.disabled = false; }
+    }
+}
+
+function advanceInPlaceQuestion(annotationId) {
+    state.guidedQA.currentIndex++;
+    if (state.guidedQA.currentIndex < state.guidedQA.questions.length) {
+        // Re-render to show next question with fresh state
+        renderAnnotations();
+        requestAnimationFrame(() => {
+            const card = document.getElementById(`eip-question-card-${annotationId}`);
+            if (card) card.classList.add('eip-slide-in');
+        });
+    } else {
+        finishInPlaceQA(annotationId);
+    }
+}
+
+async function finishInPlaceQA(annotationId) {
+    const qa = state.guidedQA;
+    const combined = qa.originalTranscript.trim()
+        ? qa.originalTranscript.trim() + '\n\n' + qa.updatedTranscript.trim()
+        : qa.updatedTranscript.trim();
+
+    state.guidedQA.annotationId = null;
+    state.guidedQA.questions = [];
+    renderAnnotations();
+
+    if (combined) {
+        await saveElicitationEdit(annotationId, combined);
+    }
+}
+
+function skipInPlaceQuestion(annotationId) {
+    advanceInPlaceQuestion(annotationId);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+function startSegmentLoop(annotation) {
+    stopSegmentLoop();
+    const videoPlayer = document.getElementById('videoPlayer');
+    if (!videoPlayer || annotation.start_time == null || annotation.end_time == null) return;
+
+    // Seek to start of segment immediately
+    videoPlayer.currentTime = annotation.start_time;
+    videoPlayer.play().catch(() => {});
+
+    state.guidedQA.loopInterval = setInterval(() => {
+        if (!document.getElementById('guidedQAModal')) {
+            stopSegmentLoop();
+            return;
+        }
+        if (videoPlayer.currentTime >= annotation.end_time) {
+            videoPlayer.currentTime = annotation.start_time;
+        }
+    }, 150);
+}
+
+function stopSegmentLoop() {
+    if (state.guidedQA.loopInterval) {
+        clearInterval(state.guidedQA.loopInterval);
+        state.guidedQA.loopInterval = null;
+    }
+}
+
+function replaySegmentOnce() {
+    const annotation = state.annotations.find(a => a.id === state.guidedQA.annotationId);
+    if (!annotation) return;
+    const videoPlayer = document.getElementById('videoPlayer');
+    if (!videoPlayer) return;
+    videoPlayer.currentTime = annotation.start_time;
+    videoPlayer.play().catch(() => {});
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function saveElicitationEdit(annotationId, transcriptionOverride = null) {
+    let newTranscription;
+    if (transcriptionOverride !== null) {
+        newTranscription = transcriptionOverride.trim();
+    } else {
+        const textarea = document.getElementById('elicitationTextEdit');
+        newTranscription = textarea ? textarea.value.trim() : '';
+    }
+    if (!newTranscription) {
+        showToast('Erreur', 'La transcription ne peut pas être vide', 'error');
+        return;
+    }
+    try {
+        showLoading('Saving...');
+        const updateResponse = await fetch(`${API_BASE}/api/annotations/${annotationId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ transcription: newTranscription })
+        });
+        if (!updateResponse.ok) throw new Error('Failed to update transcription');
+
+        const annotation = state.annotations.find(a => a.id === annotationId);
+        if (annotation) {
+            annotation.transcription = newTranscription;
+            annotation.review_status = 'pending';
+            annotation.review_results = null;
+        }
+
+        await fetch(`${API_BASE}/api/annotations/${annotationId}/review`, { method: 'POST' });
+
+        if (!transcriptionOverride) closeEditElicitationModal();
+        showToast('Succès', 'Élicitation mise à jour, re-analyse en cours', 'success');
+        renderAnnotations();
+    } catch (error) {
+        showToast('Erreur', error.message, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function markElicitationComplete(annotationId) {
+    try {
+        const response = await fetch(`${API_BASE}/api/annotations/${annotationId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ review_status: 'skipped' })
+        });
+        if (!response.ok) throw new Error('Failed to mark as complete');
+        const annotation = state.annotations.find(a => a.id === annotationId);
+        if (annotation) annotation.review_status = 'skipped';
+        showToast('Succès', 'Élicitation marquée comme complète', 'success');
+        renderAnnotations();
+    } catch (error) {
+        showToast('Erreur', error.message, 'error');
+    }
 }
 
 function renderTimeline() {
@@ -1321,19 +3554,10 @@ function renderTimeline() {
         if (annotation.transcription_status === 'processing') {
             bar.classList.add('processing');
         }
-        if (annotation.is_salient) {
-            bar.classList.add('salient');
-        }
 
         // Position bar at start_time (vertical bar, not segment)
         const startPercent = (annotation.start_time / duration) * 100;
         bar.style.left = `${startPercent}%`;
-
-        // Add persistent timestamp label
-        const timeLabel = document.createElement('div');
-        timeLabel.className = 'timeline-segment-label';
-        timeLabel.textContent = formatTime(annotation.start_time);
-        bar.appendChild(timeLabel);
 
         // Build tooltip content
         const tooltip = document.createElement('div');
@@ -1356,69 +3580,35 @@ function renderTimeline() {
             tooltip.appendChild(transcriptDiv);
         }
 
-        if (annotation.is_salient) {
-            const salientMeta = getSalientMetadata(annotation.tags);
-            const salientBlock = document.createElement('div');
-            salientBlock.className = 'timeline-tooltip-salient';
+        // // Tags section
+        // if (annotation.tags && annotation.tags.length > 0) {
+        //     const tagsContainer = document.createElement('div');
+        //     tagsContainer.className = 'timeline-tooltip-tags';
 
-            const salientTitle = document.createElement('div');
-            salientTitle.className = 'timeline-tooltip-salient-title';
-            salientTitle.textContent = 'Salient moment';
-            salientBlock.appendChild(salientTitle);
+        //     annotation.tags.forEach(tag => {
+        //         const tagSpan = document.createElement('span');
+        //         tagSpan.className = 'timeline-tooltip-tag';
+        //         if (tag.category) {
+        //             tagSpan.classList.add(`category-${tag.category}`);
+        //         }
+        //         tagSpan.textContent = tag.name;
+        //         tagsContainer.appendChild(tagSpan);
+        //     });
 
-            const addMetaRow = (label, value) => {
-                const row = document.createElement('div');
-                row.className = 'timeline-tooltip-salient-row';
-
-                const labelSpan = document.createElement('span');
-                labelSpan.className = 'timeline-tooltip-salient-label';
-                labelSpan.textContent = label;
-
-                const valueSpan = document.createElement('span');
-                valueSpan.className = 'timeline-tooltip-salient-value';
-                valueSpan.textContent = value || '—';
-
-                row.appendChild(labelSpan);
-                row.appendChild(valueSpan);
-                salientBlock.appendChild(row);
-            };
-
-            addMetaRow('Gesture', salientMeta.gesture);
-            addMetaRow('Tool', salientMeta.tool);
-            addMetaRow('Material', salientMeta.material);
-
-            tooltip.appendChild(salientBlock);
-        }
-
-        // Tags section
-        if (annotation.tags && annotation.tags.length > 0) {
-            const tagsContainer = document.createElement('div');
-            tagsContainer.className = 'timeline-tooltip-tags';
-
-            annotation.tags.forEach(tag => {
-                const tagSpan = document.createElement('span');
-                tagSpan.className = 'timeline-tooltip-tag';
-                if (tag.category) {
-                    tagSpan.classList.add(`category-${tag.category}`);
-                }
-                tagSpan.textContent = tag.name;
-                tagsContainer.appendChild(tagSpan);
-            });
-
-            tooltip.appendChild(tagsContainer);
-        } else if (annotation.tagging_status === 'completed') {
-            // No tags but tagging was completed
-            const noTags = document.createElement('div');
-            noTags.className = 'timeline-tooltip-no-tags';
-            noTags.textContent = 'No tags generated';
-            tooltip.appendChild(noTags);
-        } else if (annotation.tagging_status === 'processing') {
-            // Still processing tags
-            const processingTags = document.createElement('div');
-            processingTags.className = 'timeline-tooltip-no-tags';
-            processingTags.textContent = 'Generating tags...';
-            tooltip.appendChild(processingTags);
-        }
+        //     tooltip.appendChild(tagsContainer);
+        // } else if (annotation.tagging_status === 'completed') {
+        //     // No tags but tagging was completed
+        //     const noTags = document.createElement('div');
+        //     noTags.className = 'timeline-tooltip-no-tags';
+        //     noTags.textContent = 'No tags generated';
+        //     tooltip.appendChild(noTags);
+        // } else if (annotation.tagging_status === 'processing') {
+        //     // Still processing tags
+        //     const processingTags = document.createElement('div');
+        //     processingTags.className = 'timeline-tooltip-no-tags';
+        //     processingTags.textContent = 'Generating tags...';
+        //     tooltip.appendChild(processingTags);
+        // }
 
         bar.appendChild(tooltip);
 
@@ -1525,45 +3715,6 @@ async function deleteAnnotation(annotationId) {
     }
 }
 
-async function deleteTag(event, annotationId, tagIndex) {
-    event.stopPropagation();
-    
-    const annotation = state.annotations.find(a => a.id === annotationId);
-    if (!annotation || !annotation.tags) return;
-
-    const tag = annotation.tags[tagIndex];
-    if (!tag) return;
-
-    try {
-        // Remove tag from array
-        annotation.tags.splice(tagIndex, 1);
-
-        // Update annotation with new tags array
-        const response = await fetch(`${API_BASE}/api/annotations/${annotationId}`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                tags: JSON.stringify(annotation.tags, null, 2)
-            })
-        });
-
-        if (!response.ok) {
-            throw new Error('Failed to delete tag');
-        }
-
-        // Reload annotations to reflect changes
-        await loadAnnotations(state.currentVideoId);
-        showToast('Tag Deleted', `Removed tag: ${tag.name}`, 'success');
-    } catch (error) {
-        console.error('Error deleting tag:', error);
-        showToast('Error', 'Failed to delete tag', 'error');
-        // Reload to restore original state
-        await loadAnnotations(state.currentVideoId);
-    }
-}
-
 function updateAnnotationStatus(annotationId, status) {
     const annotation = state.annotations.find(a => a.id === annotationId);
     if (annotation) {
@@ -1580,153 +3731,6 @@ function updateAnnotationTranscription(annotationId, transcription) {
         annotation.transcription_status = 'completed';
         renderAnnotations();
         renderTimeline();
-    }
-}
-
-// Inline task editing
-function startEditTask(annotationId) {
-    const badge = document.querySelector(`#task-display-${annotationId}`);
-    if (!badge) {
-        // Empty state - create input in badge's parent
-        const emptyBadge = event.target.closest('.detected-task-badge');
-        if (!emptyBadge) return;
-        
-        const annotation = state.annotations.find(a => a.id === annotationId);
-        const currentTask = annotation?.task || annotation?.detected_task || '';
-        
-        createTaskEditor(emptyBadge, annotationId, currentTask);
-        return;
-    }
-
-    // Prevent multiple editors
-    if (document.querySelector(`.task-editor-${annotationId}`)) return;
-
-    const annotation = state.annotations.find(a => a.id === annotationId);
-    const currentTask = annotation?.task || annotation?.detected_task || '';
-
-    const badgeParent = badge.closest('.detected-task-badge');
-    createTaskEditor(badgeParent, annotationId, currentTask);
-}
-
-function createTaskEditor(badgeElement, annotationId, currentTask) {
-    // Hide the badge
-    badgeElement.style.display = 'none';
-
-    // Create editor
-    const editor = document.createElement('span');
-    editor.className = `detected-task-badge task-editor task-editor-${annotationId}`;
-    
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'task-edit-input';
-    input.value = currentTask;
-    input.placeholder = 'Enter task name';
-    
-    const saveBtn = document.createElement('button');
-    saveBtn.className = 'task-edit-save';
-    saveBtn.innerHTML = '<i class="fas fa-check"></i>';
-    saveBtn.title = 'Save';
-    
-    const clearBtn = document.createElement('button');
-    clearBtn.className = 'task-edit-clear';
-    clearBtn.innerHTML = '<i class="fas fa-trash"></i>';
-    clearBtn.title = 'Clear task';
-    
-    const cancelBtn = document.createElement('button');
-    cancelBtn.className = 'task-edit-cancel';
-    cancelBtn.innerHTML = '<i class="fas fa-times"></i>';
-    cancelBtn.title = 'Cancel';
-    
-    // Event handlers
-    saveBtn.onclick = (e) => {
-        e.stopPropagation();
-        saveTaskEdit(annotationId, input.value.trim());
-    };
-    
-    clearBtn.onclick = (e) => {
-        e.stopPropagation();
-        if (confirm('Clear this task?')) {
-            saveTaskEdit(annotationId, null);
-        }
-    };
-    
-    cancelBtn.onclick = (e) => {
-        e.stopPropagation();
-        cancelTaskEdit(annotationId);
-    };
-    
-    input.onkeydown = (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            saveTaskEdit(annotationId, input.value.trim());
-        } else if (e.key === 'Escape') {
-            e.preventDefault();
-            cancelTaskEdit(annotationId);
-        }
-    };
-    
-    editor.appendChild(input);
-    editor.appendChild(saveBtn);
-    editor.appendChild(clearBtn);
-    editor.appendChild(cancelBtn);
-    
-    badgeElement.parentNode.insertBefore(editor, badgeElement.nextSibling);
-    input.focus();
-    input.select();
-}
-
-async function saveTaskEdit(annotationId, newTask) {
-    try {
-        const payload = { task: newTask || null };
-
-        const response = await fetch(`${API_BASE}/api/annotations/${annotationId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-
-        if (!response.ok) {
-            const errText = await response.text();
-            throw new Error(errText || 'Failed to save task');
-        }
-
-        const updated = await response.json();
-
-        // Update local state
-        const annotation = state.annotations.find(a => a.id === annotationId);
-        if (annotation) {
-            annotation.task = updated.task;
-            annotation.updated_at = updated.updated_at;
-        }
-
-        // Remove editor and re-render
-        renderAnnotations();
-        renderTimeline();
-        showToast('Saved', 'Task updated', 'success');
-
-    } catch (error) {
-        console.error('Error saving task:', error);
-        showToast('Error', 'Failed to save task', 'error');
-        cancelTaskEdit(annotationId);
-    }
-}
-
-function cancelTaskEdit(annotationId) {
-    const editor = document.querySelector(`.task-editor-${annotationId}`);
-    if (editor) {
-        editor.remove();
-    }
-    
-    // Show the badge again
-    const badge = document.querySelector(`#task-display-${annotationId}`)?.closest('.detected-task-badge');
-    if (badge) {
-        badge.style.display = '';
-    } else {
-        // Empty state badge
-        const emptyBadge = document.querySelector(`.detected-task-badge.empty`);
-        if (emptyBadge) {
-            emptyBadge.style.display = '';
-        }
     }
 }
 
@@ -1749,19 +3753,19 @@ function startEditTranscription(annotationId) {
 
     const textarea = document.createElement('textarea');
     textarea.className = 'transcription-textarea';
-    textarea.value = (originalText === 'Transcription pending...' || originalText === '') ? '' : originalText;
+    textarea.value = (originalText === TRANSLATIONS.en.transcriptionPending || originalText === TRANSLATIONS.fr.transcriptionPending || originalText === '') ? '' : originalText;
 
     const actions = document.createElement('div');
     actions.className = 'transcription-editor-actions';
 
     const saveBtn = document.createElement('button');
     saveBtn.className = 'btn btn-primary btn-small';
-    saveBtn.textContent = 'Save';
+    saveBtn.textContent = t('save');
     saveBtn.addEventListener('click', () => saveTranscriptionEdit(annotationId, textarea.value, item));
 
     const cancelBtn = document.createElement('button');
     cancelBtn.className = 'btn btn-secondary btn-small';
-    cancelBtn.textContent = 'Cancel';
+    cancelBtn.textContent = t('cancel');
     cancelBtn.addEventListener('click', () => cancelTranscriptionEdit(item, transcriptionDiv, originalText));
 
     actions.appendChild(saveBtn);
@@ -1808,6 +3812,8 @@ async function saveTranscriptionEdit(annotationId, newText, itemElement) {
         renderAnnotations();
         renderTimeline();
         showToast('Saved', 'Transcription updated', 'success');
+        // Trigger extended transcript regeneration
+        await regenerateExtendedTranscript(annotationId);
 
     } catch (error) {
         console.error('Error saving transcription edit:', error);
@@ -1817,441 +3823,31 @@ async function saveTranscriptionEdit(annotationId, newText, itemElement) {
     }
 }
 
-// AI Review Functions
-
-function renderReviewContainer(annotationId, innerHtml, statusLabel = null) {
-    const isVisible = state.showReviewPanels[annotationId] || false;
-    const statusBadge = statusLabel
-        ? `<span class="review-status-badge">${statusLabel}</span>`
-        : '';
-
-    return `
-        <div class="review-panel-container">
-            <div class="review-toggle-header" onclick="toggleReviewPanel(${annotationId})">
-                <span class="review-toggle-label">
-                    <i class="fa-solid fa-magnifying-glass"></i>
-                    AI Review
-                    ${statusBadge}
-                </span>
-                <span class="review-toggle-indicator">
-                    <i class="fa-solid fa-chevron-${isVisible ? 'up' : 'down'}"></i>
-                </span>
-            </div>
-            <div class="review-panel ${isVisible ? 'visible' : 'hidden'}" id="review-panel-${annotationId}">
-                ${innerHtml}
-            </div>
-        </div>
-    `;
-}
-
-function renderReviewPanel(annotationId, review) {
-    const coveredCount = Object.values(review.dimensions).filter(d => d.covered).length;
-    const completenessPercent = review.completeness_score || 0;
-    
-    let dimensionsHTML = '';
-    ['HOW', 'EVALUATION', 'FEEDBACK'].forEach(dimName => {
-        const dim = review.dimensions[dimName];
-        if (!dim) return;
-        
-        const covered = dim.covered;
-        const statusIcon = covered ? '✓' : '✗';
-        const statusClass = covered ? 'complete' : 'incomplete';
-        
-        // Show what's good (explainability)
-        const whatIsGoodHTML = dim.what_is_good && dim.what_is_good.length > 0
-            ? `<div class="what-is-good">
-                <strong>✓ Ce qui est bien :</strong>
-                <ul>
-                    ${dim.what_is_good.map(item => `<li>${item}</li>`).join('')}
-                </ul>
-            </div>`
-            : '';
-        
-        const promptsHTML = !covered && dim.prompts && dim.prompts.length > 0 
-            ? `<div class="prompts-list">
-                ${dim.prompts.map(prompt => `
-                    <div class="prompt-item">
-                        <span>${prompt}</span>
-                    </div>
-                `).join('')}
-            </div>`
-            : '';
-        
-        dimensionsHTML += `
-            <div class="dimension-card ${statusClass}" onclick="toggleDimension(${annotationId}, '${dimName}')">
-                <div class="dimension-header">
-                    <strong>${statusIcon} ${dimName}</strong>
-                    <span>${covered ? 'Complet' : 'Incomplet'}</span>
-                </div>
-                <div class="dimension-content" id="dim-${annotationId}-${dimName}" style="display: none;">
-                    ${whatIsGoodHTML}
-                    ${!covered && dim.missing_elements ? `
-                        <p class="missing-elements"><em>Manque: ${dim.missing_elements.join(', ')}</em></p>
-                    ` : ''}
-                    ${promptsHTML}
-                </div>
-            </div>
-        `;
-    });
-    
-    const readyToComplete = review.ready_to_proceed;
-    const isVisible = state.showReviewPanels[annotationId] || false;
-    const tier = review.completeness_tier || 'MINIMAL';
-    const tierLabels = {
-        'MINIMAL': 'Minimal',
-        'PARTIAL': 'Partiel',
-        'SUBSTANTIAL': 'Substantiel',
-        'COMPLETE': 'Complet'
-    };
-    const tierColors = {
-        'MINIMAL': '#dc3545',
-        'PARTIAL': '#ffc107',
-        'SUBSTANTIAL': '#17a2b8',
-        'COMPLETE': '#28a745'
-    };
-    
-    return `
-        <div class="review-panel-container">
-            <div class="review-toggle-header" onclick="toggleReviewPanel(${annotationId})">
-                <span class="review-toggle-label">
-                    <i class="fa-solid fa-magnifying-glass"></i>
-                    AI Review
-                    <span class="tier-badge" style="background-color: ${tierColors[tier]}">
-                        ${tierLabels[tier]}
-                    </span>
-                </span>
-                <span class="review-toggle-indicator">
-                    <i class="fa-solid fa-chevron-${isVisible ? 'up' : 'down'}"></i>
-                </span>
-            </div>
-            <div class="review-panel ${isVisible ? 'visible' : 'hidden'}" id="review-panel-${annotationId}">
-                <div class="review-header-row">
-                    <div class="review-header">
-                        ${review.sensations_analysis ? `
-                        <div class="sensations-badges">
-                            ${review.sensations_analysis.visual_mentioned ? '<span class="sensation-badge visual"><i class="fa-solid fa-eye"></i> Visuel</span>' : ''}
-                            ${review.sensations_analysis.tactile_mentioned ? '<span class="sensation-badge tactile"><i class="fa-solid fa-hand"></i> Tactile</span>' : ''}
-                            ${review.sensations_analysis.auditory_mentioned ? '<span class="sensation-badge auditory"><i class="fa-solid fa-ear"></i> Auditif</span>' : ''}
-                            ${review.sensations_analysis.proprioceptive_mentioned ? '<span class="sensation-badge proprioceptive"><i class="fa-solid fa-person"></i> Proprioceptif</span>' : ''}
-                        </div>
-                    ` : ''}
-                    </div>
-                    <button class="btn btn-icon btn-tiny" onclick="triggerReview(${annotationId})" title="Relaunch AI Review">
-                        <i class="fa-solid fa-arrow-rotate-right"></i>
-                    </button>
-                </div>
-                ${dimensionsHTML}
-                <div class="review-actions">
-                    <button class="btn edit-elicitation-btn" onclick="editElicitation(${annotationId})">
-                        <i class="fa-solid fa-pencil"></i>
-                        Modifier l'élicitation
-                    </button>
-                    <button class="btn mark-complete-btn ${readyToComplete ? '' : 'disabled'}" 
-                        onclick="markElicitationComplete(${annotationId})"
-                        ${readyToComplete ? '' : 'disabled'}>
-                        <i class="fa-solid fa-check"></i>
-                        Marquer comme complet
-                    </button>
-                </div>
-            </div>
-        </div>
-    `;
-}
-
-function toggleDimension(annotationId, dimName) {
-    const content = document.getElementById(`dim-${annotationId}-${dimName}`);
-    if (content) {
-        const isVisible = content.style.display !== 'none';
-        content.style.display = isVisible ? 'none' : 'block';
-    }
-}
-
-function toggleReviewPanel(annotationId) {
-    // Toggle state
-    state.showReviewPanels[annotationId] = !state.showReviewPanels[annotationId];
-    
-    // Re-render to update UI
-    renderAnnotations();
-}
-
-async function reloadAllAnalyses() {
-    if (!state.currentVideoId) {
-        showToast('Error', 'No video loaded', 'error');
-        return;
-    }
-
-    const annotations = Array.isArray(state.annotations) ? state.annotations : [];
-    if (annotations.length === 0) {
-        showToast('Info', 'No annotations to reload', 'info');
-        return;
-    }
-
-    const eligible = annotations.filter(a => a && a.transcription && a.transcription.trim());
-    const skipped = annotations.length - eligible.length;
-
-    if (eligible.length === 0) {
-        showToast('Info', 'No transcriptions available for reload', 'info');
-        return;
-    }
-
-    eligible.forEach(annotation => {
-        annotation.tagging_status = 'processing';
-        annotation.review_status = 'processing';
-    });
-    renderAnnotations();
-    renderTimeline();
-
+async function regenerateExtendedTranscript(annotationId) {
     try {
-        showLoading('Reloading tagging and AI reviews...');
-
-        const requests = eligible.map(async annotation => {
-            const [tagResponse, reviewResponse] = await Promise.all([
-                fetch(`/api/annotations/${annotation.id}/tags`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                }),
-                fetch(`/api/annotations/${annotation.id}/review`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                })
-            ]);
-
-            return {
-                annotationId: annotation.id,
-                tagOk: tagResponse.ok,
-                reviewOk: reviewResponse.ok
-            };
+        // Call the new endpoint to trigger regeneration
+        const response = await fetch(`/api/annotations/${annotationId}/regenerate-extended`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
         });
 
-        const results = await Promise.allSettled(requests);
-        let failures = 0;
+        if (!response.ok) {
+            throw new Error('Failed to trigger extended transcript regeneration');
+        }
 
-        results.forEach(result => {
-            if (result.status === 'fulfilled') {
-                if (!result.value.tagOk) failures += 1;
-                if (!result.value.reviewOk) failures += 1;
-            } else {
-                failures += 2;
+        // Update UI to show processing status
+        const item = document.querySelector(`.annotation-item[data-id="${annotationId}"]`);
+        if (item) {
+            const extendedDiv = item.querySelector('.annotation-extended');
+            if (extendedDiv) {
+                extendedDiv.innerHTML = '<em>Regenerating extended transcript...</em>';
             }
-        });
+        }
+        showToast('Extended Transcript', 'Regeneration triggered', 'info');
 
-        const summary = failures > 0
-            ? `Triggered ${eligible.length} reloads with ${failures} failures${skipped ? ` (${skipped} skipped)` : ''}`
-            : `Reloaded ${eligible.length} annotations${skipped ? ` (${skipped} skipped)` : ''}`;
-
-        showToast('Reload all', summary, failures > 0 ? 'warning' : 'success');
     } catch (error) {
-        console.error('Error reloading all analyses:', error);
-        showToast('Error', 'Failed to reload all analyses', 'error');
-    } finally {
-        hideLoading();
-    }
-}
-
-async function triggerTagging(annotationId) {
-    try {
-        console.error('[TAGGING UI] Relancer Tags clicked', annotationId);
-        showLoading('Relaunching tagging process...');
-        
-        console.error('[TAGGING UI] Sending request to /api/annotations/' + annotationId + '/tags');
-        const response = await fetch(`/api/annotations/${annotationId}/tags`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Failed to trigger tagging');
-        }
-
-        console.error('[TAGGING UI] Tagging request accepted', annotationId);
-
-        showToast('Tagging', 'Tagging process restarted', 'info');
-        
-    } catch (error) {
-        console.error('Error triggering tagging:', error);
-        showToast('Error', error.message, 'error');
-    } finally {
-        hideLoading();
-    }
-}
-
-async function triggerReview(annotationId) {
-    try {
-        showLoading('Triggering AI review...');
-        
-        const response = await fetch(`/api/annotations/${annotationId}/review`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Failed to trigger review');
-        }
-
-        showToast('AI Review', 'Review started', 'info');
-        
-    } catch (error) {
-        console.error('Error triggering review:', error);
-        showToast('Error', error.message, 'error');
-    } finally {
-        hideLoading();
-    }
-}
-
-async function editElicitation(annotationId) {
-    const annotation = state.annotations.find(a => a.id === annotationId);
-    if (!annotation) return;
-    
-    // Create modal
-    const modal = document.createElement('div');
-    modal.className = 'modal';
-    modal.id = 'editElicitationModal';
-    
-    const review = annotation.review_results 
-        ? (typeof annotation.review_results === 'string' ? JSON.parse(annotation.review_results) : annotation.review_results)
-        : null;
-    
-    const priorityPromptsHTML = review && review.priority_prompts 
-        ? `<div class="priority-prompts">
-            <strong>Points à adresser en priorité:</strong>
-            <ul>
-                ${review.priority_prompts.map(p => `<li>${p}</li>`).join('')}
-            </ul>
-        </div>`
-        : '';
-    
-    modal.innerHTML = `
-        <div class="modal-content">
-            <span class="close" onclick="closeEditElicitationModal()">&times;</span>
-            <h2>Modifier l'élicitation</h2>
-            ${priorityPromptsHTML}
-            <textarea id="elicitationTextEdit" rows="10">${annotation.transcription || ''}</textarea>
-            <div class="modal-actions">
-                <button class="btn btn-primary" onclick="saveElicitationEdit(${annotationId})">
-                    <i class="fa-solid fa-save"></i>
-                    Enregistrer et re-analyser
-                </button>
-                <button class="btn cancel-btn" onclick="closeEditElicitationModal()">Annuler</button>
-            </div>
-        </div>
-    `;
-    
-    document.body.appendChild(modal);
-    modal.style.display = 'block';
-    
-    // Focus on textarea
-    document.getElementById('elicitationTextEdit').focus();
-}
-
-function closeEditElicitationModal() {
-    const modal = document.getElementById('editElicitationModal');
-    if (modal) {
-        modal.remove();
-    }
-}
-
-async function saveElicitationEdit(annotationId) {
-    const textarea = document.getElementById('elicitationTextEdit');
-    const newTranscription = textarea.value.trim();
-    
-    if (!newTranscription) {
-        showToast('Error', 'Transcription cannot be empty', 'error');
-        return;
-    }
-    
-    try {
-        showLoading('Saving and re-analyzing...');
-        
-        // Update transcription
-        const updateResponse = await fetch(`/api/annotations/${annotationId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ transcription: newTranscription })
-        });
-        
-        if (!updateResponse.ok) {
-            throw new Error('Failed to update transcription');
-        }
-        
-        // Trigger re-review
-        const reviewResponse = await fetch(`/api/annotations/${annotationId}/review`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-        });
-        
-        if (!reviewResponse.ok) {
-            throw new Error('Failed to trigger re-review');
-        }
-        
-        closeEditElicitationModal();
-        showToast('Success', 'Élicitation mise à jour, re-analyse en cours', 'success');
-        
-        // Reload annotations to show updated content
-        if (state.currentVideoId) {
-            await loadAnnotations(state.currentVideoId);
-        }
-        
-    } catch (error) {
-        console.error('Error saving elicitation:', error);
-        showToast('Error', error.message, 'error');
-    } finally {
-        hideLoading();
-    }
-}
-
-async function markElicitationComplete(annotationId) {
-    const annotation = state.annotations.find(a => a.id === annotationId);
-    if (!annotation) return;
-    
-    // Update review status to 'skipped' to indicate manual completion
-    try {
-        const response = await fetch(`/api/annotations/${annotationId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ review_status: 'skipped' })
-        });
-        
-        if (!response.ok) {
-            throw new Error('Failed to mark as complete');
-        }
-        
-        showToast('Success', 'Élicitation marquée comme complète', 'success');
-        
-        if (state.currentVideoId) {
-            await loadAnnotations(state.currentVideoId);
-        }
-        
-    } catch (error) {
-        console.error('Error marking complete:', error);
-        showToast('Error', error.message, 'error');
-    }
-}
-
-function updateReviewStatus(annotationId, status) {
-    const annotation = state.annotations.find(a => a.id === annotationId);
-    if (annotation) {
-        annotation.review_status = status;
-        if (state.currentVideoId) {
-            renderAnnotations();
-            renderTimeline();
-        }
-    }
-}
-
-function updateReviewResults(annotationId, reviewResults, isSalient = null) {
-    const annotation = state.annotations.find(a => a.id === annotationId);
-    if (annotation) {
-        annotation.review_status = 'completed';
-        annotation.review_results = reviewResults;
-        if (isSalient !== null && typeof isSalient !== 'undefined') {
-            annotation.is_salient = isSalient;
-        }
-        if (state.currentVideoId) {
-            renderAnnotations();
-            renderTimeline();
-        }
+        console.error('Error regenerating extended transcript:', error);
+        showToast("Error", 'Failed to regenerate extended transcript', 'error');
     }
 }
 
@@ -2368,13 +3964,67 @@ function formatFileSize(bytes) {
 
 function getStatusText(status) {
     const statusMap = {
-        'pending': '<i class="fas fa-hourglass-half"></i> Transcription pending...',
-        'processing': '<i class="fas fa-spinner fa-spin"></i> Transcribing audio...',
-        'completed': '<i class="fas fa-check-circle"></i> Transcription complete',
-        'failed': '<i class="fas fa-exclamation-circle"></i> Transcription failed'
+        'pending': `<i class="fas fa-hourglass-half"></i> ${t('transcriptionPending')}`,
+        'processing': `<i class="fas fa-spinner fa-spin"></i> ${t('transcribingAudio')}`,
+        'completed': `<i class="fas fa-check-circle"></i> ${t('transcriptionComplete')}`,
+        'failed': `<i class="fas fa-exclamation-circle"></i> ${t('transcriptionFailed')}`
     };
 
     return statusMap[status] || status;
+}
+
+// Extended Transcript Functions
+function toggleExtendedTranscript(annotationId) {
+    const content = document.getElementById(`extended-${annotationId}`);
+    const toggle = content.previousElementSibling;
+    const icon = toggle.querySelector('i');
+
+    if (content.classList.contains('expanded')) {
+        content.classList.remove('expanded');
+        icon.classList.remove('fa-caret-up');
+        icon.classList.add('fa-caret-down');
+        toggle.querySelector('span').textContent = 'See Extended Transcript';
+    } else {
+        content.classList.add('expanded');
+        icon.classList.remove('fa-caret-down');
+        icon.classList.add('fa-caret-up');
+        toggle.querySelector('span').textContent = 'Hide Extended Transcript';
+    }
+}
+
+function updateExtendedTranscriptStatus(annotationId, status) {
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (annotation) {
+        annotation.extended_transcript_status = status;
+        renderAnnotations();
+        renderTimeline();
+    }
+}
+
+function updateExtendedTranscript(annotationId, extendedTranscript) {
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (annotation) {
+        annotation.extended_transcript = extendedTranscript;
+        annotation.extended_transcript_status = 'completed';
+        renderAnnotations();
+    }
+}
+
+function updateJudgeStatus(annotationId, status) {
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (annotation) {
+        annotation.judge_status = status;
+        renderAnnotations();
+    }
+}
+
+function updateJudgeDecision(annotationId, judgeDecision) {
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (annotation) {
+        annotation.judge_status = 'completed';
+        annotation.judge_decision = judgeDecision;
+        renderAnnotations();
+    }
 }
 
 function updateTaggingStatus(annotationId, status) {
@@ -2388,58 +4038,71 @@ function updateTaggingStatus(annotationId, status) {
 function updateTags(annotationId, tags) {
     const annotation = state.annotations.find(a => a.id === annotationId);
     if (annotation) {
-        annotation.tags = tags;
         annotation.tagging_status = 'completed';
-        renderAnnotations();
-    }
-}
-
-function updateJudgeStatus(annotationId, status) {
-    const annotation = state.annotations.find(a => a.id === annotationId);
-    if (annotation) {
-        annotation.judge_status = status;
-        renderAnnotations();
-    }
-}
-
-function updateJudgeDecision(annotationId, judge_decision) {
-    const annotation = state.annotations.find(a => a.id === annotationId);
-    if (annotation) {
-        annotation.judge_decision = judge_decision;
-        annotation.judge_status = 'completed';
-        
-        // If judge says review NOT needed and confidence is high, show manual trigger button with hint
-        // Otherwise, the auto-review will have been triggered by process_judge in backend
-        renderAnnotations();
-    }
-}
-
-async function triggerManualReview(annotationId, event) {
-    event.stopPropagation();
-    
-    const annotation = state.annotations.find(a => a.id === annotationId);
-    if (!annotation) return;
-    
-    try {
-        annotation.review_status = 'processing';
-        renderAnnotations();
-        
-        const response = await fetch(`/api/annotations/${annotationId}/review`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-        });
-        
-        if (!response.ok) {
-            throw new Error(await response.text());
+        // tags may arrive as array of objects or JSON string
+        if (typeof tags === 'string') {
+            try { tags = JSON.parse(tags); } catch(e) { tags = []; }
         }
-        
-        showToast('AI Review', 'Analysis in progress...', 'info');
-    } catch (error) {
-        showToast('Error', `Failed to trigger review: ${error.message}`, 'error');
-        annotation.review_status = 'failed';
+        annotation.tags = tags || [];
         renderAnnotations();
     }
 }
+
+function updateTaskDetectionStatus(annotationId, status) {
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (annotation) {
+        annotation.detected_task_status = status;
+        renderAnnotations();
+    }
+}
+
+function updateTaskDetected(annotationId, detectedTask, confidence) {
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (annotation) {
+        annotation.detected_task_status = 'completed';
+        if (detectedTask && (confidence === undefined || confidence >= 0.5)) {
+            annotation.detected_task = detectedTask;
+        }
+        renderAnnotations();
+    }
+}
+
+function updateReviewStatus(annotationId, status) {
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (annotation) {
+        annotation.review_status = status;
+        renderAnnotations();
+    }
+}
+
+function updateReviewResults(annotationId, reviewResults, isSalient) {
+    const annotation = state.annotations.find(a => a.id === annotationId);
+    if (annotation) {
+        annotation.review_status = 'completed';
+        annotation.review_results = reviewResults;
+        if (isSalient !== undefined) annotation.is_salient = isSalient;
+        // Auto-open the review panel for this annotation
+        state.showReviewPanels[annotationId] = true;
+        renderAnnotations();
+    }
+}
+
+// function updateTaggingStatus(annotationId, status) {
+//     const annotation = state.annotations.find(a => a.id === annotationId);
+//     if (annotation) {
+//         annotation.tagging_status = status;
+//         renderAnnotations();
+//     }
+// }
+
+// function updateTags(annotationId, tags) {
+//     const annotation = state.annotations.find(a => a.id === annotationId);
+//     if (annotation) {
+//         annotation.tags = tags;
+//         annotation.tagging_status = 'completed';
+//         renderAnnotations();
+//     }
+// }
 
 function handleFeedback(annotationId, feedbackValue, event) {
     event.stopPropagation();
@@ -2494,18 +4157,20 @@ function showFeedbackModal(annotationId, feedbackValue) {
     modal.innerHTML = `
         <div class="feedback-modal-content">
             <div class="feedback-modal-header">
-                <h3>Merci pour votre avis</h3>
+                <h3>${currentLang === 'fr' ? 'Merci pour votre avis' : 'Thank you for your feedback'}</h3>
                 <button class="feedback-modal-close">&times;</button>
             </div>
             <div class="feedback-modal-body">
-                <p class="feedback-intro">Veuillez sélectionner ce qui vous a ${isPositive ? 'plu' : 'déplu'} :</p>
+                <p class="feedback-intro">${currentLang === 'fr'
+                    ? `Veuillez sélectionner ce qui vous a ${isPositive ? 'plu' : 'déplu'} :`
+                    : `Please select what you ${isPositive ? 'liked' : 'disliked'} :`}</p>
                 <div class="feedback-choices">
                     ${choicesHTML}
                 </div>
             </div>
             <div class="feedback-modal-footer">
-                <button class="btn btn-secondary" onclick="closeFeedbackModal()">Annuler</button>
-                <button class="btn btn-primary" onclick="submitFeedbackModal(${annotationId}, ${feedbackValue})">Soumettre</button>
+                <button class="btn btn-secondary" onclick="closeFeedbackModal()">${t('cancel')}</button>
+                <button class="btn btn-primary" onclick="submitFeedbackModal(${annotationId}, ${feedbackValue})">${currentLang === 'fr' ? 'Soumettre' : 'Submit'}</button>
             </div>
         </div>
     `;
@@ -2637,10 +4302,10 @@ function showToast(title, message, type = 'info') {
         removeToast(toast);
     });
 
-    // Auto remove after 4.25 seconds (15% reduction from 5000ms)
+    // Auto remove after 5 seconds
     const autoRemoveTimeout = setTimeout(() => {
         removeToast(toast);
-    }, 4250);
+    }, 5000);
 
     // Store timeout ID so we can cancel it if user closes manually
     toast.dataset.timeoutId = autoRemoveTimeout;
@@ -2685,11 +4350,496 @@ function switchTab(tabName) {
     if (tabName === 'annotate') {
         if (annotateTab) annotateTab.style.display = '';
     } else if (tabName === 'segment') {
-        if (segmentTab) segmentTab.style.display = '';
+        if (segmentTab) segmentTab.style.display = 'block';
         initializeSegmentTab();
     } else if (tabName === 'projects') {
         if (projectsTab) projectsTab.style.display = 'block';
         loadProjects();
+    }
+}
+
+// ------------------ Segment tab helpers (minimal) ------------------
+let _segmentTabInitialized = false;
+
+function initializeSegmentTab() {
+    if (_segmentTabInitialized) return;
+    _segmentTabInitialized = true;
+
+    // Render video list for the Segment tab
+    renderSegmentVideoSelector();
+
+    const refreshBtn = document.getElementById('refreshSegmentsBtn');
+    if (refreshBtn) refreshBtn.addEventListener('click', () => loadSegments());
+
+    const createBtn = document.getElementById('createSegmentBtn');
+    if (createBtn) createBtn.addEventListener('click', createSegment);
+
+    const loadIntoMainBtn = document.getElementById('loadIntoMainBtn');
+    if (loadIntoMainBtn) loadIntoMainBtn.addEventListener('click', () => {
+        if (state.currentVideoId) {
+            // open same video in the main (Elicit) player
+            switchTab('annotate');
+            loadVideo(state.currentVideoId).catch(() => {});
+        }
+    });
+
+    // If a segment player is present, forward play/pause to keep UX consistent
+    const segPlayer = document.getElementById('segmentPlayer');
+    if (segPlayer) {
+        segPlayer.addEventListener('ended', () => {
+            // nothing for now — placeholder for future UX
+        });
+    }
+
+    // Initialize the draggable two-ended slider UI
+    initializeSegmentSlider();
+
+    // Load segments for current video when tab first opened
+    loadSegments();
+}
+
+
+// ------------------ Segment slider helpers ------------------
+function initializeSegmentSlider() {
+    const track = document.getElementById('segmentTrack');
+    const handleStart = document.getElementById('segmentHandleStart');
+    const handleEnd = document.getElementById('segmentHandleEnd');
+    const rangeEl = document.getElementById('segmentRange');
+    if (!track || !handleStart || !handleEnd || !rangeEl) return;
+
+    // Utility: convert time <-> percent
+    const timeToPercent = (t) => {
+        const dur = (document.getElementById('segmentPlayer') || document.getElementById('videoPlayer')).duration || 1;
+        return Math.max(0, Math.min(100, (t / dur) * 100));
+    };
+    const percentToTime = (p) => {
+        const dur = (document.getElementById('segmentPlayer') || document.getElementById('videoPlayer')).duration || 1;
+        return Math.max(0, Math.min(dur, (p / 100) * dur));
+    };
+
+    // Update slider UI from state
+    function updateUI() {
+        const dur = (document.getElementById('segmentPlayer') || document.getElementById('videoPlayer')).duration || 1;
+        const s = (state.segmentStartTime != null) ? state.segmentStartTime : 0;
+        const e = (state.segmentEndTime != null) ? state.segmentEndTime : dur;
+        const sp = timeToPercent(s);
+        const ep = timeToPercent(e);
+        handleStart.style.left = `calc(${sp}% - ${handleStart.offsetWidth/2}px)`;
+        handleEnd.style.left = `calc(${ep}% - ${handleEnd.offsetWidth/2}px)`;
+        rangeEl.style.left = `${sp}%`;
+        rangeEl.style.width = `${Math.max(0, ep - sp)}%`;
+        const sdisp = document.getElementById('segmentStartDisplay');
+        const edisp = document.getElementById('segmentEndDisplay');
+        if (sdisp) sdisp.textContent = `${t('segmentStartPrefix')}: ${formatTime(s)}`;
+        if (edisp) edisp.textContent = `${t('segmentEndPrefix')}: ${formatTime(e)}`;
+    }
+
+    // Pointer/drag handling
+    // Seeks are deferred to mouseup/touchend only — writing currentTime on every
+    // mousemove fires a new HTTP range request even on a paused video (the browser
+    // must fetch+decode the new frame), which floods the server under fast scrubbing.
+    let activeHandle = null;
+    let dragWasPlaying = false;
+
+    function getVid() {
+        return document.getElementById('segmentPlayer') || document.getElementById('videoPlayer');
+    }
+
+    function onPointerMove(ev) {
+        if (!activeHandle) return;
+        ev.preventDefault();
+        const rect = track.getBoundingClientRect();
+        const clientX = ev.touches ? ev.touches[0].clientX : ev.clientX;
+        let pct = ((clientX - rect.left) / rect.width) * 100;
+        pct = Math.max(0, Math.min(100, pct));
+        const t = percentToTime(pct);
+        const vid = getVid();
+        if (activeHandle === 'start') {
+            const maxStart = (state.segmentEndTime != null) ? state.segmentEndTime - 0.1 : vid.duration - 0.1;
+            state.segmentStartTime = Math.min(maxStart, Math.max(0, t));
+        } else {
+            const minEnd = (state.segmentStartTime != null) ? state.segmentStartTime + 0.1 : 0.1;
+            const dur = vid ? vid.duration || 1 : 1;
+            state.segmentEndTime = Math.max(minEnd, Math.min(dur, t));
+        }
+        updateUI();
+    }
+
+    function startDrag(handle) {
+        activeHandle = handle;
+        const vid = getVid();
+        if (vid) { dragWasPlaying = !vid.paused; vid.pause(); }
+        document.addEventListener('mousemove', onPointerMove);
+        document.addEventListener('mouseup', onPointerUp);
+    }
+
+    function onPointerUp() {
+        const handle = activeHandle;
+        activeHandle = null;
+        document.removeEventListener('mousemove', onPointerMove);
+        document.removeEventListener('mouseup', onPointerUp);
+        document.removeEventListener('touchmove', onPointerMove);
+        document.removeEventListener('touchend', onPointerUp);
+        // Single seek after drag ends — one request, not dozens
+        const vid = getVid();
+        if (vid) {
+            const t = (handle === 'start') ? state.segmentStartTime : state.segmentEndTime;
+            if (t != null) vid.currentTime = t;
+            if (dragWasPlaying) vid.play().catch(() => {});
+        }
+    }
+
+    handleStart.addEventListener('mousedown', () => startDrag('start'));
+    handleEnd.addEventListener('mousedown', () => startDrag('end'));
+    handleStart.addEventListener('touchstart', () => {
+        activeHandle = 'start';
+        const vid = getVid();
+        if (vid) { dragWasPlaying = !vid.paused; vid.pause(); }
+        document.addEventListener('touchmove', onPointerMove, {passive:false});
+        document.addEventListener('touchend', onPointerUp);
+    }, {passive:false});
+    handleEnd.addEventListener('touchstart', () => {
+        activeHandle = 'end';
+        const vid = getVid();
+        if (vid) { dragWasPlaying = !vid.paused; vid.pause(); }
+        document.addEventListener('touchmove', onPointerMove, {passive:false});
+        document.addEventListener('touchend', onPointerUp);
+    }, {passive:false});
+
+    // Click on track sets nearest handle and seeks to that position
+    track.addEventListener('click', (e) => {
+        const rect = track.getBoundingClientRect();
+        const pct = ((e.clientX - rect.left) / rect.width) * 100;
+        const sPct = timeToPercent(state.segmentStartTime || 0);
+        const ePct = timeToPercent(state.segmentEndTime || getVid().duration || 1);
+        const distStart = Math.abs(pct - sPct);
+        const distEnd = Math.abs(pct - ePct);
+        activeHandle = (distStart <= distEnd) ? 'start' : 'end';
+        onPointerMove(e);
+        onPointerUp();
+    });
+
+    // Keyboard accessibility: arrow keys adjust handles
+    [handleStart, handleEnd].forEach(h => {
+        h.addEventListener('keydown', (ev) => {
+            const step = 0.5; // seconds
+            if (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight') {
+                ev.preventDefault();
+                const sign = (ev.key === 'ArrowRight') ? 1 : -1;
+                const dur = (document.getElementById('segmentPlayer') || document.getElementById('videoPlayer')).duration || 1;
+                if (h === handleStart) {
+                    state.segmentStartTime = Math.max(0, Math.min((state.segmentEndTime || dur) - 0.1, (state.segmentStartTime || 0) + sign * step));
+                } else {
+                    state.segmentEndTime = Math.max((state.segmentStartTime || 0) + 0.1, Math.min(dur, (state.segmentEndTime || dur) + sign * step));
+                }
+                updateUI();
+            }
+        });
+    });
+
+    // Expose updater and highlight helper used elsewhere
+    window.updateSegmentSliderUI = updateUI;
+    window.highlightSegmentOnTrack = function(startTime, endTime) {
+        let hl = document.getElementById('segmentHighlight');
+        if (!hl) {
+            hl = document.createElement('div');
+            hl.id = 'segmentHighlight';
+            hl.className = 'segment-highlight';
+            track.appendChild(hl);
+        }
+        const sp = timeToPercent(startTime);
+        const ep = timeToPercent(endTime);
+        hl.style.left = `${sp}%`;
+        hl.style.width = `${Math.max(0, ep - sp)}%`;
+        hl.style.display = 'block';
+        // Remove previous active-card highlight
+        document.querySelectorAll('.segment-item.active').forEach(el => el.classList.remove('active'));
+    };
+
+    // When segment player loads metadata, reset handles to 0 → full duration
+    const segPlayer = document.getElementById('segmentPlayer');
+    if (segPlayer) {
+        segPlayer.addEventListener('loadedmetadata', () => {
+            const dur = segPlayer.duration || 0;
+            state.segmentStartTime = 0;
+            state.segmentEndTime = dur;
+            updateUI();
+        });
+    }
+
+    // Initial render — start handle at left (0%), end handle at right (100% or known duration)
+    const dur0 = (document.getElementById('segmentPlayer') || document.getElementById('videoPlayer')).duration || 0;
+    if (state.segmentStartTime == null) state.segmentStartTime = 0;
+    if (state.segmentEndTime == null) state.segmentEndTime = dur0 > 0 ? dur0 : 0;
+    updateUI();
+}
+
+function loadVideoAndSegment(videoId, startTime) {
+    // helper used by Select Video modal: load video then seek to segment start
+    (async () => {
+        await loadVideo(videoId);
+        loadVideoSegment(startTime);
+        closeVideoModal();
+    })();
+}
+
+// Render the list of videos inside the Segment tab selector
+function renderSegmentVideoSelector() {
+    const container = document.getElementById('segmentVideoSelector');
+    if (!container) return;
+
+    if (!state.videos || state.videos.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-film empty-icon"></i>
+                <h3>${t('noVideoLoaded')}</h3>
+                <p>${t('noVideoHint')}</p>
+            </div>
+        `;
+        return;
+    }
+
+    // Render a compact list (reuse same visual style as modal items)
+    container.innerHTML = state.videos.map(v => `
+        <div class="video-list-item" style="display:flex;align-items:center;justify-content:space-between;padding:0.5rem;border-bottom:1px solid #eee;">
+            <div style="display:flex;gap:0.75rem;align-items:center;">
+                <i class="fas fa-video" style="color:#0066cc"></i>
+                <div style="font-weight:500">${escapeHtml(v.filename)}</div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;">
+                <button class="btn btn-small" onclick="loadSegmentPlayer(${v.id})">Open</button>
+                <button class="btn btn-small" onclick="loadSegmentPlayer(${v.id}); switchTab('annotate'); loadVideo(${v.id})">Open in main</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+// Load a video into the small Segment tab player
+function loadSegmentPlayer(videoId) {
+    const player = document.getElementById('segmentPlayer');
+    const src = document.getElementById('segmentSource');
+    if (!player || !src) return;
+
+    state.currentVideoId = videoId;
+    const tokenParam2 = MOODLE_JWT ? `?token=${encodeURIComponent(MOODLE_JWT)}` : '';
+    src.src = `${API_BASE}/api/videos/${videoId}/file${tokenParam2}`;
+    player.load();
+
+    // Show player container and reset start/end to 0 → full (loadedmetadata will refine)
+    const container = document.getElementById('segmentVideoPlayerContainer');
+    if (container) container.style.display = 'block';
+    state.segmentStartTime = 0;
+    state.segmentEndTime = 0;
+    if (window.updateSegmentSliderUI) window.updateSegmentSliderUI();
+
+    // Refresh segments list for the loaded video
+    loadSegments();
+}
+
+async function loadSegments() {
+    const list = document.getElementById('segmentsList');
+    if (!list) return;
+
+    list.innerHTML = `<div class="empty-state"><p>${currentLang === 'fr' ? 'Chargement des segments…' : 'Loading segments…'}</p></div>`;
+
+    if (!state.currentVideoId) {
+        list.innerHTML = `<div class="empty-state"><p>${t('loadVideoFirst')}</p></div>`;
+        return;
+    }
+
+    try {
+        const resp = await fetch(`${API_BASE}/api/segments/video/${state.currentVideoId}`);
+        if (!resp.ok) throw new Error('Failed to load segments');
+        const segments = await resp.json();
+        state.segments = segments || [];
+        renderSegments();
+        refreshSegmentSelector();
+    } catch (err) {
+        console.error('Failed to load segments', err);
+        list.innerHTML = `<div class="empty-state"><p>${currentLang === 'fr' ? 'Échec du chargement des segments' : 'Failed to load segments'}</p></div>`;
+    }
+}
+
+function renderSegments() {
+    const list = document.getElementById('segmentsList');
+    if (!list) return;
+
+    if (!state.segments || state.segments.length === 0) {
+        list.innerHTML = `<div class="empty-state"><p>${t('noSegmentsForVideo')}</p></div>`;
+        return;
+    }
+
+    list.innerHTML = '';
+    state.segments.forEach(seg => {
+        const duration = seg.end_time - seg.start_time;
+        const item = document.createElement('div');
+        item.className = 'segment-item';
+        item.title = t('previewSegment');
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'segment-card-name';
+        nameSpan.textContent = seg.name || `Segment ${seg.id}`;
+        nameSpan.title = 'Double-click to rename';
+
+        nameSpan.addEventListener('dblclick', e => {
+            e.stopPropagation();
+            startInlineRename(nameSpan, seg);
+        });
+
+        const cardBody = document.createElement('div');
+        cardBody.className = 'segment-card-body';
+        cardBody.innerHTML = `
+            <div class="segment-card-times">
+                <span><i class="fas fa-clock"></i> ${formatTime(seg.start_time)} – ${formatTime(seg.end_time)}</span>
+                <span class="segment-card-duration">${formatTime(duration)}</span>
+            </div>
+        `;
+        cardBody.insertBefore(nameSpan, cardBody.firstChild);
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'segment-card-delete';
+        deleteBtn.title = t('deleteSegment');
+        deleteBtn.innerHTML = '<i class="fas fa-trash"></i>';
+        deleteBtn.addEventListener('click', e => { e.stopPropagation(); deleteSegment(seg.id); });
+
+        item.appendChild(cardBody);
+        item.appendChild(deleteBtn);
+
+        item.addEventListener('click', () => {
+            // Seek video to segment start
+            const vid = document.getElementById('segmentPlayer') || document.getElementById('videoPlayer');
+            if (vid) { vid.pause(); vid.currentTime = seg.start_time; }
+            // Highlight range on track
+            if (window.highlightSegmentOnTrack) window.highlightSegmentOnTrack(seg.start_time, seg.end_time);
+            // Mark card as active
+            document.querySelectorAll('.segment-item.active').forEach(el => el.classList.remove('active'));
+            item.classList.add('active');
+        });
+        list.appendChild(item);
+    });
+}
+
+function loadVideoSegment(startTime) {
+    // Switch to annotate tab and seek — do NOT autoplay, let the user decide when to start
+    switchTab('annotate');
+    const videoPlayer = document.getElementById('videoPlayer');
+    if (videoPlayer && !isNaN(startTime)) {
+        videoPlayer.pause();
+        videoPlayer.currentTime = Math.max(0, startTime);
+    }
+}
+
+function setSegmentStart() {
+    const segPlayer = document.getElementById('segmentPlayer');
+    const videoPlayer = (segPlayer && segPlayer.readyState > 0) ? segPlayer : document.getElementById('videoPlayer');
+    if (!videoPlayer || isNaN(videoPlayer.currentTime)) return;
+    state.segmentStartTime = videoPlayer.currentTime;
+    const disp = document.getElementById('segmentStartDisplay');
+    if (disp) disp.textContent = `${t('segmentStartPrefix')}: ${formatTime(state.segmentStartTime)}`;
+    if (window.updateSegmentSliderUI) window.updateSegmentSliderUI();
+}
+
+function setSegmentEnd() {
+    const segPlayer = document.getElementById('segmentPlayer');
+    const videoPlayer = (segPlayer && segPlayer.readyState > 0) ? segPlayer : document.getElementById('videoPlayer');
+    if (!videoPlayer || isNaN(videoPlayer.currentTime)) return;
+    state.segmentEndTime = videoPlayer.currentTime;
+    const disp = document.getElementById('segmentEndDisplay');
+    if (disp) disp.textContent = `${t('segmentEndPrefix')}: ${formatTime(state.segmentEndTime)}`;
+    if (window.updateSegmentSliderUI) window.updateSegmentSliderUI();
+}
+
+async function createSegment() {
+    if (!state.currentVideoId) {
+        showToast('No video', 'Load a video before creating a segment', 'warning');
+        return;
+    }
+    const start = state.segmentStartTime;
+    const end = state.segmentEndTime;
+    if (start == null || end == null || end <= start) {
+        showToast('Invalid segment', 'Set a valid start and end time first', 'error');
+        return;
+    }
+    try {
+        const payload = { parent_video_id: state.currentVideoId, name: `Segment ${formatTime(start)}-${formatTime(end)}`, start_time: start, end_time: end };
+        const resp = await fetch(`${API_BASE}/api/segments`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        if (!resp.ok) throw new Error('Create failed');
+        showToast('Segment created', 'Segment saved', 'success');
+        await loadSegments();
+        // refresh video lists so Select-Video modal shows the new segment immediately
+        await loadVideos();
+    } catch (err) {
+        console.error(err);
+        showToast('Error', 'Failed to create segment', 'error');
+    }
+}
+
+async function deleteSegment(id) {
+    if (!confirm('Delete this segment?')) return;
+    try {
+        const resp = await fetch(`${API_BASE}/api/segments/${id}`, { method: 'DELETE' });
+        if (!resp.ok) throw new Error('Delete failed');
+        showToast('Deleted', 'Segment deleted', 'success');
+        await loadSegments();
+    } catch (err) {
+        console.error(err);
+        showToast('Error', 'Failed to delete segment', 'error');
+    }
+}
+
+function startInlineRename(nameSpan, seg) {
+    const original = seg.name || `Segment ${seg.id}`;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'segment-card-name-input';
+    input.value = original;
+
+    nameSpan.replaceWith(input);
+    input.focus();
+    input.select();
+
+    let committed = false;
+    const commit = async () => {
+        if (committed) return;
+        committed = true;
+        const newName = input.value.trim() || original;
+        input.replaceWith(nameSpan);
+        if (newName !== original) {
+            nameSpan.textContent = newName;
+            await renameSegment(seg.id, newName);
+        }
+    };
+    const cancel = () => {
+        if (committed) return;
+        committed = true;
+        input.replaceWith(nameSpan);
+    };
+
+    input.addEventListener('blur', commit);
+    input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); commit(); }
+        if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+    });
+}
+
+async function renameSegment(id, newName) {
+    try {
+        const resp = await fetch(`${API_BASE}/api/segments/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: newName })
+        });
+        if (!resp.ok) throw new Error('Update failed');
+        // Update local state so selector and modal reflect the new name without full reload
+        const seg = state.segments.find(s => s.id === id);
+        if (seg) seg.name = newName;
+        refreshSegmentSelector();
+        showToast('Renamed', 'Segment name updated', 'success');
+    } catch (err) {
+        console.error(err);
+        showToast('Error', 'Failed to rename segment', 'error');
+        // Re-render to restore old name
+        renderSegments();
     }
 }
 
@@ -2860,51 +5010,55 @@ async function deleteVideo(videoId) {
     const video = state.videos.find(v => v.id === videoId);
     const name = video ? video.filename : `ID ${videoId}`;
 
-    if (!confirm(`Delete video "${name}" and ALL its elicitations?\n\nThis will remove the video file and all associated annotations. Continue?`)) {
+    const willDeleteRemote = video && video.source_type === 'webdav';
+    // Trash on loaded videos = remove plugin record only. OwnCloud deletion is handled separately.
+    const confirmMsg = willDeleteRemote
+        ? `Remove "${name}" from the plugin?\n\nThis removes the video and all its elicitations from this tool.\nThe file on OwnCloud is NOT deleted — use the trash icon in the OwnCloud section for that.`
+        : `Delete video "${name}" and ALL its elicitations? This cannot be undone.`;
+
+    if (!confirm(confirmMsg)) {
         return;
     }
 
     try {
-        showLoading('Deleting video...');
+        showLoading('Removing video...');
 
-        const response = await fetch(`${API_BASE}/api/videos/${videoId}`, {
-            method: 'DELETE'
-        });
+        // Choose endpoint: WebDAV videos get force=true (local record only, OwnCloud untouched)
+        const deleteUrl = willDeleteRemote
+            ? `${API_BASE}/api/videos/${videoId}?force=true`
+            : `${API_BASE}/api/videos/${videoId}`;
+
+        const response = await fetch(deleteUrl, { method: 'DELETE' });
 
         if (!response.ok) {
-            const errText = await response.text();
-            throw new Error(errText || 'Failed to delete video');
+            // 404 means the record is already gone (e.g. OwnCloud file was deleted first and
+            // cleaned up the local record). Treat it as success so the UI stays consistent.
+            if (response.status !== 404) {
+                const errText = await response.text();
+                throw new Error(errText || 'Failed to delete video');
+            }
         }
 
-        // Remove from local state
         state.videos = state.videos.filter(v => v.id !== videoId);
 
-        // If the deleted video is currently loaded, clear the player
         if (state.currentVideoId === videoId) {
             state.currentVideo = null;
             state.currentVideoId = null;
-            // Clear persisted video state
-            try {
-                localStorage.removeItem('currentVideoId');
-            } catch (e) {
-                console.error('Failed to clear video state:', e);
-            }
+            try { localStorage.removeItem('currentVideoId'); } catch (e) { console.error('Failed to clear video state:', e); }
             document.getElementById('videoPlayerContainer').style.display = 'none';
             document.getElementById('recordingControls').style.display = 'none';
-            document.getElementById('videoSelector').style.display = 'flex';
+            document.getElementById('videoSelector').style.display = 'block';
             document.getElementById('videoInfo').style.display = 'none';
         }
 
-        // Refresh videos in case of ordering or counts
         await loadVideos();
-
-        showToast('Deleted', 'Video and its elicitations were deleted', 'success');
+        showVideoModal();
+        showToast('Removed', willDeleteRemote ? 'Plugin record removed (OwnCloud file untouched)' : 'Video and elicitations deleted', 'success');
     } catch (error) {
         console.error('Error deleting video:', error);
         showToast('Error', 'Failed to delete video', 'error');
     } finally {
         hideLoading();
-        closeVideoModal();
     }
 }
 
@@ -3111,27 +5265,6 @@ function openLocalFolderModal() {
         modal.style.display = 'flex';
         document.getElementById('localVideosContainer').style.display = 'none';
         document.getElementById('localFolderPath').value = '';
-
-        // Focus on the input field
-        setTimeout(() => {
-            document.getElementById('localFolderPath').focus();
-        }, 100);
-
-        // Close on Escape key
-        const escapeHandler = (e) => {
-            if (e.key === 'Escape') {
-                closeLocalFolderModal();
-                document.removeEventListener('keydown', escapeHandler);
-            }
-        };
-        document.addEventListener('keydown', escapeHandler);
-
-        // Close on background click
-        modal.onclick = (e) => {
-            if (e.target === modal) {
-                closeLocalFolderModal();
-            }
-        };
     } else {
         console.error('localFolderModal not found!');
     }
@@ -3149,9 +5282,36 @@ async function handleBrowseLocalFolder() {
         return;
     }
 
-    // Call the existing handleBrowseFolder function and close modal on success
-    await handleBrowseFolder(folderPath);
-    closeLocalFolderModal();
+    try {
+        showLoading('Browsing folder...');
+
+        const response = await fetch(`${API_BASE}/api/videos/local/browse?directory=${encodeURIComponent(folderPath)}`);
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to browse folder');
+        }
+
+        const data = await response.json();
+
+        if (data.videos.length === 0) {
+            showToast('No Videos', 'No video files found in this folder', 'info');
+            return;
+        }
+
+        // Display found videos
+        renderLocalVideos(data.videos);
+        document.getElementById('localVideosContainer').style.display = 'block';
+        document.getElementById('localVideoCount').textContent = data.videos.length;
+
+        showToast('Success', `Found ${data.videos.length} video(s)`, 'success');
+
+    } catch (error) {
+        console.error('Error browsing folder:', error);
+        showToast('Error', error.message, 'error');
+    } finally {
+        hideLoading();
+    }
 }
 
 function renderLocalVideos(videos) {
@@ -3221,706 +5381,19 @@ async function registerLocalVideo(filepath, filename) {
 // Make functions globally available
 window.seekToAnnotation = seekToAnnotation;
 window.deleteAnnotation = deleteAnnotation;
+window.toggleExtendedTranscript = toggleExtendedTranscript;
+window.toggleReviewPanel = toggleReviewPanel;
 window.toggleDimension = toggleDimension;
+window.triggerTagging = triggerTagging;
 window.triggerReview = triggerReview;
+window.deleteTag = deleteTag;
+window.startEditTask = startEditTask;
 window.editElicitation = editElicitation;
 window.closeEditElicitationModal = closeEditElicitationModal;
-
-// ============================================================================
-// SEGMENTATION TAB FUNCTIONS
-// ============================================================================
-
-function initializeSegmentTab() {
-    // Initialize event listeners for segmentation controls
-    const trimStartInput = document.getElementById('trimStartInput');
-    const trimEndInput = document.getElementById('trimEndInput');
-    const createSegmentBtn = document.getElementById('createSegmentBtn');
-    const clearSegmentBtn = document.getElementById('clearSegmentBtn');
-    const refreshSegmentsBtn = document.getElementById('refreshSegmentsBtn');
-    const segmentVideoPlayer = document.getElementById('segmentVideoPlayer');
-    
-    // CRITICAL FIX: Find timeline track WITHIN segmentation controls, not the whole page
-    const segmentationControls = document.getElementById('segmentationControls');
-    const timelineTrack = segmentationControls ? segmentationControls.querySelector('.timeline-track') : null;
-    
-    const trimHandleStart = document.getElementById('trimHandleStart');
-    const trimHandleEnd = document.getElementById('trimHandleEnd');
-    
-    console.log('initializeSegmentTab: Found elements:', {
-        trimStartInput: !!trimStartInput,
-        trimEndInput: !!trimEndInput,
-        createSegmentBtn: !!createSegmentBtn,
-        segmentationControls: !!segmentationControls,
-        timelineTrack: !!timelineTrack,
-        trimHandleStart: !!trimHandleStart,
-        trimHandleEnd: !!trimHandleEnd,
-        segmentVideoPlayer: !!segmentVideoPlayer
-    });
-
-    if (trimStartInput && !trimStartInput.dataset.initialized) {
-        trimStartInput.addEventListener('input', handleTimeInputChange);
-        trimStartInput.addEventListener('blur', validateTimeInput);
-        trimStartInput.dataset.initialized = 'true';
-    }
-
-    if (trimEndInput && !trimEndInput.dataset.initialized) {
-        trimEndInput.addEventListener('input', handleTimeInputChange);
-        trimEndInput.addEventListener('blur', validateTimeInput);
-        trimEndInput.dataset.initialized = 'true';
-    }
-
-    if (createSegmentBtn && !createSegmentBtn.dataset.initialized) {
-        createSegmentBtn.addEventListener('click', createSegment);
-        createSegmentBtn.dataset.initialized = 'true';
-    }
-
-    if (clearSegmentBtn && !clearSegmentBtn.dataset.initialized) {
-        clearSegmentBtn.addEventListener('click', clearSegmentMarkers);
-        clearSegmentBtn.dataset.initialized = 'true';
-    }
-
-    if (refreshSegmentsBtn && !refreshSegmentsBtn.dataset.initialized) {
-        refreshSegmentsBtn.addEventListener('click', () => {
-            if (state.segmentVideoId) {
-                loadSegments(state.segmentVideoId);
-            }
-        });
-        refreshSegmentsBtn.dataset.initialized = 'true';
-    }
-
-    // Timeline click to set position - ONLY if we found the correct one
-    if (timelineTrack && !timelineTrack.dataset.clickInitialized) {
-        console.log('Attaching click handler to segment timeline track');
-        timelineTrack.addEventListener('click', handleTimelineClick);
-        timelineTrack.dataset.clickInitialized = 'true';
-    }
-
-    // Draggable handles - use more robust event attachment
-    if (trimHandleStart && !trimHandleStart.dataset.initialized) {
-        console.log('Initializing start handle drag');
-        trimHandleStart.addEventListener('mousedown', (e) => {
-            console.log('Start handle mousedown event fired');
-            startDrag(e, 'start');
-        });
-        // Also add touch support
-        trimHandleStart.addEventListener('touchstart', (e) => {
-            console.log('Start handle touchstart event fired');
-            e.preventDefault();
-            const touch = e.touches[0];
-            const mouseEvent = new MouseEvent('mousedown', {
-                clientX: touch.clientX,
-                clientY: touch.clientY
-            });
-            startDrag(mouseEvent, 'start');
-        });
-        trimHandleStart.dataset.initialized = 'true';
-    }
-
-    if (trimHandleEnd && !trimHandleEnd.dataset.initialized) {
-        console.log('Initializing end handle drag');
-        trimHandleEnd.addEventListener('mousedown', (e) => {
-            console.log('End handle mousedown event fired');
-            startDrag(e, 'end');
-        });
-        // Also add touch support
-        trimHandleEnd.addEventListener('touchstart', (e) => {
-            console.log('End handle touchstart event fired');
-            e.preventDefault();
-            const touch = e.touches[0];
-            const mouseEvent = new MouseEvent('mousedown', {
-                clientX: touch.clientX,
-                clientY: touch.clientY
-            });
-            startDrag(mouseEvent, 'end');
-        });
-        trimHandleEnd.dataset.initialized = 'true';
-    }
-
-    // Update playhead position
-    if (segmentVideoPlayer && !segmentVideoPlayer.dataset.playheadInitialized) {
-        segmentVideoPlayer.addEventListener('timeupdate', updatePlayhead);
-        segmentVideoPlayer.dataset.playheadInitialized = 'true';
-    }
-
-    // If a video is already loaded in the elicitation tab, use it
-    if (state.currentVideoId && state.currentVideo) {
-        loadVideoForSegmentation(state.currentVideoId);
-    }
-}
-
-// Drag state
-let isDragging = false;
-let dragType = null;
-
-function startDrag(e, type) {
-    console.log('startDrag called with type:', type);
-    e.preventDefault();
-    e.stopPropagation();
-    isDragging = true;
-    dragType = type;
-    
-    // Debug: Check what element we clicked on
-    console.log('Event target:', e.target, 'Target classes:', e.target.className);
-    
-    // Debug: Find all timeline-track elements  
-    const allTracks = document.querySelectorAll('.timeline-track');
-    console.log('Total .timeline-track elements on page:', allTracks.length);
-    allTracks.forEach((track, idx) => {
-        const rect = track.getBoundingClientRect();
-        console.log(`Track ${idx}:`, {
-            width: rect.width,
-            height: rect.height,
-            display: window.getComputedStyle(track).display,
-            parentDisplay: window.getComputedStyle(track.parentElement).display,
-            grandparentDisplay: window.getComputedStyle(track.parentElement?.parentElement).display
-        });
-    });
-    
-    console.log('Drag started, isDragging:', isDragging, 'dragType:', dragType);
-    
-    document.addEventListener('mousemove', handleDrag);
-    document.addEventListener('mouseup', stopDrag);
-    document.addEventListener('touchmove', handleTouchDrag, { passive: false });
-    document.addEventListener('touchend', stopDrag);
-}
-
-function handleTouchDrag(e) {
-    e.preventDefault();
-    const touch = e.touches[0];
-    const mouseEvent = new MouseEvent('mousemove', {
-        clientX: touch.clientX,
-        clientY: touch.clientY
-    });
-    handleDrag(mouseEvent);
-}
-
-function previewSegmentFrame(time) {
-    const player = document.getElementById('segmentVideoPlayer');
-    if (!player || !player.duration) return;
-    const safeTime = Math.max(0, Math.min(time, player.duration));
-    player.currentTime = safeTime;
-}
-
-function handleDrag(e) {
-    if (!isDragging) {
-        console.log('handleDrag called but isDragging is false');
-        return;
-    }
-    
-    // Ensure we have valid mouse coordinates
-    if (typeof e.clientX === 'undefined' || typeof e.clientY === 'undefined') {
-        console.log('Invalid event object, missing clientX/clientY:', e);
-        return;
-    }
-    
-    // CRITICAL FIX: Find the timeline track in the SEGMENT tab, not the annotate tab
-    // Look within the segmentation controls container specifically
-    const segmentationControls = document.getElementById('segmentationControls');
-    if (!segmentationControls) {
-        console.log('Segmentation controls container not found');
-        return;
-    }
-    
-    const timelineTrack = segmentationControls.querySelector('.timeline-track');
-    if (!timelineTrack) {
-        console.log('Timeline track not found within segmentation controls');
-        return;
-    }
-    
-    const rect = timelineTrack.getBoundingClientRect();
-    console.log('Timeline rect:', {left: rect.left, width: rect.width, top: rect.top, bottom: rect.bottom}, 'clientX:', e.clientX);
-    console.log('Timeline track styles:', {
-        display: window.getComputedStyle(timelineTrack).display,
-        width: window.getComputedStyle(timelineTrack).width,
-        position: window.getComputedStyle(timelineTrack).position
-    });
-    
-    if (!rect.width || rect.width === 0) {
-        console.log('⚠️ Timeline track has no width! Rect:', rect);
-        console.log('Full debuginfo:');
-        console.log('- Segment tab display:', window.getComputedStyle(document.getElementById('segmentTab')).display);
-        console.log('- Segmentation controls display:', window.getComputedStyle(segmentationControls).display);
-        console.log('- Timeline scrubber display:', window.getComputedStyle(timelineTrack.parentElement).display);
-        return;
-    }
-    
-    const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
-    const percentage = x / rect.width;
-    
-    console.log('x:', x, 'rect.width:', rect.width, 'percentage:', percentage);
-    
-    const player = document.getElementById('segmentVideoPlayer');
-    if (!player || !player.duration || isNaN(player.duration) || player.duration === 0) {
-        console.log('Player not ready, duration:', player?.duration, 'isNaN:', isNaN(player?.duration));
-        return;
-    }
-    
-    const time = percentage * player.duration;
-    console.log('Calculated time:', time, 'from percentage:', percentage, 'duration:', player.duration);
-    previewSegmentFrame(time);
-
-    if (dragType === 'start') {
-        state.segmentStartTime = time;
-        if (state.segmentEndTime !== null && time >= state.segmentEndTime) {
-            state.segmentEndTime = Math.min(time + 1, player.duration);
-        }
-        console.log('✅ Updated start time to:', time, 'state.segmentStartTime:', state.segmentStartTime);
-    } else if (dragType === 'end') {
-        state.segmentEndTime = time;
-        if (state.segmentStartTime !== null && time <= state.segmentStartTime) {
-            state.segmentStartTime = Math.max(0, time - 1);
-        }
-        console.log('✅ Updated end time to:', time, 'state.segmentEndTime:', state.segmentEndTime);
-    }
-    
-    console.log('About to call updateTimelineUI, current state:', {
-        startTime: state.segmentStartTime,
-        endTime: state.segmentEndTime
-    });
-    updateTimelineUI();
-}
-
-function stopDrag() {
-    console.log('stopDrag called, was dragging:', isDragging);
-    isDragging = false;
-    dragType = null;
-    document.removeEventListener('mousemove', handleDrag);
-    document.removeEventListener('mouseup', stopDrag);
-    document.removeEventListener('touchmove', handleTouchDrag);
-    document.removeEventListener('touchend', stopDrag);
-}
-
-function handleTimelineClick(e) {
-    if (isDragging) return;
-    
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const percentage = x / rect.width;
-    
-    const player = document.getElementById('segmentVideoPlayer');
-    if (!player || !player.duration) return;
-    
-    const time = percentage * player.duration;
-    
-    // Set start if not set, otherwise set end
-    if (state.segmentStartTime === null) {
-        state.segmentStartTime = time;
-    } else if (state.segmentEndTime === null || time > state.segmentStartTime) {
-        state.segmentEndTime = time;
-    } else {
-        state.segmentStartTime = time;
-    }
-    
-    updateTimelineUI();
-}
-
-function handleTimeInputChange(e) {
-    const input = e.target;
-    const value = input.value;
-    
-    // Only allow digits and colon
-    const cleaned = value.replace(/[^0-9:]/g, '');
-    if (cleaned !== value) {
-        input.value = cleaned;
-        return;
-    }
-    
-    // Try to parse if it looks complete
-    if (value.match(/^\d{1,2}:\d{2}$/)) {
-        const time = parseTimeInput(value);
-        if (time !== null) {
-            if (input.id === 'trimStartInput') {
-                state.segmentStartTime = time;
-            } else {
-                state.segmentEndTime = time;
-            }
-            updateTimelineUI();
-        }
-    }
-}
-
-function validateTimeInput(e) {
-    const input = e.target;
-    const value = input.value;
-    
-    if (!value) return;
-    
-    const time = parseTimeInput(value);
-    if (time !== null) {
-        if (input.id === 'trimStartInput') {
-            state.segmentStartTime = time;
-        } else {
-            state.segmentEndTime = time;
-        }
-    }
-    
-    updateTimelineUI();
-}
-
-function parseTimeInput(timeStr) {
-    const match = timeStr.match(/^(\d{1,2}):(\d{2})$/);
-    if (!match) return null;
-    
-    const minutes = parseInt(match[1], 10);
-    const seconds = parseInt(match[2], 10);
-    
-    if (seconds >= 60) return null;
-    
-    const player = document.getElementById('segmentVideoPlayer');
-    const time = minutes * 60 + seconds;
-    
-    if (player && player.duration && time > player.duration) {
-        return player.duration;
-    }
-    
-    return time;
-}
-
-function updatePlayhead() {
-    const player = document.getElementById('segmentVideoPlayer');
-    const playhead = document.getElementById('timelinePlayhead');
-    
-    if (!player || !player.duration || !playhead) return;
-    
-    const percentage = (player.currentTime / player.duration) * 100;
-    playhead.style.left = percentage + '%';
-}
-
-function updateTimelineUI() {
-    const player = document.getElementById('segmentVideoPlayer');
-    if (!player || !player.duration || isNaN(player.duration) || player.duration === 0) {
-        console.log('updateTimelineUI: Player not ready, duration:', player?.duration);
-        return;
-    }
-    
-    const startTime = state.segmentStartTime !== null ? state.segmentStartTime : 0;
-    const endTime = state.segmentEndTime !== null ? state.segmentEndTime : player.duration;
-    
-    console.log('updateTimelineUI: startTime:', startTime, 'endTime:', endTime, 'duration:', player.duration);
-    
-    // Update timeline selection
-    const selection = document.getElementById('timelineSelection');
-    if (selection) {
-        const startPercent = (startTime / player.duration) * 100;
-        const endPercent = (endTime / player.duration) * 100;
-        selection.style.left = startPercent + '%';
-        selection.style.width = (endPercent - startPercent) + '%';
-        console.log('✅ Timeline selection updated: left:', startPercent + '%', 'width:', (endPercent - startPercent) + '%');
-        console.log('   Selection element style:', window.getComputedStyle(selection).left, window.getComputedStyle(selection).width);
-    } else {
-        console.warn('❌ timelineSelection element not found');
-    }
-    
-    // Update input fields
-    const trimStartInput = document.getElementById('trimStartInput');
-    const trimEndInput = document.getElementById('trimEndInput');
-    if (trimStartInput) {
-        trimStartInput.value = formatTimeInput(startTime);
-        console.log('✅ Updated trimStartInput to:', formatTimeInput(startTime));
-    } else {
-        console.warn('❌ trimStartInput not found');
-    }
-    
-    if (trimEndInput) {
-        trimEndInput.value = formatTimeInput(endTime);
-        console.log('✅ Updated trimEndInput to:', formatTimeInput(endTime));
-    } else {
-        console.warn('❌ trimEndInput not found');
-    }
-    
-    // Update duration display
-    const duration = endTime - startTime;
-    const trimDurationEl = document.getElementById('trimDuration');
-    if (trimDurationEl) {
-        trimDurationEl.textContent = formatTime(duration);
-        console.log('✅ Updated trimDuration to:', formatTime(duration));
-    } else {
-        console.warn('❌ trimDuration not found');
-    }
-    
-    // Enable/disable create button
-    const createBtn = document.getElementById('createSegmentBtn');
-    if (createBtn) {
-        createBtn.disabled = state.segmentStartTime === null || state.segmentEndTime === null || 
-                             state.segmentEndTime <= state.segmentStartTime;
-    }
-}
-
-function formatTimeInput(seconds) {
-    if (isNaN(seconds) || !isFinite(seconds)) return '0:00';
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-}
-
-async function loadVideoForSegmentation(videoId) {
-    try {
-        const response = await fetch(`${API_BASE}/api/videos/${videoId}`);
-        if (!response.ok) throw new Error('Failed to load video');
-
-        const video = await response.json();
-        state.segmentVideoId = videoId;
-
-        // Show video player
-        document.getElementById('segmentVideoSelector').style.display = 'none';
-        document.getElementById('segmentVideoPlayerContainer').style.display = 'block';
-        document.getElementById('segmentationControls').style.display = 'flex';
-        document.getElementById('segmentVideoInfo').style.display = 'flex';
-
-        // Load video
-        const videoPlayer = document.getElementById('segmentVideoPlayer');
-        const videoSource = document.getElementById('segmentVideoSource');
-        videoSource.src = `${API_BASE}/api/videos/${videoId}/file`;
-        videoPlayer.load();
-
-        state.segmentVideoElement = videoPlayer;
-
-        // Initialize timeline when video metadata is loaded
-        videoPlayer.addEventListener('loadedmetadata', function initTimeline() {
-            console.log('Video metadata loaded, duration:', videoPlayer.duration);
-            // Set default segment to full video
-            state.segmentStartTime = 0;
-            state.segmentEndTime = videoPlayer.duration;
-            console.log('Set initial segment range:', state.segmentStartTime, '-', state.segmentEndTime);
-            updateTimelineUI();
-        }, { once: true });
-
-        // Update info
-        document.getElementById('segmentVideoName').textContent = video.filename;
-
-        // Load existing segments
-        await loadSegments(videoId);
-
-    } catch (error) {
-        console.error('Error loading video for segmentation:', error);
-        showToast('Error', 'Failed to load video', 'error');
-    }
-}
-
-function clearSegmentMarkers() {
-    const player = document.getElementById('segmentVideoPlayer');
-    
-    // Reset to full video range if video is loaded
-    if (player && player.duration) {
-        state.segmentStartTime = 0;
-        state.segmentEndTime = player.duration;
-        updateTimelineUI();
-    } else {
-        // No video loaded, just clear
-        state.segmentStartTime = null;
-        state.segmentEndTime = null;
-        document.getElementById('trimStartInput').value = '';
-        document.getElementById('trimEndInput').value = '';
-        document.getElementById('trimDuration').textContent = '0:00';
-        
-        // Reset timeline UI to initial state
-        const selection = document.getElementById('timelineSelection');
-        if (selection) {
-            selection.style.left = '0%';
-            selection.style.width = '100%';
-        }
-    }
-    
-    document.getElementById('segmentNameInput').value = '';
-    
-    const createBtn = document.getElementById('createSegmentBtn');
-    if (createBtn) {
-        createBtn.disabled = false; // Enable since full video is valid
-    }
-}
-
-async function createSegment() {
-    if (!state.segmentVideoId) {
-        showToast('Error', 'No video loaded', 'error');
-        return;
-    }
-
-    if (state.segmentStartTime === null || state.segmentEndTime === null) {
-        showToast('Error', 'Please set start and end times', 'error');
-        return;
-    }
-
-    if (state.segmentEndTime <= state.segmentStartTime) {
-        showToast('Error', 'End time must be after start time', 'error');
-        return;
-    }
-
-    try {
-        showLoading('Creating segment...');
-
-        const segmentName = document.getElementById('segmentNameInput').value.trim() || null;
-
-        const segmentData = {
-            parent_video_id: state.segmentVideoId,
-            name: segmentName,
-            start_time: state.segmentStartTime,
-            end_time: state.segmentEndTime
-        };
-
-        const response = await fetch(`${API_BASE}/api/segments`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(segmentData)
-        });
-
-        if (!response.ok) {
-            const error = await response.text();
-            throw new Error(error || 'Failed to create segment');
-        }
-
-        const segment = await response.json();
-        showToast('Success', 'Segment created successfully', 'success');
-
-        // Reload segments
-        await loadSegments(state.segmentVideoId);
-
-        // Clear form
-        clearSegmentMarkers();
-
-    } catch (error) {
-        console.error('Error creating segment:', error);
-        showToast('Error', error.message || 'Failed to create segment', 'error');
-    } finally {
-        hideLoading();
-    }
-}
-
-async function loadSegments(videoId) {
-    try {
-        const response = await fetch(`${API_BASE}/api/segments/video/${videoId}`);
-        if (!response.ok) throw new Error('Failed to load segments');
-
-        state.segments = await response.json();
-        renderSegments();
-
-        // Update segment count
-        document.getElementById('segmentCount').textContent = state.segments.length;
-
-    } catch (error) {
-        console.error('Error loading segments:', error);
-        showToast('Error', 'Failed to load segments', 'error');
-    }
-}
-
-function renderSegments() {
-    const container = document.getElementById('segmentsList');
-
-    if (state.segments.length === 0) {
-        container.innerHTML = `
-            <div class="empty-state">
-                <i class="fas fa-scissors empty-icon"></i>
-                <p>No segments yet</p>
-                <p class="hint">Mark start and end times to create your first segment</p>
-            </div>
-        `;
-        return;
-    }
-
-    container.innerHTML = '';
-
-    state.segments.forEach(segment => {
-        const duration = segment.end_time - segment.start_time;
-        const segmentName = segment.name || 'Unnamed Segment';
-
-        const item = document.createElement('div');
-        item.className = 'segment-item';
-        item.innerHTML = `
-            <div class="segment-header">
-                <div class="segment-name ${segment.name ? '' : 'unnamed'}">
-                    <i class="fas fa-cut"></i> ${segmentName}
-                </div>
-                <div class="segment-actions-buttons">
-                    <button class="btn btn-icon btn-small" onclick="seekToSegment(${segment.id})" title="Play segment">
-                        <i class="fas fa-play"></i>
-                    </button>
-                    <button class="btn btn-icon btn-small" onclick="editSegment(${segment.id})" title="Edit segment">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                    <button class="btn btn-icon btn-small" onclick="deleteSegment(${segment.id})" title="Delete segment">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </div>
-            </div>
-            <div class="segment-info">
-                <div class="segment-time-range">
-                    <i class="fas fa-clock"></i>
-                    <span>${formatTime(segment.start_time)} - ${formatTime(segment.end_time)}</span>
-                    <span>(${formatTime(duration)})</span>
-                </div>
-            </div>
-        `;
-
-        container.appendChild(item);
-    });
-}
-
-function seekToSegment(segmentId) {
-    const segment = state.segments.find(s => s.id === segmentId);
-    if (!segment) return;
-
-    const player = document.getElementById('segmentVideoPlayer');
-    if (player) {
-        player.currentTime = segment.start_time;
-        player.play();
-    }
-}
-
-async function editSegment(segmentId) {
-    const segment = state.segments.find(s => s.id === segmentId);
-    if (!segment) return;
-
-    const newName = prompt('Edit segment name:', segment.name || '');
-    if (newName === null) return; // User cancelled
-
-    try {
-        showLoading('Updating segment...');
-
-        const response = await fetch(`${API_BASE}/api/segments/${segmentId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: newName.trim() || null })
-        });
-
-        if (!response.ok) throw new Error('Failed to update segment');
-
-        showToast('Success', 'Segment updated', 'success');
-        await loadSegments(state.segmentVideoId);
-
-    } catch (error) {
-        console.error('Error updating segment:', error);
-        showToast('Error', 'Failed to update segment', 'error');
-    } finally {
-        hideLoading();
-    }
-}
-
-async function deleteSegment(segmentId) {
-    if (!confirm('Delete this segment?')) return;
-
-    try {
-        showLoading('Deleting segment...');
-
-        const response = await fetch(`${API_BASE}/api/segments/${segmentId}`, {
-            method: 'DELETE'
-        });
-
-        if (!response.ok) throw new Error('Failed to delete segment');
-
-        showToast('Success', 'Segment deleted', 'success');
-        await loadSegments(state.segmentVideoId);
-
-    } catch (error) {
-        console.error('Error deleting segment:', error);
-        showToast('Error', 'Failed to delete segment', 'error');
-    } finally {
-        hideLoading();
-    }
-}
-
-// Make segmentation functions globally available
-window.seekToSegment = seekToSegment;
-window.editSegment = editSegment;
-window.deleteSegment = deleteSegment;
+window.cancelInPlaceQA = cancelInPlaceQA;
+window.toggleInPlaceRecording = toggleInPlaceRecording;
+window.skipInPlaceQuestion = skipInPlaceQuestion;
+window.finishInPlaceQA = finishInPlaceQA;
 window.saveElicitationEdit = saveElicitationEdit;
 window.markElicitationComplete = markElicitationComplete;
 window.registerLocalVideo = registerLocalVideo;
@@ -3932,52 +5405,152 @@ window.assignVideos = assignVideos;
 window.addVideoToProject = addVideoToProject;
 window.removeVideoFromProject = removeVideoFromProject;
 window.deleteVideo = deleteVideo;
+window.openTutorialModal = openTutorialModal;
 
-// DIAGNOSTIC FUNCTION: Call from console to debug segmentation issues
-window.debugSegmentation = function() {
-    console.log('=== SEGMENTATION DIAGNOSTICS ===');
-    
-    const segmentTab = document.getElementById('segmentTab');
-    const segmentationControls = document.getElementById('segmentationControls');
-    const timelineTrack = segmentationControls?.querySelector('.timeline-track');
-    const timelineSelection = document.getElementById('timelineSelection');
-    const trimHandleStart = document.getElementById('trimHandleStart');
-    const trimHandleEnd = document.getElementById('trimHandleEnd');
-    const segmentVideoPlayer = document.getElementById('segmentVideoPlayer');
-    
-    console.log('DOM Elements Found:');
-    console.log('- segmentTab:', !!segmentTab, 'display:', segmentTab ? window.getComputedStyle(segmentTab).display : 'N/A');
-    console.log('- segmentationControls:', !!segmentationControls, 'display:', segmentationControls ? window.getComputedStyle(segmentationControls).display : 'N/A');
-    console.log('- timelineTrack:', !!timelineTrack, 'display:', timelineTrack ? window.getComputedStyle(timelineTrack).display : 'N/A');
-    console.log('- timelineSelection:', !!timelineSelection, 'display:', timelineSelection ? window.getComputedStyle(timelineSelection).display : 'N/A');
-    console.log('- trimHandleStart:', !!trimHandleStart, 'display:', trimHandleStart ? window.getComputedStyle(trimHandleStart).display : 'N/A');
-    console.log('- trimHandleEnd:', !!trimHandleEnd, 'display:', trimHandleEnd ? window.getComputedStyle(trimHandleEnd).display : 'N/A');
-    console.log('- segmentVideoPlayer:', !!segmentVideoPlayer, 'duration:', segmentVideoPlayer?.duration || 'N/A');
-    
-    console.log('\nTimeline Track Measurements:');
-    if (timelineTrack) {
-        const rect = timelineTrack.getBoundingClientRect();
-        console.log('- getBoundingClientRect():', rect);
-        console.log('- offsetWidth:', timelineTrack.offsetWidth);
-        console.log('- clientWidth:', timelineTrack.clientWidth);
+// =============================================================================
+// TUTORIAL / HELP SYSTEM
+// =============================================================================
+
+const TUTORIAL_MARKDOWN = `
+# Bienvenue dans l'outil d'élicitation vidéo
+
+Cet outil a été conçu dans le cadre du projet **ReSOuRCE** pour capturer et préserver les savoirs experts des artisans. Vous allez pouvoir commenter vos propres vidéos à la voix, et un système d'intelligence artificielle vous aidera à structurer et enrichir vos commentaires.
+
+---
+
+## 1. Uploader une vidéo
+
+Vos vidéos sont stockées dans un espace personnel sécurisé appelé **OwnCloud**, hébergé par Mines Paris.
+
+**OwnCloud, c'est quoi ?**
+C'est un espace de stockage en ligne similaire à Dropbox ou Google Drive, mais hébergé sur les serveurs de l'école, garantissant la confidentialité de vos données.
+
+**Format accepté :** MP4, MOV, AVI, WebM (jusqu'à 5 Go par fichier).
+
+**Étapes pour uploader une vidéo :**
+1. Cliquez sur **"Upload to OwnCloud"** dans la barre du haut.
+2. Une fenêtre s'ouvre — cliquez sur **"Upload video to OwnCloud"**.
+3. Sélectionnez votre fichier vidéo depuis votre ordinateur.
+4. La barre de progression indique l'avancement. Attendez le message **"Upload complete !"** avant de fermer.
+
+> La première fois, un dossier personnel est créé automatiquement à votre nom.
+
+---
+
+## 2. Sélectionner une vidéo
+
+Une fois votre vidéo uploadée, cliquez sur **"Select Video"** dans la barre du haut.
+
+- La fenêtre affiche vos vidéos déjà chargées dans le plugin, ainsi que les fichiers présents dans votre dossier OwnCloud.
+- **Fichiers grisés** : déjà chargés, pas besoin de les recharger.
+- Cliquez sur un fichier OwnCloud non grisé pour le charger dans le lecteur vidéo.
+- L'icône 🗑 à droite d'un fichier OwnCloud **supprime le fichier définitivement** de votre espace OwnCloud.
+- L'icône 🗑 à côté d'une vidéo chargée retire uniquement la vidéo du plugin (le fichier OwnCloud est conservé).
+
+---
+
+## 3. Éliciter (commenter une vidéo)
+
+L'onglet **"Elicit"** est le cœur de l'outil.
+
+1. Chargez une vidéo (voir étape 2).
+2. Lancez la lecture et positionnez-vous sur le moment qui vous semble intéressant à commenter.
+3. Appuyez sur le bouton **micro** pour commencer l'enregistrement. Le micro capture votre voix pendant que la vidéo tourne.
+4. Appuyez à nouveau sur le micro pour **arrêter** l'enregistrement.
+
+**Ce qui se passe ensuite (automatiquement) :**
+- Votre commentaire vocal est **transcrit** par intelligence artificielle.
+- Des **tags** sont extraits (geste, outil, matière, intention...).
+- Une **tâche détectée** est identifiée (ex. : "tournassage", "émaillage"...).
+- Une **revue IA** évalue la complétude de votre commentaire selon trois dimensions : *Comment faire* (HOW), *Évaluation* (EVALUATION), et *Retour d'expérience* (FEEDBACK).
+
+Vous pouvez **éditer la transcription** et **relancer l'analyse** si vous le souhaitez.
+
+---
+
+## 4. Segmenter une vidéo
+
+L'onglet **"Segment"** vous permet de découper une vidéo en segments thématiques avant de l'éliciter.
+
+1. Dans l'onglet Segment, sélectionnez votre vidéo avec **"Open"**.
+2. Utilisez les **deux poignées de la barre de timeline** pour délimiter un segment.
+   - Poignée gauche (bleue) = début du segment.
+   - Poignée droite (violette) = fin du segment.
+3. Cliquez sur **"Create segment"** pour enregistrer.
+
+Les segments apparaissent dans le panneau de droite. Vous pouvez les charger dans le lecteur principal pour éliciter uniquement cette portion.
+
+---
+
+## 5. Protection des données (RGPD)
+
+Les données collectées dans cet outil sont utilisées **exclusivement** dans le cadre du projet de recherche **ReSOuRCE** soutenu par le gouvernement français dans le cadre du volet « Compétences et métiers d'avenir » du programme France 2030, géré par la Caisse des Dépôts, dont l'objectif est la préservation des savoirs experts dans les métiers d'art.
+
+- **Votre identifiant** dans le système est un numéro anonyme. **Votre nom n'est pas associé à vos données** dans les exports de recherche.
+- Vos données (vidéos, transcriptions, commentaires) sont hébergées sur les serveurs de **Mines Paris** et ne sont **pas transmises à des tiers**.
+- Elles servent uniquement à l'évaluation de l'expérience et à la rédaction d'articles scientifiques.
+- **Aucune donnée n'est commercialisée.**
+
+Pour toute question, contactez l'équipe ReSOuRCE à Mines Paris - PSL:
+- Théo Akbas - theo.akbas@minesparis.psl.eu
+- Alina Glushkova - alina.glushkova@minesparis.psl.eu
+`;
+
+function openTutorialModal() {
+    const modal = document.getElementById('tutorialModal');
+    const body = document.getElementById('tutorialBody');
+    if (!modal || !body) return;
+
+    // Render Markdown (marked + DOMPurify)
+    if (window.marked && window.DOMPurify) {
+        body.innerHTML = DOMPurify.sanitize(marked.parse(TUTORIAL_MARKDOWN));
+    } else {
+        body.textContent = TUTORIAL_MARKDOWN;
     }
-    
-    console.log('\nHandle Positions:');
-    if (trimHandleStart) {
-        const rect = trimHandleStart.getBoundingClientRect();
-        console.log('- trimHandleStart rect:', rect);
+
+    modal.classList.add('active');
+
+    const closeBtn = document.getElementById('closeTutorialBtn');
+    if (closeBtn) {
+        closeBtn.onclick = closeTutorialModal;
     }
-    if (trimHandleEnd) {
-        const rect = trimHandleEnd.getBoundingClientRect();
-        console.log('- trimHandleEnd rect:', rect);
+    // Click outside to close
+    modal.onclick = (e) => { if (e.target === modal) closeTutorialModal(); };
+}
+
+function closeTutorialModal() {
+    const modal = document.getElementById('tutorialModal');
+    if (modal) modal.classList.remove('active');
+    // Remember that user has seen the tutorial
+    try { localStorage.setItem('tutorialSeen', '1'); } catch (e) {}
+}
+
+/**
+ * Auto-open tutorial for first-time users.
+ * A newcomer is someone who has no personal OwnCloud folder yet.
+ * We check this after the OwnCloud config check resolves.
+ * Falls back to localStorage flag if WebDAV is not configured.
+ */
+async function maybeShowTutorialForNewcomer() {
+    try {
+        const seen = localStorage.getItem('tutorialSeen');
+        if (seen) return; // Already acknowledged
+
+        if (!_webdavApiUrl) {
+            // Can't check OwnCloud — show tutorial for first visit anyway
+            openTutorialModal();
+            return;
+        }
+
+        // Check if user folder exists via ensureuserfolder (creates it if absent, returns {created:true} the first time)
+        const resp = await fetch(`${_webdavApiUrl}?action=ensureuserfolder`);
+        if (!resp.ok) { openTutorialModal(); return; }
+        const data = await resp.json().catch(() => ({}));
+        // If the folder was just created → newcomer
+        if (data.created === true) {
+            openTutorialModal();
+        }
+    } catch (e) {
+        // Non-blocking — ignore errors silently
     }
-    
-    console.log('\nCurrent State:');
-    console.log('- state.segmentStartTime:', state.segmentStartTime);
-    console.log('- state.segmentEndTime:', state.segmentEndTime);
-    console.log('- isDragging:', isDragging);
-    console.log('- dragType:', dragType);
-    
-    console.log('\n(Tip: Try dragging a handle and watch the console logs)');
-    console.log('=== END DIAGNOSTICS ===');
-};
+}

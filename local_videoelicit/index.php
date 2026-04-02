@@ -46,16 +46,11 @@ $jwt_token = jwt_helper::create_token($USER->id, $USER->username, $context->id, 
 $owncloud_url = get_config('local_videoelicit', 'webdav_base_url');
 $owncloud_user_id = get_config('local_videoelicit', 'webdav_user_id');
 
-// Use the proxied URL path instead of direct backend URL
-// Apache proxies /videoelicit-ui/ to the backend, so we use that path
-$api_url = $CFG->wwwroot . '/videoelicit-ui';
-
 $iframeurl = new moodle_url('/videoelicit-ui/', array(
     'token' => $jwt_token,
     'owncloud_base_url' => $owncloud_url,
     'owncloud_user_id' => $owncloud_user_id,
     'webdav_api_url' => $CFG->wwwroot . '/local/videoelicit/webdav_api.php',
-    'api_base_url' => $api_url,
 ));
 
 // Output header

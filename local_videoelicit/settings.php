@@ -73,12 +73,30 @@ if ($hassiteconfig) {
         ''
     ));
 
-    // WebDAV User/Folder ID (the path segment in the WebDAV URL)
+    // WebDAV Service Account UUID (path segment in the WebDAV URL)
     $settings->add(new admin_setting_configtext(
         'local_videoelicit/webdav_user_id',
         get_string('settings_webdav_user_id', 'local_videoelicit'),
         get_string('settings_webdav_user_id_desc', 'local_videoelicit'),
         'aadda5c2-2019-103f-8e2d-bb8e1f6141ce',
+        PARAM_TEXT
+    ));
+
+    // Storage root path inside the service account's WebDAV tree
+    $settings->add(new admin_setting_configtext(
+        'local_videoelicit/webdav_storage_path',
+        get_string('settings_webdav_storage_path', 'local_videoelicit'),
+        get_string('settings_webdav_storage_path_desc', 'local_videoelicit'),
+        'Moodle_OwnCloud_Storage',
+        PARAM_TEXT
+    ));
+
+    // Shared library subfolder (read-only, browsable by all users)
+    $settings->add(new admin_setting_configtext(
+        'local_videoelicit/webdav_shared_folder',
+        get_string('settings_webdav_shared_folder', 'local_videoelicit'),
+        get_string('settings_webdav_shared_folder_desc', 'local_videoelicit'),
+        'Shared',
         PARAM_TEXT
     ));
 
