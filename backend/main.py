@@ -25,7 +25,7 @@ from fastapi import (
     Form,
 )
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import aiofiles
 from starlette.types import Scope
@@ -37,6 +37,11 @@ from auth import verify_moodle_jwt, MoodleUser
 from database_compat import AsyncSession  # Type alias for compatibility
 import models
 from models import Task
+import httpx
+import time
+from collections import defaultdict
+from threading import Lock
+
 from transcription import transcribe_audio_simple, preload_model, get_model_info
 from config import (
     HOST,
@@ -51,8 +56,51 @@ from config import (
     MAX_UPLOAD_SIZE,
     GOOGLE_DRIVE_API_KEY,
     GOOGLE_DRIVE_DEFAULT_FOLDER_ID,
-    MOODLE_ORIGIN,
 )
+
+
+# ---------------------------------------------------------------------------
+# In-process sliding-window rate limiter
+# ---------------------------------------------------------------------------
+
+class _SlidingWindowRateLimiter:
+    """Thread-safe per-key sliding window rate limiter (no external dependencies)."""
+
+    def __init__(self) -> None:
+        self._windows: dict[str, list[float]] = defaultdict(list)
+        self._lock = Lock()
+
+    def check(self, key: str, max_requests: int, window_seconds: int) -> tuple[bool, int]:
+        """Return (allowed, retry_after_seconds). allowed=False → 429."""
+        now = time.monotonic()
+        cutoff = now - window_seconds
+        with self._lock:
+            hits = [t for t in self._windows[key] if t > cutoff]
+            self._windows[key] = hits
+            if len(hits) >= max_requests:
+                retry_after = int(hits[0] - cutoff) + 1
+                return False, retry_after
+            self._windows[key].append(now)
+            return True, 0
+
+
+_rate_limiter = _SlidingWindowRateLimiter()
+
+
+def _enforce_rate_limit(user_key: str, max_requests: int, window_seconds: int) -> None:
+    """Raise HTTP 429 with Retry-After header if rate limit exceeded."""
+    allowed, retry_after = _rate_limiter.check(user_key, max_requests, window_seconds)
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Rate limit exceeded — try again in {retry_after}s.",
+            headers={"Retry-After": str(retry_after)},
+        )
+
+
+# ---------------------------------------------------------------------------
+# Stream ticket helper
+# ---------------------------------------------------------------------------
 
 # Configure logging
 logging.basicConfig(
@@ -172,17 +220,19 @@ async def health_check():
 
 @app.get("/api/storage-mode")
 async def storage_mode():
-    """Return storage mode so the frontend knows whether WebDAV/Moodle integration is active"""
-    from config import MOODLE_INTEGRATION
-    mode = "webdav" if MOODLE_INTEGRATION else "server"
-    return {"mode": mode}
+    """Return storage mode — always 'server' now that OwnCloud has been removed"""
+    return {"mode": "server"}
 
 
 @app.post("/api/videos/upload", response_model=models.VideoResponse)
 async def upload_video(
-    file: UploadFile = File(...), session: AsyncSession = Depends(db.get_session)
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(db.get_session),
+    current_user: MoodleUser = Depends(verify_moodle_jwt),
 ):
     """Upload a video file"""
+    # 10 uploads per user per hour — large file I/O is resource-intensive.
+    _enforce_rate_limit(f"upload:{current_user.userid}", max_requests=10, window_seconds=3600)
     try:
         # Validate filename exists
         if not file.filename:
@@ -296,35 +346,6 @@ async def get_video_file(
         if not video:
             raise HTTPException(status_code=404, detail="Video not found")
 
-        # For WebDAV videos, redirect to the Moodle stream.php URL.
-        # Pass filesize so stream.php can skip the blocking HEAD request to OwnCloud.
-        # Pass the JWT token so stream.php can authenticate without a Moodle session
-        # (the SPA runs on a different origin and has no Moodle session cookie).
-        if video.source_type == "webdav":
-            fp = video.filepath or ""
-            if "stream.php" in fp:
-                stream_url = fp
-            else:
-                origin = MOODLE_ORIGIN.rstrip("/")
-                stream_url = f"{origin}/local/videoelicit/stream.php?videoid={video.id}"
-            # Append filesize param to eliminate the per-request HEAD round-trip
-            filesize = getattr(video, 'file_size', None)
-            if filesize:
-                sep = "&" if "?" in stream_url else "?"
-                stream_url = f"{stream_url}{sep}filesize={filesize}"
-            # Forward the JWT token so stream.php can authenticate the browser redirect.
-            # The token arrives either as ?token= query param (from <video> src) or
-            # as Authorization: Bearer header (from fetch() calls).
-            jwt_token = token or ""
-            if not jwt_token:
-                auth_header = request.headers.get("authorization", "")
-                if auth_header.startswith("Bearer "):
-                    jwt_token = auth_header[len("Bearer "):]
-            if jwt_token:
-                sep = "&" if "?" in stream_url else "?"
-                stream_url = f"{stream_url}{sep}token={jwt_token}"
-            return RedirectResponse(url=stream_url, status_code=302)
-
         if not os.path.exists(str(video.filepath)):
             raise HTTPException(status_code=404, detail="Video file not found on disk")
 
@@ -433,35 +454,19 @@ async def update_video(
 
 @app.delete("/api/videos/{video_id}")
 async def delete_video(video_id: int, force: bool = False, session: AsyncSession = Depends(db.get_session)):
-    """Delete a video and all its annotations
-
-    If the video is `source_type=='webdav'` the external OwnCloud file must be deleted via the Moodle/WebDAV flow.
-    To avoid orphaning remote files we refuse FastAPI-side deletes for WebDAV videos unless `?force=true` is provided.
-    """
+    """Delete a video and all its annotations"""
     try:
         video = await db.get_video(session, video_id)
         if not video:
             raise HTTPException(status_code=404, detail="Video not found")
 
-        # Reject accidental deletes for WebDAV-linked videos unless caller explicitly forces local-only delete
-        if getattr(video, 'source_type', '') == 'webdav' and not force:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "Video is linked to an external WebDAV/OwnCloud resource. "
-                    "Delete the file via the Moodle OwnCloud browser (or call the Moodle webdav API) first. "
-                    "If you really want to remove the local FastAPI record only, call this endpoint again with `?force=true`."
-                ),
-            )
-
-        # Only delete a local filesystem file — never try to remove WebDAV/external URLs or directories.
-        # Some Moodle records use '/' or stream.php URLs for external resources; guard against that.
+        # Delete the local file if it exists
         try:
             fp = str(video.filepath or "")
-            if video.source_type != 'webdav' and fp and os.path.exists(fp) and os.path.isfile(fp):
+            if fp and os.path.exists(fp) and os.path.isfile(fp):
                 os.remove(fp)
             else:
-                logger.debug(f"Skipping file unlink for video ID={video_id} (source_type={video.source_type}, filepath={fp})")
+                logger.debug(f"Skipping file unlink for video ID={video_id} (filepath={fp})")
         except Exception as e:
             logger.warning(f"Skipping file delete for video ID={video_id}: {e}")
 
@@ -669,80 +674,6 @@ async def browse_local_directory(directory: str):
         logger.error(f"Error browsing local directory: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
-@app.post("/api/videos/webdav/register", response_model=models.VideoResponse)
-async def register_webdav_video(
-    request: Request,
-    session: AsyncSession = Depends(db.get_session),
-    current_user: MoodleUser = Depends(verify_moodle_jwt),
-):
-    """
-    Register an OwnCloud/WebDAV video by its Moodle video ID.
-    If moodle_video_id is provided, look up the existing Moodle record and return it.
-    This avoids creating duplicate records in the Moodle DB.
-    """
-    try:
-        body = await request.json()
-        stream_url = body.get("stream_url")  # e.g. https://moodle.example.com/local/videoelicit/stream.php?videoid=42
-        filename = body.get("filename", "video.mp4")
-        file_size = body.get("file_size", 0)
-        moodle_video_id = body.get("moodle_video_id")  # Moodle DB video ID
-
-        if not stream_url:
-            raise HTTPException(status_code=400, detail="stream_url is required")
-
-        # If we have the Moodle video ID, look up the existing record instead of creating a new one
-        if moodle_video_id:
-            try:
-                moodle_id_int = int(moodle_video_id)
-                existing = await db.get_video(session, moodle_id_int)
-                if existing:
-                    logger.info(f"WebDAV video already registered as Moodle ID={moodle_id_int}, returning it")
-                    response_data = models.VideoResponse.model_validate(existing)
-                    response_data.annotation_count = 0
-                    return response_data
-            except (ValueError, TypeError):
-                pass  # Invalid moodle_video_id, fall through to create
-
-        # Check by filepath/stream_url (deduplication fallback)
-        existing = await db.get_video_by_filepath(session, stream_url)
-        if existing:
-            logger.info(f"WebDAV video already registered by filepath, returning it")
-            response_data = models.VideoResponse.model_validate(existing)
-            response_data.annotation_count = 0
-            return response_data
-
-        # Not found — create new record
-        video_data = models.VideoCreate(
-            filename=filename,
-            filepath=stream_url,
-            file_size=file_size,
-            mime_type="video/mp4",
-            is_local=0,
-            source_type="webdav",
-            user_id=current_user.userid,
-        )
-
-        video = await db.create_video(session, video_data)
-        logger.info(f"WebDAV video registered: {filename} (ID={video.id}, stream_url={stream_url})")
-
-        response_data = models.VideoResponse.model_validate(video)
-        response_data.annotation_count = 0
-        return response_data
-
-    except IntegrityError:
-        # Already registered — look it up and return it
-        existing = await db.get_video_by_filepath(session, stream_url)
-        if existing:
-            response_data = models.VideoResponse.model_validate(existing)
-            response_data.annotation_count = 0
-            return response_data
-        raise HTTPException(status_code=409, detail="Video already registered")
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error registering WebDAV video: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/videos/local/register", response_model=models.VideoResponse)
@@ -985,6 +916,8 @@ async def create_annotation(
     current_user: MoodleUser = Depends(verify_moodle_jwt),
 ):
     """Create a new annotation with audio recording"""
+    # 60 annotations per user per hour — each triggers transcription + pipeline.
+    _enforce_rate_limit(f"annotate:{current_user.userid}", max_requests=60, window_seconds=3600)
     try:
         # Validate video exists
         video = await db.get_video(session, video_id)
@@ -1296,6 +1229,8 @@ async def transcribe_only(
     Accepts a raw audio blob, transcribes it, and returns the text.
     Does NOT create any annotation record or trigger any pipeline.
     """
+    # 20 transcriptions per user per hour — transcription is CPU/API-intensive.
+    _enforce_rate_limit(f"transcribe:{current_user.userid}", max_requests=20, window_seconds=3600)
     import tempfile
 
     tmp_path = None
@@ -1328,12 +1263,16 @@ async def transcribe_only(
 
 @app.post("/api/annotations/{annotation_id}/review")
 async def review_annotation(
-    annotation_id: int, session: AsyncSession = Depends(db.get_session)
+    annotation_id: int,
+    session: AsyncSession = Depends(db.get_session),
+    current_user: MoodleUser = Depends(verify_moodle_jwt),
 ):
     """
     Trigger AI review of an elicitation to identify gaps in HOW/EVALUATION/FEEDBACK dimensions.
     Returns review results with prompts for missing information.
     """
+    # 30 LLM reviews per user per hour.
+    _enforce_rate_limit(f"review:{current_user.userid}", max_requests=30, window_seconds=3600)
     try:
         # Verify annotation exists and has transcription
         annotation = await db.get_annotation(session, annotation_id)

@@ -11,7 +11,7 @@ const TRANSLATIONS = {
         // Header / nav
         backToMoodle: 'Back to Moodle',
         headerSubtitle: 'ReSource Project - Expert Knowledge Capture',
-        uploadToOwnCloud: 'Upload to OwnCloud',
+        uploadVideo: 'Upload Video',
         selectVideo: 'Select Video',
         tabElicit: 'Elicit',
         tabSegment: 'Segment',
@@ -19,7 +19,7 @@ const TRANSLATIONS = {
 
         // Empty states
         noVideoLoaded: 'No Video Loaded',
-        noVideoHint: 'Click "Upload to OwnCloud" then "Select Video" to get started',
+        noVideoHint: 'Click "Upload Video" then "Select Video" to get started',
         segmentNoVideoHint: 'Open a video from the selector to view or create segments',
         noAnnotationsYet: 'No annotations yet',
         noAnnotationsHint: 'Start recording to create your first elicitation',
@@ -61,13 +61,6 @@ const TRANSLATIONS = {
 
         // Video list modal
         modalSelectVideo: 'Select Video',
-        ownCloudFiles: 'OwnCloud files',
-        ownCloudTip: 'Tip: click a file to link & load it into the player.',
-
-        // OwnCloud modal
-        uploadVideoToOwnCloud: 'Upload video to OwnCloud',
-        uploadSecureHint: 'Uploads via secure server proxy (supports large files)',
-        ownCloudNotConfigured: 'OwnCloud is not configured. Please contact your administrator.',
         loadingFiles: 'Loading files...',
 
         // Project modal
@@ -131,8 +124,7 @@ const TRANSLATIONS = {
         recordAnswer: 'Record an answer',
 
         // Video list items
-        removeFromPlugin: 'Remove from plugin (does not delete OwnCloud file)',
-        deleteFromOwnCloud: 'Delete from OwnCloud (permanent)',
+        removeFromPlugin: 'Remove from plugin',
 
         // Segment cards
         deleteSegment: 'Delete segment',
@@ -157,8 +149,7 @@ const TRANSLATIONS = {
         replaySegmentFor: 'Replay segment to recall',
 
         // No video in list
-        noVideosLoaded: 'No videos loaded yet. Click an OwnCloud file below to load it.',
-        noOwnCloudFiles: 'No video files found in your OwnCloud folder.',
+        noVideosLoaded: 'No videos loaded yet. Click a video below to load it.',
         noSegmentsForVideo: 'No segments for this video',
         loadVideoFirst: 'Load a video first to see segments.',
     },
@@ -166,7 +157,7 @@ const TRANSLATIONS = {
         // Header / nav
         backToMoodle: 'Vers Moodle',
         headerSubtitle: 'Projet ReSource - Capture de savoirs experts',
-        uploadToOwnCloud: 'Déposer sur OwnCloud',
+        uploadVideo: 'Déposer une vidéo',
         selectVideo: 'Choisir une vidéo',
         tabElicit: 'Éliciter',
         tabSegment: 'Segmenter',
@@ -174,7 +165,7 @@ const TRANSLATIONS = {
 
         // Empty states
         noVideoLoaded: 'Aucune vidéo chargée',
-        noVideoHint: 'Cliquez sur "Déposer sur OwnCloud" puis "Choisir une vidéo" pour démarrer',
+        noVideoHint: 'Cliquez sur "Déposer une vidéo" puis "Choisir une vidéo" pour démarrer',
         segmentNoVideoHint: 'Ouvrez une vidéo depuis le sélecteur pour voir ou créer des segments',
         noAnnotationsYet: 'Aucune annotation pour l\'instant',
         noAnnotationsHint: 'Commencez un enregistrement pour créer votre première élicitation',
@@ -216,13 +207,6 @@ const TRANSLATIONS = {
 
         // Video list modal
         modalSelectVideo: 'Choisir une vidéo',
-        ownCloudFiles: 'Fichiers OwnCloud',
-        ownCloudTip: 'Astuce : cliquez sur un fichier pour le lier et le charger dans le lecteur.',
-
-        // OwnCloud modal
-        uploadVideoToOwnCloud: 'Déposer une vidéo sur OwnCloud',
-        uploadSecureHint: 'Envoi via proxy sécurisé côté serveur (supporte les gros fichiers)',
-        ownCloudNotConfigured: 'OwnCloud n\'est pas configuré. Contactez votre administrateur.',
         loadingFiles: 'Chargement des fichiers...',
 
         // Project modal
@@ -286,8 +270,7 @@ const TRANSLATIONS = {
         recordAnswer: 'Enregistrer une réponse',
 
         // Video list items
-        removeFromPlugin: 'Retirer du plugin (ne supprime pas le fichier OwnCloud)',
-        deleteFromOwnCloud: 'Supprimer d\'OwnCloud (définitif)',
+        removeFromPlugin: 'Retirer du plugin',
 
         // Segment cards
         deleteSegment: 'Supprimer le segment',
@@ -312,8 +295,7 @@ const TRANSLATIONS = {
         replaySegmentFor: 'Rejouer le segment pour vous remémorer',
 
         // No video in list
-        noVideosLoaded: 'Aucune vidéo chargée. Cliquez sur un fichier OwnCloud ci-dessous pour le charger.',
-        noOwnCloudFiles: 'Aucun fichier vidéo trouvé dans votre dossier OwnCloud.',
+        noVideosLoaded: 'Aucune vidéo chargée. Cliquez sur une vidéo ci-dessous pour la charger.',
         noSegmentsForVideo: 'Aucun segment pour cette vidéo',
         loadVideoFirst: 'Chargez d\'abord une vidéo pour voir les segments.',
     },
@@ -480,13 +462,10 @@ const state = {
     tasks: [],
     task: '',
     sortBy: 'newest',
-    storageMode: 'server',
     // Segment-specific state
     segmentStartTime: null,
     segmentEndTime: null,
     segments: [],
-    // Cached list of files found in the user's OwnCloud personal folder (populated on select)
-    ownCloudFiles: [],
     // Tracks which annotation review panels are open { [annotationId]: boolean }
     showReviewPanels: {},
     // Guided Q&A voice enrichment session
@@ -507,7 +486,7 @@ const state = {
 const TOKEN_PARAM = new URLSearchParams(window.location.search).get('token');
 const MOODLE_JWT = TOKEN_PARAM || '';
 
-// Decode JWT payload (lightweight) so we can access `userid` for OwnCloud discovery fallbacks
+// Decode JWT payload (lightweight) so we can access `userid`
 function parseJwtPayload(token) {
     try {
         const payload = token.split('.')[1];
@@ -627,29 +606,6 @@ function mdToHtml(text) {
     }
 }
 
-async function loadStorageMode() {
-    if (!MOODLE_JWT) {
-        state.storageMode = 'server';
-        // updateTestModeBanner();
-        return;
-    }
-
-    try {
-        const response = await fetch(`${API_BASE}/api/storage-mode`);
-        if (!response.ok) {
-            throw new Error(`Storage mode check failed: ${response.status}`);
-        }
-        const data = await response.json();
-        state.storageMode = data.mode === 'webdav' ? 'webdav' : 'server';
-    } catch (error) {
-        console.warn('Falling back to server storage mode:', error);
-        state.storageMode = 'server';
-    }
-
-    // updateTestModeBanner();
-}
-
-
 async function initializeApp() {
     console.log('Initializing Video Elicitation Tool...');
 
@@ -681,9 +637,6 @@ async function initializeApp() {
     // Check microphone permissions
     checkMicrophonePermission();
 
-    // Load storage mode and update banner
-    await loadStorageMode();
-
     // Load craft selection from localStorage (default to glassblowing)
     state.craft = localStorage.getItem('craft') || 'glassblowing';
     // Create craft selector UI only (task selector removed)
@@ -709,9 +662,6 @@ async function initializeApp() {
 
     // Show tutorial automatically for newcomers (non-blocking)
     maybeShowTutorialForNewcomer().catch(() => {});
-
-    // Check for any uploads interrupted by a previous page navigation (non-blocking)
-    if (_webdavApiUrl) checkAndOfferResumeUploads().catch(e => console.warn('Resume check:', e));
 
     // Apply language (reads localStorage preference or defaults to 'en')
     applyLanguage();
@@ -915,28 +865,9 @@ function setupEventListeners() {
 
     // Video selection
     document.getElementById('selectVideoBtn').addEventListener('click', async () => {
-        // Offer resume banners for any uploads interrupted since last page load.
-        if (_webdavApiUrl) checkAndOfferResumeUploads().catch(e => console.warn('Resume check:', e));
+        await loadVideos();
 
-        // When user opens the video selector, proactively PROPFIND the user's OwnCloud personal folder
-        // so the UI can offer remote files without additional browsing steps.
-        if (_webdavApiUrl) {
-            try {
-                showLoading('Scanning OwnCloud user folder...');
-                await Promise.all([scanUserOwnCloudFolder(), loadVideos()]);
-                hideLoading();
-                showToast('OwnCloud', `Found ${state.ownCloudFiles.length} files in your personal folder`, 'success');
-            } catch (err) {
-                hideLoading();
-                console.error('OwnCloud scan failed:', err);
-                showToast('OwnCloud', `Scan failed: ${err.message}`, 'error');
-            }
-        } else {
-            await loadVideos();
-        }
-
-        // Open the normal video modal if we have any videos (local or linked) or remote OwnCloud files
-        if (state.videos.length > 0 || (state.ownCloudFiles && state.ownCloudFiles.length > 0)) {
+        if (state.videos.length > 0) {
             showVideoModal();
         } else {
             showToast('No Videos', 'Please upload videos first', 'info');
@@ -1005,10 +936,19 @@ function setupEventListeners() {
     document.getElementById('closeAssignVideosModalBtn').addEventListener('click', closeAssignVideosModal);
     document.getElementById('closeAssignVideosBtn').addEventListener('click', closeAssignVideosModal);
 
-    // OwnCloud Video Browser
-    document.getElementById('linkOwnCloudBtn').addEventListener('click', openOwnCloudModal);
-    document.getElementById('closeOwnCloudModalBtn').addEventListener('click', closeOwnCloudModal);
-    document.getElementById('closeOwnCloudBtn').addEventListener('click', closeOwnCloudModal);
+    // Upload Video button → trigger native file picker
+    const uploadVideoBtn = document.getElementById('uploadVideoBtn');
+    const videoUploadInput = document.getElementById('videoUploadInput');
+    if (uploadVideoBtn && videoUploadInput) {
+        uploadVideoBtn.addEventListener('click', () => videoUploadInput.click());
+        videoUploadInput.addEventListener('change', async (e) => {
+            const files = Array.from(e.target.files || []);
+            if (files.length > 0) {
+                await uploadVideos(files);
+            }
+            videoUploadInput.value = '';
+        });
+    }
 }
 
 // WebSocket Connection
@@ -1269,10 +1209,8 @@ async function uploadVideos(files) {
 
 function uploadSingleFile(file) {
     return new Promise((resolve, reject) => {
-        const isWebDav = state.storageMode === 'webdav';
-        const endpoint = isWebDav ? '/api/uploads' : '/api/videos/upload';
         const xhr = new XMLHttpRequest();
-        xhr.open('POST', `${API_BASE}${endpoint}`);
+        xhr.open('POST', `${API_BASE}/api/videos/upload`);
 
         if (MOODLE_JWT) {
             xhr.setRequestHeader('Authorization', `Bearer ${MOODLE_JWT}`);
@@ -1299,8 +1237,7 @@ function uploadSingleFile(file) {
         };
 
         const formData = new FormData();
-        const fieldName = isWebDav ? 'files' : 'file';
-        formData.append(fieldName, file, file.name);
+        formData.append('file', file, file.name);
         xhr.send(formData);
     });
 }
@@ -1328,9 +1265,6 @@ function showVideoModal() {
     const container = document.getElementById('videoListContainer');
 
     container.innerHTML = '';
-
-    // Build set of filenames/paths already loaded into the plugin (for greying out OwnCloud items)
-    const loadedFilenames = new Set(state.videos.map(v => v.filename));
 
     // ── Loaded videos (plugin-side records) ─────────────────────────────────
     if (state.videos.length === 0) {
@@ -1390,879 +1324,9 @@ function showVideoModal() {
         });
     }
 
-    // ── OwnCloud personal folder ─────────────────────────────────────────────
-    const ownCloudArea = document.getElementById('videoModalOwnCloudArea');
-    if (ownCloudArea) {
-        if (state.ownCloudFiles && state.ownCloudFiles.length > 0) {
-            ownCloudArea.style.display = 'block';
-            renderOwnCloudItemsForModal(state.ownCloudFiles, loadedFilenames);
-        } else {
-            ownCloudArea.style.display = 'none';
-        }
-    }
-
     modal.classList.add('active');
 }
 
-/**
- * Render OwnCloud files inside the Select Video modal.
- * Files already loaded into the plugin are shown greyed-out (not_loadable).
- * A trash icon on each item deletes the OwnCloud file (permanent).
- */
-function renderOwnCloudItemsForModal(files, loadedFilenames) {
-    const listEl = document.getElementById('videoModalOwnCloudFilesList');
-    if (!listEl) return;
-    listEl.innerHTML = '';
-
-    const videoFiles = files.filter(f => f.type === 'file');
-
-    if (videoFiles.length === 0) {
-        listEl.innerHTML = `<p style="color:#999;font-size:0.85rem;padding:0.5rem;">${t('noOwnCloudFiles')}</p>`;
-        return;
-    }
-
-    videoFiles.forEach(f => {
-        const alreadyLoaded = loadedFilenames.has(f.name);
-        const item = document.createElement('div');
-        item.style.cssText = `
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 0.5rem 0.75rem; border-bottom: 1px solid #eee; gap: 0.5rem;
-            ${alreadyLoaded ? 'opacity:0.45; pointer-events:none;' : 'cursor:pointer;'}
-        `;
-        if (!alreadyLoaded) {
-            item.style.pointerEvents = 'auto';
-            item.addEventListener('click', (e) => {
-                if (e.target.closest('.oc-delete-btn')) return;
-                const videoUrl = f.url || f.href || f.path || f.name;
-                linkOwnCloudVideo(f.name, f.size || 0, videoUrl);
-                closeVideoModal();
-            });
-        }
-
-        item.innerHTML = `
-            <div style="display:flex;align-items:center;gap:0.6rem;min-width:0;flex:1;">
-                <i class="fas fa-video" style="color:${alreadyLoaded ? '#aaa' : '#0066cc'};flex-shrink:0;"></i>
-                <div style="min-width:0;">
-                    <div style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(f.name)}</div>
-                    <div style="font-size:0.8rem;color:#888;">${f.size ? formatFileSize(f.size) : ''}</div>
-                </div>
-                ${alreadyLoaded ? `<span style="font-size:0.75rem;color:#888;margin-left:auto;white-space:nowrap;">${currentLang === 'fr' ? 'déjà chargé' : 'already loaded'}</span>` : ''}
-            </div>
-            <button class="btn btn-icon btn-small btn-danger oc-delete-btn"
-                title="${t('deleteFromOwnCloud')}"
-                style="flex-shrink:0;pointer-events:auto;">
-                <i class="fas fa-trash"></i>
-            </button>
-        `;
-        // Attach delete handler via data attributes (avoids HTML-attribute quoting issues with JSON.stringify)
-        const deleteBtn = item.querySelector('.oc-delete-btn');
-        if (deleteBtn) {
-            deleteBtn._ocName = f.name;
-            deleteBtn._ocPath = f.path || f.href || '';
-            deleteBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                deleteOwnCloudFile(e.currentTarget._ocName, e.currentTarget._ocPath);
-            });
-        }
-
-        listEl.appendChild(item);
-    });
-}
-
-/**
- * Delete an OwnCloud file via the WebDAV API proxy.
- * This is the ONLY way users can delete their OwnCloud files from within the plugin.
- */
-async function deleteOwnCloudFile(filename, path) {
-    if (!confirm(`Delete "${filename}" from OwnCloud?\n\nThis is permanent and cannot be undone.`)) return;
-    if (!_webdavApiUrl) { showToast('Error', 'WebDAV API not configured', 'error'); return; }
-    try {
-        showLoading(`Deleting ${filename} from OwnCloud…`);
-        const resp = await fetch(`${_webdavApiUrl}?action=delete&path=${encodeURIComponent(path || filename)}`, { method: 'GET' });
-        hideLoading();
-        const data = await resp.json().catch(() => ({}));
-        if (!resp.ok || data.error) {
-            throw new Error(data.error || `HTTP ${resp.status}`);
-        }
-        showToast('Deleted', `${filename} removed from OwnCloud`, 'success');
-
-        // Also remove the local plugin record if this file was already registered
-        const linkedVideo = state.videos.find(v => v.filename === filename && v.source_type === 'webdav');
-        if (linkedVideo) {
-            try {
-                await fetch(`${API_BASE}/api/videos/${linkedVideo.id}?force=true`, { method: 'DELETE' });
-            } catch (_) { /* best-effort */ }
-            await loadVideos();
-        }
-
-        // Refresh OwnCloud file list and re-render modal
-        await scanUserOwnCloudFolder();
-        const loadedFilenames = new Set(state.videos.map(v => v.filename));
-        renderOwnCloudItemsForModal(state.ownCloudFiles, loadedFilenames);
-    } catch (err) {
-        hideLoading();
-        console.error('OwnCloud delete failed', err);
-        showToast('Error', `Failed to delete: ${err.message}`, 'error');
-    }
-}
-
-function closeVideoModal() {
-    document.getElementById('videoListModal').classList.remove('active');
-}
-
-// OwnCloud Video Browser Functions
-// Resolved once per page load
-const _webdavApiUrl = new URLSearchParams(window.location.search).get('webdav_api_url') || '';
-const _moodleWwwRoot = (() => {
-    // Derive from webdav_api_url: strip path after /local/
-    const u = _webdavApiUrl;
-    const idx = u.indexOf('/local/');
-    return idx !== -1 ? u.slice(0, idx) : window.location.origin;
-})();
-
-async function openOwnCloudModal() {
-    const modal = document.getElementById('ownCloudModal');
-
-    // Clear previous state (upload-only modal — do not show file browser here)
-    const cfgWarn = document.getElementById('ownCloudConfigWarning'); if (cfgWarn) cfgWarn.style.display = 'none';
-    const uploadArea = document.getElementById('ownCloudUploadArea'); if (uploadArea) uploadArea.style.display = 'none';
-    const loadingEl = document.getElementById('ownCloudLoading'); if (loadingEl) loadingEl.style.display = 'block';
-
-    modal.classList.add('active');
-
-    // Check if OwnCloud is configured
-    try {
-        if (!_webdavApiUrl) throw new Error('WebDAV API URL not configured');
-
-        const response = await fetch(`${_webdavApiUrl}?action=checkconfig`);
-        const data = await response.json();
-
-        if (!data.configured) {
-            document.getElementById('ownCloudLoading').style.display = 'none';
-            document.getElementById('ownCloudConfigWarning').style.display = 'block';
-            return;
-        }
-
-        // Show upload area and wire up file input
-        const uploadAreaEl = document.getElementById('ownCloudUploadArea');
-        if (uploadAreaEl) uploadAreaEl.style.display = 'block';
-        const fileInput = document.getElementById('ownCloudFileInput');
-        fileInput.onchange = null; // clear old listener
-        fileInput.addEventListener('change', async (e) => {
-            const file = e.target.files[0];
-            if (file) await uploadToOwnCloud(file);
-            fileInput.value = '';
-        });
-
-        // ownCloudModal is upload-only: do not list/browse files here.
-        if (loadingEl) loadingEl.style.display = 'none';
-    } catch (error) {
-        console.error('Error checking OwnCloud config:', error);
-        document.getElementById('ownCloudLoading').style.display = 'none';
-        document.getElementById('ownCloudConfigWarning').style.display = 'block';
-        showToast('Error', 'Failed to access OwnCloud', 'error');
-    }
-}
-
-// ── Resumable Upload State ────────────────────────────────────────────────────
-// Persists chunked-upload progress to localStorage so a page navigation mid-upload
-// does not lose everything. The OwnCloud session folder (MKCOL'd under /uploads/)
-// survives page close; on return the client can verify it and resume from last offset.
-//
-// localStorage key: oc_pending_upload_{encodeURIComponent(filename)}
-// Value JSON: { uploadId, filename, filesize, nextOffset, startedAt }
-// nextOffset is written BEFORE each chunk PUT — if the page closes during a PUT,
-// the worst case is that chunk is re-sent (OwnCloud PUT is idempotent by offset).
-
-function saveUploadState(filename, uploadId, filesize, nextOffset) {
-    try {
-        localStorage.setItem(
-            'oc_pending_upload_' + encodeURIComponent(filename),
-            JSON.stringify({ uploadId, filename, filesize, nextOffset, startedAt: Date.now() })
-        );
-    } catch (e) { console.warn('saveUploadState failed', e); }
-}
-
-function clearUploadState(filename) {
-    try { localStorage.removeItem('oc_pending_upload_' + encodeURIComponent(filename)); }
-    catch (e) { console.warn('clearUploadState failed', e); }
-}
-
-function loadPendingUploads() {
-    const pending = [];
-    try {
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && key.startsWith('oc_pending_upload_')) {
-                try {
-                    const val = JSON.parse(localStorage.getItem(key));
-                    if (val && val.uploadId && val.filename) pending.push(val);
-                } catch (_) { localStorage.removeItem(key); }
-            }
-        }
-    } catch (e) { console.warn('loadPendingUploads failed', e); }
-    return pending;
-}
-
-/**
- * Check localStorage for interrupted uploads, verify each against OwnCloud via
- * chunkstatus, and show a resume banner for any that still have a live session.
- * Called from initializeApp() and from the selectVideoBtn click handler.
- */
-async function checkAndOfferResumeUploads() {
-    if (!_webdavApiUrl) return;
-    const pending = loadPendingUploads();
-    for (const saved of pending) {
-        try {
-            const params = new URLSearchParams({ action: 'chunkstatus', upload_id: saved.uploadId });
-            const res  = await fetch(`${_webdavApiUrl}?${params}`, { method: 'GET' });
-            const data = await res.json();
-            if (!data.exists) { clearUploadState(saved.filename); continue; }
-
-            // Compute resume offset from what OwnCloud has confirmed
-            let resumeOffset = saved.nextOffset;
-            if (data.chunks && data.chunks.length > 0) {
-                const ocNext = Math.max(...data.chunks) + CHUNK_SIZE;
-                resumeOffset = Math.min(Math.max(ocNext, saved.nextOffset), saved.filesize);
-            }
-            _showResumeBanner(saved.filename, saved.filesize,
-                { uploadId: saved.uploadId, nextOffset: resumeOffset });
-        } catch (e) { console.warn('Resume check error for', saved.filename, e); }
-    }
-}
-
-/**
- * Render a "resume upload" banner inside the floating upload panel.
- * The user must re-select the file (browser security: File objects don't survive navigation).
- */
-function _showResumeBanner(filename, filesize, resumeState) {
-    const bannerId = 'resume-banner-' + encodeURIComponent(filename);
-    if (document.getElementById(bannerId)) return;
-
-    ensureUploadPanel();
-    const list = document.getElementById('uploadProgressList');
-    if (!list) return;
-
-    const resumedMB = (resumeState.nextOffset / 1048576).toFixed(1);
-    const totalMB   = (filesize / 1048576).toFixed(1);
-    const shortName = filename.length > 35 ? filename.slice(0, 32) + '...' : filename;
-
-    const banner = document.createElement('div');
-    banner.id = bannerId;
-    banner.style.cssText = 'margin-bottom:10px;padding:8px;background:#fff3cd;border:1px solid #ffc107;border-radius:6px;font-size:0.85rem;';
-
-    const msg = document.createElement('div');
-    msg.style.marginBottom = '4px';
-    msg.textContent = `Incomplete upload: ${shortName} (${resumedMB} / ${totalMB} MB done)`;
-    banner.appendChild(msg);
-
-    const hint = document.createElement('div');
-    hint.style.cssText = 'color:#6c757d;font-size:0.78rem;margin-bottom:6px;';
-    hint.textContent = 'Select the same file again to resume from where it stopped.';
-    banner.appendChild(hint);
-
-    const btnRow = document.createElement('div');
-    btnRow.style.cssText = 'display:flex;gap:6px;';
-
-    const resumeBtn = document.createElement('button');
-    resumeBtn.textContent = 'Resume';
-    resumeBtn.style.cssText = 'padding:4px 10px;background:#0066cc;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.82rem;';
-    resumeBtn.addEventListener('click', () => {
-        const fi = document.createElement('input');
-        fi.type = 'file';
-        fi.accept = 'video/*';
-        fi.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            if (file.name !== filename) {
-                showToast('Resume', `Please select "${filename}" to resume.`, 'error'); return;
-            }
-            if (file.size !== filesize) {
-                showToast('Resume', 'File size mismatch — select the exact same file.', 'error'); return;
-            }
-            banner.remove();
-            uploadToOwnCloud(file, resumeState);
-        });
-        fi.click();
-    });
-
-    const dismissBtn = document.createElement('button');
-    dismissBtn.textContent = 'Dismiss';
-    dismissBtn.style.cssText = 'padding:4px 10px;background:#6c757d;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.82rem;';
-    dismissBtn.addEventListener('click', () => {
-        clearUploadState(filename);
-        banner.remove();
-        const l = document.getElementById('uploadProgressList');
-        if (l && !l.children.length) {
-            const panel = document.getElementById('uploadProgressPanel');
-            if (panel) panel.remove();
-        }
-    });
-
-    btnRow.appendChild(resumeBtn);
-    btnRow.appendChild(dismissBtn);
-    banner.appendChild(btnRow);
-    list.appendChild(banner);
-}
-// ── End Resumable Upload State ─────────────────────────────────────────────────
-
-/**
- * Upload a file to OwnCloud via the PHP proxy using OwnCloud DAV chunking 1.0.
- * Chunks are sent sequentially (10 MB each) so no single request exceeds OwnCloud's
- * per-request body limit. Progress is shown in the fixed upload panel; the upload
- * button stays enabled so the user can start additional uploads concurrently.
- * Pass resumeState = { uploadId, nextOffset } to resume an interrupted upload.
- */
-const CHUNK_SIZE = 10 * 1024 * 1024; // 10 MB per chunk
-
-async function uploadToOwnCloud(file, resumeState = null) {
-    if (!_webdavApiUrl) { showToast('Error', 'WebDAV API not configured', 'error'); return; }
-
-    // Dismiss any existing resume banner for this file (fresh start or user-initiated resume).
-    const _existBanner = document.getElementById('resume-banner-' + encodeURIComponent(file.name));
-    if (_existBanner) _existBanner.remove();
-
-    // Each upload gets its own row in the floating panel — button stays enabled.
-    ensureUploadPanel();
-    // Reuse the existing OwnCloud session when resuming; generate a new one otherwise.
-    const sessionUploadId = resumeState
-        ? resumeState.uploadId
-        : ('oc-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8));
-    updateUploadRow(file.name, 0, resumeState ? 'Resuming…' : 'Preparing…');
-
-    // Per-file row in the inline modal upload list.
-    const uploadList = document.getElementById('ownCloudUploadList');
-    let inlineRow = null;
-    let inlineBar = null;
-    let inlinePct = null;
-    let inlineStatus = null;
-
-    if (uploadList) {
-        uploadList.style.display = 'block';
-        inlineRow = document.createElement('div');
-        inlineRow.dataset.file = file.name;
-        inlineRow.style.cssText = 'margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid #e9ecef;';
-
-        const header = document.createElement('div');
-        header.style.cssText = 'display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:3px;';
-        const nameEl = document.createElement('span');
-        nameEl.style.cssText = 'overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:75%;';
-        nameEl.textContent = file.name.length > 40 ? file.name.slice(0, 37) + '…' : file.name;
-        inlinePct = document.createElement('span');
-        inlinePct.style.fontWeight = '600';
-        inlinePct.textContent = '0%';
-        header.appendChild(nameEl);
-        header.appendChild(inlinePct);
-        inlineRow.appendChild(header);
-
-        const barTrack = document.createElement('div');
-        barTrack.style.cssText = 'height:6px; background:#dee2e6; border-radius:999px; overflow:hidden;';
-        inlineBar = document.createElement('div');
-        inlineBar.style.cssText = 'height:100%; width:0; background:#0066cc; transition:width 0.2s;';
-        barTrack.appendChild(inlineBar);
-        inlineRow.appendChild(barTrack);
-
-        inlineStatus = document.createElement('div');
-        inlineStatus.style.cssText = 'font-size:0.8rem; color:#666; margin-top:3px;';
-        inlineRow.appendChild(inlineStatus);
-
-        uploadList.appendChild(inlineRow);
-    }
-
-    const updateProgress = (pct, statusText) => {
-        updateUploadRow(file.name, pct, statusText);
-        if (inlineBar) inlineBar.style.width = pct + '%';
-        if (inlinePct) inlinePct.textContent = pct + '%';
-        if (inlineStatus) inlineStatus.textContent = statusText || '';
-    };
-
-    const setError = (msg) => {
-        updateUploadRow(file.name, 0, '✗ ' + msg, true);
-        if (inlineStatus) { inlineStatus.textContent = '✗ ' + msg; inlineStatus.style.color = '#dc3545'; }
-        if (inlineBar) inlineBar.style.background = '#dc3545';
-    };
-
-    try {
-        // Step 1: Ensure destination folder exists on OwnCloud.
-        await fetch(`${_webdavApiUrl}?action=ensureuserfolder`, { method: 'GET' });
-
-        // Step 2: Create the OwnCloud upload session (MKCOL /uploads/{uuid}/{session_id}/).
-        // Skip when resuming — the session folder already exists on OwnCloud.
-        if (!resumeState) {
-            const startParams = new URLSearchParams({ action: 'chunkstart', upload_id: sessionUploadId, filename: file.name });
-            const startRes = await fetch(`${_webdavApiUrl}?${startParams}`, { method: 'POST' });
-            const startData = await startRes.json();
-            if (!startData.success) throw new Error(startData.error || 'Failed to start chunked upload');
-        }
-
-        // Step 3: Send chunks sequentially, starting from resumeState.nextOffset when resuming.
-        const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-        const startChunk  = resumeState ? Math.floor(resumeState.nextOffset / CHUNK_SIZE) : 0;
-        for (let i = startChunk; i < totalChunks; i++) {
-            const offset = i * CHUNK_SIZE;
-            const chunk  = file.slice(offset, offset + CHUNK_SIZE);
-            const fd     = new FormData();
-            fd.append('chunk', chunk, file.name);
-
-            const chunkParams = new URLSearchParams({ action: 'chunkput', upload_id: sessionUploadId, offset: String(offset) });
-            const pct = Math.round((offset / file.size) * 100);
-            const uploadedMB = (offset / 1048576).toFixed(1);
-            const totalMB    = (file.size  / 1048576).toFixed(1);
-            updateProgress(pct, `${uploadedMB} / ${totalMB} MB`);
-
-            // Persist state BEFORE sending — if the page closes mid-PUT, this offset is recoverable.
-            saveUploadState(file.name, sessionUploadId, file.size, offset);
-
-            await new Promise((resolve, reject) => {
-                const xhr = new XMLHttpRequest();
-                xhr.open('POST', `${_webdavApiUrl}?${chunkParams}`);
-                xhr.addEventListener('load', () => {
-                    try {
-                        const res = JSON.parse(xhr.responseText);
-                        if (xhr.status >= 200 && xhr.status < 300 && res.success) resolve(res);
-                        else reject(new Error(res.error || `Chunk HTTP ${xhr.status}`));
-                    } catch (e) { reject(new Error('Invalid chunk response')); }
-                });
-                xhr.addEventListener('error', () => reject(new Error('Network error on chunk ' + i)));
-                xhr.send(fd);
-            });
-        }
-
-        // Step 4: MOVE assembled chunks to final destination and register in Moodle DB.
-        updateProgress(99, 'Assembling…');
-        if (inlinePct) inlinePct.innerHTML = '<i class="fas fa-spinner fa-spin" style="font-size:0.9em;"></i>';
-
-        const finishParams = new URLSearchParams({
-            action:    'chunkfinish',
-            upload_id: sessionUploadId,
-            filename:  file.name,
-            filesize:  String(file.size),
-        });
-
-        let finishData = null;
-        try {
-            const finishRes = await fetch(`${_webdavApiUrl}?${finishParams}`, { method: 'POST' });
-            const text = await finishRes.text();
-            try { finishData = JSON.parse(text); } catch (_) { /* non-JSON body — see below */ }
-        } catch (netErr) {
-            // network-level failure — fall through to assembly polling
-        }
-
-        // If chunkfinish returned a gateway error (504 etc.) or non-JSON, OwnCloud may still
-        // be assembling chunks. Poll registerupload every 10 s with no cap — assembly of a
-        // 6 GB file can take many minutes. Only give up after 15 min of no progress.
-        if (!finishData?.success) {
-            if (finishData?.error && !finishData.error.match(/gateway|timeout|504/i)) {
-                // Definitive API error — clear state and surface it
-                clearUploadState(file.name);
-                throw new Error(finishData.error);
-            }
-            const assemblyStart   = Date.now();
-            const MAX_ASSEMBLY_MS = 15 * 60 * 1000; // 15 minutes
-            while (true) {
-                await new Promise(r => setTimeout(r, 10_000)); // 10 s between polls
-                const elapsed = Math.round((Date.now() - assemblyStart) / 1000);
-                updateProgress(99, `Assembling… (${elapsed} s)`);
-                if (inlinePct) inlinePct.innerHTML =
-                    `<i class="fas fa-spinner fa-spin" style="font-size:0.9em;"></i> ${elapsed}s`;
-                const checkParams = new URLSearchParams({
-                    action:    'registerupload',
-                    filename:  file.name,
-                    file_path: `Moodle_OwnCloud_Storage/Users/${window.USER_ID || ''}/${file.name}`,
-                    filesize:  String(file.size),
-                });
-                try {
-                    const checkRes  = await fetch(`${_webdavApiUrl}?${checkParams}`, { method: 'GET' });
-                    const checkData = JSON.parse(await checkRes.text());
-                    if (checkData.success) { finishData = checkData; break; }
-                    // 422 = "not found yet" — keep polling
-                    if (checkRes.status !== 422 && checkData.error && !checkData.error.match(/not found/i)) {
-                        clearUploadState(file.name);
-                        throw new Error(checkData.error || `Unexpected status ${checkRes.status}`);
-                    }
-                } catch (pollErr) {
-                    if (pollErr.message?.startsWith('Unexpected')) throw pollErr;
-                    console.warn('Assembly poll transient error:', pollErr.message);
-                }
-                if (Date.now() - assemblyStart > MAX_ASSEMBLY_MS) {
-                    // Do NOT clear state — chunks are on OwnCloud; user can retry on next visit.
-                    throw new Error('Assembly exceeded 15 minutes — check OwnCloud server load');
-                }
-            }
-        }
-
-        const moodleVideoId = finishData.moodle_id;
-
-        // Step 5: Register in FastAPI backend.
-        if (moodleVideoId) {
-            const streamUrl = `${_moodleWwwRoot}/local/videoelicit/stream.php?videoid=${moodleVideoId}`;
-            await fetch(`${API_BASE}/api/videos/webdav/register`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    stream_url:      streamUrl,
-                    filename:        file.name,
-                    file_size:       file.size,
-                    moodle_video_id: moodleVideoId,
-                }),
-            });
-        }
-
-        // Clear persisted state — upload finished successfully.
-        clearUploadState(file.name);
-
-        updateProgress(100, '✓ Upload complete!');
-        if (inlineStatus) { inlineStatus.textContent = '✓ Upload complete!'; inlineStatus.style.color = '#28a745'; }
-
-        await browseOwnCloudDirectory('/');
-        await loadVideos();
-
-        setTimeout(() => {
-            removeUploadRow(file.name);
-            if (inlineRow && inlineRow.parentNode) {
-                inlineRow.remove();
-                if (uploadList && !uploadList.children.length) uploadList.style.display = 'none';
-            }
-        }, 4000);
-
-    } catch (err) {
-        console.error('OwnCloud upload error:', err);
-        setError(err.message || 'Upload failed');
-    }
-}
-
-function closeOwnCloudModal() {
-    document.getElementById('ownCloudModal').classList.remove('active');
-}
-
-async function browseOwnCloudDirectory(path) {
-    try {
-        const loadingEl = document.getElementById('ownCloudLoading');
-        const browserEl = document.getElementById('ownCloudBrowser');
-        if (loadingEl) loadingEl.style.display = 'block';
-        if (browserEl) browserEl.style.display = 'none';
-        
-        const webdavApiUrl = new URLSearchParams(window.location.search).get('webdav_api_url');
-        if (!webdavApiUrl) {
-            throw new Error('WebDAV API URL not configured');
-        }
-        
-        const response = await fetch(`${webdavApiUrl}?action=browse&path=${encodeURIComponent(path)}`);
-        if (!response.ok) {
-            // Try to extract server-provided error text/json to show a more helpful message
-            let serverMessage = '';
-            try {
-                const text = await response.text();
-                const parsed = text ? JSON.parse(text) : null;
-                serverMessage = parsed && parsed.error ? parsed.error : (text || '');
-            } catch (e) {
-                /* ignore parse errors - fall back to status code */
-            }
-            throw new Error(`Failed to browse directory: ${response.status}${serverMessage ? ' — ' + serverMessage : ''}`);
-        }
-        
-        const data = await response.json();
-        
-        // Update breadcrumb
-        updateOwnCloudBreadcrumb(path);
-        
-        // Choose appropriate container (Select Video modal uses videoModalOwnCloudFilesList)
-        const targetContainer = document.getElementById('videoModalOwnCloudFilesList') ? 'videoModalOwnCloudFilesList' : 'ownCloudFilesList';
-        // Render files and folders into the chosen container
-        renderOwnCloudItems(data.items || [], path, targetContainer);
-        
-        if (loadingEl) loadingEl.style.display = 'none';
-        if (browserEl) browserEl.style.display = 'block';
-    } catch (error) {
-        console.error('Error browsing OwnCloud directory:', error);
-        showToast('Error', `Failed to browse OwnCloud directory: ${error.message}`, 'error');
-        const loadingEl = document.getElementById('ownCloudLoading');
-        if (loadingEl) loadingEl.style.display = 'none';
-    }
-}
-
-// Recursively PROPFIND an OwnCloud path and return all files found (depth-first)
-async function propfindOwnCloudRecursive(startPath = '/', maxDepth = 10, maxFiles = 5000) {
-    if (!_webdavApiUrl) throw new Error('WebDAV API URL not configured');
-
-    const collected = [];
-    let fileCount = 0;
-
-    async function walk(path, depth) {
-        if (depth > maxDepth) return;
-
-        const resp = await fetch(`${_webdavApiUrl}?action=browse&path=${encodeURIComponent(path)}`);
-        if (!resp.ok) {
-            // Try to surface server-provided error payload (JSON or plain text)
-            let body = await resp.text();
-            try { body = JSON.parse(body); } catch (e) { /* keep as text */ }
-            throw new Error(`Browse failed for ${path}: HTTP ${resp.status} - ${typeof body === 'string' ? body : JSON.stringify(body)}`);
-        }
-        const data = await resp.json();
-        const items = data.items || [];
-
-        for (const it of items) {
-            if (it.type === 'folder') {
-                const subpath = path.endsWith('/') ? path + it.name : path + '/' + it.name;
-                await walk(subpath, depth + 1);
-                if (fileCount >= maxFiles) return;
-            } else if (it.type === 'file') {
-                collected.push({ ...it, parentPath: path });
-                fileCount++;
-                if (fileCount >= maxFiles) return;
-            }
-        }
-    }
-
-    await walk(startPath, 0);
-    return collected;
-}
-
-// Ensure and scan the user's personal OwnCloud folder (uses ensureuserfolder endpoint)
-async function scanUserOwnCloudFolder() {
-    if (!_webdavApiUrl) throw new Error('WebDAV API URL not configured');
-
-    // Ensure folder exists and get the relative path
-    const ensureRes = await fetch(`${_webdavApiUrl}?action=ensureuserfolder`);
-    if (!ensureRes.ok) {
-        const txt = await ensureRes.text();
-        throw new Error(`ensureuserfolder failed: ${ensureRes.status} - ${txt}`);
-    }
-    const ensureJson = await ensureRes.json();
-    const folderPath = ensureJson.folder_path ? (`/` + ensureJson.folder_path.replace(/^\//, '')) : '/';
-
-    // Try recursive PROPFIND of the user's folder. If it fails (remote permission/PROPFIND error),
-    // fall back to a conservative scan from root with limited depth so we still discover some files.
-    try {
-        const files = await propfindOwnCloudRecursive(folderPath, 20, 5000);
-        state.ownCloudFiles = files;
-        return files;
-    } catch (err) {
-        console.warn('User-folder PROPFIND failed, attempting discovery fallbacks:', err.message);
-
-        // 1) Try to discover user's folder by scanning the base/root tree shallowly
-        try {
-            const discoveryItems = await propfindOwnCloudRecursive('/', 3, 2000);
-            const userid = (typeof window !== 'undefined' && window.USER_ID) ? window.USER_ID : null;
-
-            // Prefer paths that contain 'Users/{id}' or 'Moodle_OwnCloud_Storage'
-            let candidatePath = null;
-            if (userid) {
-                const match = discoveryItems.find(i => i.path && i.path.includes(`/Users/${userid}`));
-                if (match) candidatePath = match.parentPath || ('/' + match.path.replace(/^\//, ''));
-            }
-
-            if (!candidatePath) {
-                const mos = discoveryItems.find(i => i.name && i.name.toLowerCase().includes('moodle_owncloud_storage'));
-                if (mos) candidatePath = mos.parentPath || ('/' + mos.path.replace(/^\//, ''));
-            }
-
-            if (candidatePath) {
-                try {
-                    const files = await propfindOwnCloudRecursive(candidatePath, 10, 5000);
-                    state.ownCloudFiles = files;
-                    showToast('Warning', `User-folder discovery succeeded (scanned ${candidatePath})`, 'warning');
-                    return files;
-                } catch (e2) {
-                    console.warn('Discovery candidate scan failed:', e2.message);
-                }
-            }
-        } catch (discoveryErr) {
-            console.warn('Discovery scan failed:', discoveryErr.message);
-        }
-
-        // 2) Conservative fallback: scan '/' with small depth to avoid heavy operations
-        try {
-            const fallbackFiles = await propfindOwnCloudRecursive('/', 3, 500);
-            state.ownCloudFiles = fallbackFiles;
-            showToast('Warning', 'Full user-folder scan failed — used limited fallback (root) scan', 'warning');
-            return fallbackFiles;
-        } catch (err2) {
-            console.error('Fallback OwnCloud scan also failed:', err2);
-            throw err; // rethrow original error for caller visibility
-        }
-    }
-}
-
-function updateOwnCloudBreadcrumb(path) {
-    const breadcrumbBtn = document.querySelector('[data-path="/"]');
-    if (breadcrumbBtn) {
-        breadcrumbBtn.addEventListener('click', () => browseOwnCloudDirectory('/'));
-    }
-    
-    const breadcrumbPathEl = document.getElementById('breadcrumbPath');
-    if (breadcrumbPathEl) {
-        if (path !== '/') {
-            const parts = path.split('/').filter(p => p);
-            let html = ' / ';
-            let currentPath = '/';
-            
-            parts.forEach((part, index) => {
-                currentPath += part + (index === parts.length - 1 ? '' : '/');
-                const isLast = index === parts.length - 1;
-                if (isLast) {
-                    html += `<span style="color: #0066cc; font-weight: 600;">${part}</span>`;
-                } else {
-                    html += `<button class="breadcrumb-btn" data-path="${currentPath}" style="margin: 0 0.25rem;">${part}</button>`;
-                }
-            });
-            
-            breadcrumbPathEl.innerHTML = html;
-            
-            // Add click handlers to breadcrumb buttons
-            document.querySelectorAll('[data-path]').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const p = btn.dataset.path;
-                    browseOwnCloudDirectory(p);
-                });
-            });
-        } else {
-            breadcrumbPathEl.innerHTML = '';
-        }
-    }
-    
-    const ownCloudBreadcrumbEl = document.getElementById('ownCloudBreadcrumb');
-    if (ownCloudBreadcrumbEl) ownCloudBreadcrumbEl.style.display = 'block';
-}
-
-function renderOwnCloudItems(items, currentPath, containerId) {
-    containerId = containerId || 'ownCloudFilesList';
-    const container = document.getElementById(containerId);
-    if (!container) return;
-    container.innerHTML = '';
-    
-    if (!items || items.length === 0) {
-        container.innerHTML = '<div style="padding: 1rem; text-align: center; color: #999;">No files or folders found</div>';
-        return;
-    }
-    
-    // Separate folders and files
-    const folders = items.filter(item => item.type === 'folder');
-    const files = items.filter(item => item.type === 'file');
-    
-    // Render folders first
-    folders.forEach(folder => {
-        const item = document.createElement('div');
-        item.className = 'owncloud-item folder-item';
-        item.style.padding = '0.75rem';
-        item.style.borderBottom = '1px solid #eee';
-        item.style.cursor = 'pointer';
-        item.style.display = 'flex';
-        item.style.alignItems = 'center';
-        item.style.gap = '0.75rem';
-        
-        item.innerHTML = `
-            <i class="fas fa-folder" style="color: #ffb81c; font-size: 1.2rem;"></i>
-            <span style="flex-grow: 1; font-weight: 500;">${folder.name}</span>
-        `;
-        
-        item.addEventListener('click', () => {
-            const newPath = currentPath.endsWith('/') ? currentPath + folder.name : currentPath + '/' + folder.name;
-            browseOwnCloudDirectory(newPath);
-        });
-        
-        container.appendChild(item);
-    });
-    
-    // Render video files
-    files.forEach(file => {
-        // Defensive: trim trailing slashes from name provided by server
-        const safeName = (file.name || '').replace(/\/+$/g, '');
-        const isVideo = /\.(mp4|webm|ogg|avi|mov|mkv|flv|wmv|m4v)$/i.test(safeName);
-        
-        const item = document.createElement('div');
-        item.className = 'owncloud-item file-item';
-        item.style.padding = '0.75rem';
-        item.style.borderBottom = '1px solid #eee';
-        item.style.display = 'flex';
-        item.style.alignItems = 'center';
-        item.style.gap = '0.75rem';
-        
-        if (isVideo) {
-            item.style.cursor = 'pointer';
-            item.style.backgroundColor = '#f5f5f5';
-        } else {
-            item.style.opacity = '0.6';
-        }
-        
-        const fileSize = file.size ? formatFileSize(file.size) : 'Unknown';
-        item.innerHTML = `
-            <i class="fas ${isVideo ? 'fa-video' : 'fa-file'}" style="color: ${isVideo ? '#0066cc' : '#999'}; font-size: 1.1rem;"></i>
-            <div style="flex-grow: 1;">
-                <div style="font-weight: ${isVideo ? '500' : '400'}">${safeName}</div>
-                <div style="font-size: 0.85rem; color: #666;">${fileSize}</div>
-            </div>
-        `;
-        
-        if (isVideo) {
-            item.addEventListener('click', () => {
-                const videoUrl = file.url || `${currentPath}${currentPath.endsWith('/') ? '' : '/'}${safeName}`;
-                linkOwnCloudVideo(safeName, file.size, videoUrl);
-            });
-        }
-        
-        container.appendChild(item);
-    });
-}
-
-async function linkOwnCloudVideo(filename, fileSize, videoUrl) {
-    try {
-        showLoading('Linking video…');
-
-        if (!_webdavApiUrl) throw new Error('WebDAV API URL not configured');
-
-        // Step 1: Register in Moodle DB (idempotent)
-        // Send form-encoded POST so Moodle's required_param() picks up values reliably
-        const params = new URLSearchParams();
-        params.append('url', videoUrl);
-        params.append('filename', filename);
-        params.append('filesize', String(fileSize || 0));
-
-        const linkRes = await fetch(`${_webdavApiUrl}?action=link`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: params.toString(),
-        });
-        if (!linkRes.ok) {
-            // try to extract server message
-            let txt = await linkRes.text();
-            try { txt = JSON.parse(txt).error || txt; } catch (e) { /* keep as text */ }
-            throw new Error(`Link failed: HTTP ${linkRes.status} - ${txt}`);
-        }
-        const linkData = await linkRes.json();
-        if (!linkData.success) throw new Error(linkData.error || 'Link failed');
-
-        const moodleVideoId = linkData.video.id;
-
-        // Step 2: Register in FastAPI using stream.php as the filepath
-        const streamUrl = `${_moodleWwwRoot}/local/videoelicit/stream.php?videoid=${moodleVideoId}`;
-        const regRes = await fetch(`${API_BASE}/api/videos/webdav/register`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                stream_url:      streamUrl,
-                filename,
-                file_size:       fileSize || 0,
-                moodle_video_id: moodleVideoId,
-            }),
-        });
-        const regData = await regRes.json();
-
-        // Step 3: Load the video directly
-        await loadVideos();
-        // close whichever modal was used
-        closeOwnCloudModal();
-        closeVideoModal();
-        await loadVideo(regData.id);
-
-        showToast('Success', `Video "${filename}" linked successfully`, 'success');
-    } catch (error) {
-        console.error('Error linking OwnCloud video:', error);
-        showToast('Error', error.message || 'Failed to link video', 'error');
-    } finally {
-        hideLoading();
-    }
-}
 
 // Load and Play Video
 async function loadVideo(videoId) {
@@ -5010,29 +4074,17 @@ async function deleteVideo(videoId) {
     const video = state.videos.find(v => v.id === videoId);
     const name = video ? video.filename : `ID ${videoId}`;
 
-    const willDeleteRemote = video && video.source_type === 'webdav';
-    // Trash on loaded videos = remove plugin record only. OwnCloud deletion is handled separately.
-    const confirmMsg = willDeleteRemote
-        ? `Remove "${name}" from the plugin?\n\nThis removes the video and all its elicitations from this tool.\nThe file on OwnCloud is NOT deleted — use the trash icon in the OwnCloud section for that.`
-        : `Delete video "${name}" and ALL its elicitations? This cannot be undone.`;
-
-    if (!confirm(confirmMsg)) {
+    if (!confirm(`Delete video "${name}" and ALL its elicitations? This cannot be undone.`)) {
         return;
     }
 
     try {
         showLoading('Removing video...');
 
-        // Choose endpoint: WebDAV videos get force=true (local record only, OwnCloud untouched)
-        const deleteUrl = willDeleteRemote
-            ? `${API_BASE}/api/videos/${videoId}?force=true`
-            : `${API_BASE}/api/videos/${videoId}`;
-
-        const response = await fetch(deleteUrl, { method: 'DELETE' });
+        const response = await fetch(`${API_BASE}/api/videos/${videoId}`, { method: 'DELETE' });
 
         if (!response.ok) {
-            // 404 means the record is already gone (e.g. OwnCloud file was deleted first and
-            // cleaned up the local record). Treat it as success so the UI stays consistent.
+            // 404 means the record is already gone — treat as success
             if (response.status !== 404) {
                 const errText = await response.text();
                 throw new Error(errText || 'Failed to delete video');
@@ -5053,7 +4105,7 @@ async function deleteVideo(videoId) {
 
         await loadVideos();
         showVideoModal();
-        showToast('Removed', willDeleteRemote ? 'Plugin record removed (OwnCloud file untouched)' : 'Video and elicitations deleted', 'success');
+        showToast('Removed', 'Video and elicitations deleted', 'success');
     } catch (error) {
         console.error('Error deleting video:', error);
         showToast('Error', 'Failed to delete video', 'error');
@@ -5420,32 +4472,24 @@ Cet outil a été conçu dans le cadre du projet **ReSOuRCE** pour capturer et p
 
 ## 1. Uploader une vidéo
 
-Vos vidéos sont stockées dans un espace personnel sécurisé appelé **OwnCloud**, hébergé par Mines Paris.
-
-**OwnCloud, c'est quoi ?**
-C'est un espace de stockage en ligne similaire à Dropbox ou Google Drive, mais hébergé sur les serveurs de l'école, garantissant la confidentialité de vos données.
+Vos vidéos sont stockées de façon sécurisée sur les serveurs de Mines Paris. Cliquez sur **"Déposer une vidéo"** pour ajouter une nouvelle vidéo, puis **"Choisir une vidéo"** pour la charger dans le lecteur.
 
 **Format accepté :** MP4, MOV, AVI, WebM (jusqu'à 5 Go par fichier).
 
 **Étapes pour uploader une vidéo :**
-1. Cliquez sur **"Upload to OwnCloud"** dans la barre du haut.
-2. Une fenêtre s'ouvre — cliquez sur **"Upload video to OwnCloud"**.
-3. Sélectionnez votre fichier vidéo depuis votre ordinateur.
-4. La barre de progression indique l'avancement. Attendez le message **"Upload complete !"** avant de fermer.
-
-> La première fois, un dossier personnel est créé automatiquement à votre nom.
+1. Cliquez sur **"Déposer une vidéo"** dans la barre du haut.
+2. Sélectionnez votre fichier vidéo depuis votre ordinateur.
+3. La barre de progression indique l'avancement. Attendez le message **"Upload complete !"** avant de continuer.
 
 ---
 
 ## 2. Sélectionner une vidéo
 
-Une fois votre vidéo uploadée, cliquez sur **"Select Video"** dans la barre du haut.
+Une fois votre vidéo uploadée, cliquez sur **"Choisir une vidéo"** dans la barre du haut.
 
-- La fenêtre affiche vos vidéos déjà chargées dans le plugin, ainsi que les fichiers présents dans votre dossier OwnCloud.
-- **Fichiers grisés** : déjà chargés, pas besoin de les recharger.
-- Cliquez sur un fichier OwnCloud non grisé pour le charger dans le lecteur vidéo.
-- L'icône 🗑 à droite d'un fichier OwnCloud **supprime le fichier définitivement** de votre espace OwnCloud.
-- L'icône 🗑 à côté d'une vidéo chargée retire uniquement la vidéo du plugin (le fichier OwnCloud est conservé).
+- La fenêtre affiche vos vidéos disponibles.
+- Cliquez sur une vidéo pour la charger dans le lecteur.
+- L'icône corbeille retire la vidéo du plugin.
 
 ---
 
@@ -5527,29 +4571,13 @@ function closeTutorialModal() {
 
 /**
  * Auto-open tutorial for first-time users.
- * A newcomer is someone who has no personal OwnCloud folder yet.
- * We check this after the OwnCloud config check resolves.
- * Falls back to localStorage flag if WebDAV is not configured.
+ * Opens the tutorial on first visit (no localStorage flag set).
  */
 async function maybeShowTutorialForNewcomer() {
     try {
         const seen = localStorage.getItem('tutorialSeen');
         if (seen) return; // Already acknowledged
-
-        if (!_webdavApiUrl) {
-            // Can't check OwnCloud — show tutorial for first visit anyway
-            openTutorialModal();
-            return;
-        }
-
-        // Check if user folder exists via ensureuserfolder (creates it if absent, returns {created:true} the first time)
-        const resp = await fetch(`${_webdavApiUrl}?action=ensureuserfolder`);
-        if (!resp.ok) { openTutorialModal(); return; }
-        const data = await resp.json().catch(() => ({}));
-        // If the folder was just created → newcomer
-        if (data.created === true) {
-            openTutorialModal();
-        }
+        openTutorialModal();
     } catch (e) {
         // Non-blocking — ignore errors silently
     }
