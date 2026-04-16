@@ -28,7 +28,14 @@ DATABASE_URL = f"sqlite+aiosqlite:///{CHROMA_DIR / 'annotations.db'}"
 
 # === MOODLE INTEGRATION CONFIGURATION ===
 MOODLE_INTEGRATION = os.getenv('MOODLE_INTEGRATION', 'false').lower() in ('true', '1', 'yes')
-MOODLE_JWT_SECRET = os.getenv('MOODLE_JWT_SECRET', 'changeme')
+MOODLE_JWT_SECRET = os.getenv('MOODLE_JWT_SECRET', '')
+if not MOODLE_JWT_SECRET or MOODLE_JWT_SECRET == 'changeme':
+    import warnings
+    warnings.warn(
+        "MOODLE_JWT_SECRET is not set or is using the insecure default 'changeme'. "
+        "Set a strong random secret in the .env file before accepting real traffic.",
+        stacklevel=1,
+    )
 MOODLE_PROXY_MODE = os.getenv('MOODLE_PROXY_MODE', 'false').lower() in ('true', '1', 'yes')
 MOODLE_ORIGIN = os.getenv('MOODLE_ORIGIN', '')
 
@@ -45,7 +52,7 @@ MOODLE_TABLE_PREFIX = os.getenv('MOODLE_TABLE_PREFIX', 'mdl_')
 # Server settings
 HOST = "localhost"
 PORT = 8005
-DEBUG = True
+DEBUG = os.getenv('DEBUG', 'false').lower() in ('true', '1', 'yes')
 
 # CORS settings — includes the Moodle origin so the iframe can make same-origin API calls
 _extra_origins = [o.strip() for o in os.getenv("CORS_EXTRA_ORIGINS", "").split(",") if o.strip()]

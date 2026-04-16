@@ -38,9 +38,10 @@
                     <span class="lang-flag" id="langFlag">🇬🇧</span>
                     <span id="langLabel">EN</span>
                 </button>
-                <button id="linkOwnCloudBtn" class="btn btn-info">
-                    <i class="fas fa-cloud-upload-alt"></i> <span data-i18n="uploadToOwnCloud">Upload to OwnCloud</span>
+                <button id="uploadVideoBtn" class="btn btn-info">
+                    <i class="fas fa-upload"></i> <span data-i18n="uploadVideo">Upload Video</span>
                 </button>
+                <input type="file" id="videoUploadInput" accept="video/*,.mp4,.mov,.avi,.mkv,.webm" style="display:none" multiple>
                 <button id="selectVideoBtn" class="btn btn-secondary">
                     <i class="fas fa-video"></i> <span data-i18n="selectVideo">Select Video</span>
                 </button>
@@ -70,7 +71,7 @@
                     <div class="empty-state">
                         <i class="fas fa-film empty-icon"></i>
                         <h3 data-i18n="noVideoLoaded">No Video Loaded</h3>
-                        <p data-i18n="noVideoHint">Click "Upload to OwnCloud" then "Select Video" to get started</p>
+                        <p data-i18n="noVideoHint">Click "Upload Video" then "Select Video" to get started</p>
                     </div>
                 </div>
 
@@ -270,15 +271,6 @@
                     <div id="videoListContainer" class="video-list">
                         <!-- Video items will be populated here -->
                     </div>
-
-                    <!-- Embedded OwnCloud browser (also shown inside "Select Video") -->
-                    <div id="videoModalOwnCloudArea" style="margin-top:1rem; display: none;">
-                        <h3 style="margin-top:0.5rem; margin-bottom:0.5rem;" data-i18n="ownCloudFiles">OwnCloud files</h3>
-                        <div id="videoModalOwnCloudFilesList" class="videos-list-scrollable" style="max-height: 240px; border: 1px solid #ddd; border-radius: 4px; overflow-y: auto; padding: 0.25rem;">
-                            <!-- OwnCloud files for selection will be populated here -->
-                        </div>
-                        <div style="font-size:0.85rem; color:#666; margin-top:0.5rem;" data-i18n="ownCloudTip">Tip: click a file to link &amp; load it into the player.</div>
-                    </div>
                 </div>
             </div>
         </div>
@@ -365,47 +357,6 @@
 
                     <div class="modal-actions">
                         <button class="btn btn-secondary" id="cancelLocalBtn" data-i18n="close">Close</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- OwnCloud Upload Modal (upload-only) -->
-        <div id="ownCloudModal" class="modal">
-            <div class="modal-content modal-large">
-                <div class="modal-header">
-                    <h2><i class="fas fa-cloud-upload-alt"></i> <span data-i18n="uploadToOwnCloud">Upload to OwnCloud</span></h2>
-                    <button class="modal-close" id="closeOwnCloudModalBtn">&times;</button>
-                </div>
-                <div class="modal-body">
-                    <!-- OwnCloud Config Check -->
-                    <div id="ownCloudConfigWarning" style="display: none; margin-bottom: 1rem;">
-                        <div style="padding: 1rem; background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; color: #856404;">
-                            <i class="fas fa-exclamation-triangle"></i> <span data-i18n="ownCloudNotConfigured">OwnCloud is not configured. Please contact your administrator.</span>
-                        </div>
-                    </div>
-
-                    <!-- Upload to OwnCloud -->
-                    <div id="ownCloudUploadArea" style="margin-bottom: 1rem; padding: 0.75rem; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; display: none;">
-                        <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
-                            <button class="btn btn-primary btn-small" id="ownCloudUploadBtn" onclick="document.getElementById('ownCloudFileInput').click()">
-                                <i class="fas fa-upload"></i> <span data-i18n="uploadVideoToOwnCloud">Upload video to OwnCloud</span>
-                            </button>
-                            <span style="font-size: 0.85rem; color: #666;" data-i18n="uploadSecureHint">Uploads via secure server proxy (supports large files)</span>
-                        </div>
-                        <input type="file" id="ownCloudFileInput" accept="video/*,.mp4,.mov,.avi,.mkv,.webm" style="display:none">
-                        <!-- Per-file upload progress list -->
-                        <div id="ownCloudUploadList" style="margin-top: 0.75rem; max-height: 144px; overflow-y: auto; display: none;"></div>
-                    </div>
-
-                    <!-- Loading Indicator -->
-                    <div id="ownCloudLoading" style="display: none; text-align: center; padding: 2rem;">
-                        <i class="fas fa-spinner fa-spin" style="font-size: 2rem; color: #0066cc;"></i>
-                        <p data-i18n="loadingFiles">Loading files...</p>
-                    </div>
-
-                    <div class="modal-actions">
-                        <button class="btn btn-secondary" id="closeOwnCloudBtn" data-i18n="close">Close</button>
                     </div>
                 </div>
             </div>
