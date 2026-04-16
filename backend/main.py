@@ -270,6 +270,7 @@ async def upload_video(
             filepath=str(file_path),
             file_size=file_size,
             mime_type=file.content_type,
+            user_id=current_user.userid,
         )
 
         video = await db.create_video(session, video_data)

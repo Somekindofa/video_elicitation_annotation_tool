@@ -1197,13 +1197,23 @@ function removeUploadRow(fileName) {
 async function uploadVideos(files) {
     ensureUploadPanel();
 
+    let succeeded = 0;
     for (const file of files) {
-        await uploadSingleFile(file);
+        try {
+            await uploadSingleFile(file);
+            succeeded++;
+        } catch (err) {
+            showToast('Upload failed', err.message || file.name, 'error');
+        }
     }
 
     const panel = document.getElementById('uploadProgressPanel');
-    if (panel) {
-        setTimeout(() => panel.remove(), 2000);
+    if (panel) setTimeout(() => panel.remove(), 2000);
+
+    if (succeeded > 0) {
+        await loadVideos();
+        showToast('Upload complete', `${succeeded} video${succeeded > 1 ? 's' : ''} ready`, 'success');
+        showVideoModal();
     }
 }
 
@@ -1260,6 +1270,10 @@ async function loadVideos() {
 }
 
 // Video Modal
+function closeVideoModal() {
+    document.getElementById('videoListModal').classList.remove('active');
+}
+
 function showVideoModal() {
     const modal = document.getElementById('videoListModal');
     const container = document.getElementById('videoListContainer');
