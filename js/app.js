@@ -1727,6 +1727,9 @@ function renderAnnotations() {
         // Replaces the legacy HOW/EVALUATION/FEEDBACK review. No LLM call per
         // annotation — everything here comes from the cached coverage score.
         const reviewPanelHTML = renderCoveragePanel(annotation);
+        const weakBadgeHTML = isAnnotationWeak(annotation)
+            ? `<span class="annotation-weak-badge" title="Élicitation courte : peu de marqueurs détectés."><i class="fa-solid fa-triangle-exclamation"></i> Élicitation brève</span>`
+            : '';
 
         item.innerHTML = `
             <div class="annotation-header">
@@ -1735,6 +1738,7 @@ function renderAnnotations() {
                         ${formatTime(annotation.start_time)} - ${formatTime(annotation.end_time)}
                         (${duration.toFixed(1)}s)
                     </span>
+                    ${weakBadgeHTML}
                     ${taskBadgeHTML}
                 </div>
                 <div class="annotation-actions">
@@ -2799,9 +2803,19 @@ async function saveTranscriptionEdit(annotationId, newText, itemElement) {
             annotation.transcription_status = updated.transcription_status || annotation.transcription_status;
         }
 
+        // Invalidate this annotation's cached coverage score so the detector
+        // runs again against the new text on the next coverage refresh.
+        if (state.coverage && state.coverage.scores) {
+            delete state.coverage.scores[annotationId];
+        }
+
         // Remove editor and re-render
         renderAnnotations();
         renderTimeline();
+        // Re-score + re-aggregate + repaint banner, pips and panel.
+        if (typeof updateCoverageForAnnotations === 'function') {
+            updateCoverageForAnnotations().catch(e => console.warn('coverage refresh failed', e));
+        }
         showToast('Saved', 'Transcription updated', 'success');
         // Trigger extended transcript regeneration
         await regenerateExtendedTranscript(annotationId);
@@ -4787,7 +4801,7 @@ function renderCoveragePanel(annotation) {
         const label = COVERAGE_PHASE_META[p].label;
         const hint = s.status === 'absent' ? COVERAGE_PHASE_META[p].hint : '';
         return `
-            <div class="coverage-row" data-status="${s.status}">
+            <div class="coverage-row" data-phase="${p}" data-status="${s.status}">
                 <span class="coverage-row-dot" data-status="${s.status}"></span>
                 <span class="coverage-row-label">${label}</span>
                 <span class="coverage-row-status">${COVERAGE_STATUS_LABEL[s.status] || s.status}</span>
@@ -4814,6 +4828,7 @@ function renderCoveragePanel(annotation) {
                 <div class="coverage-rows">${rowsHTML}</div>
                 <div class="coverage-transcript-label">Transcription (marqueurs surlignés) :</div>
                 <div class="coverage-transcript">${highlighted}</div>
+                ${renderCoveragePanelActions(annotation, score)}
             </div>
         </div>`;
 }
@@ -4867,4 +4882,111 @@ function highlightTranscript(transcript, markers) {
     }
     if (idx < transcript.length) out += escapeHtml(transcript.slice(idx));
     return out;
+}
+
+// ============================================================================
+// Weak-annotation signalling + redo actions
+// Weak = transcription completed AND either all three phases absent, OR the
+// transcript is shorter than COVERAGE_MIN_TOKENS. Unknown (no score yet) is
+// NOT weak — avoids flashing the badge on cards mid-scoring.
+// ============================================================================
+
+const COVERAGE_MIN_TOKENS = 10;
+
+function isAnnotationWeak(annotation) {
+    if (!annotation) return false;
+    if (annotation.transcription_status !== 'completed') return false;
+
+    const s = state.coverage && state.coverage.scores && state.coverage.scores[annotation.id];
+    if (!s) return false;
+
+    const allAbsent = COVERAGE_PHASES.every(p => ((s[p] || {}).status || 'absent') === 'absent');
+    const tooShort = (s.token_count || 0) < COVERAGE_MIN_TOKENS;
+    return allAbsent || tooShort;
+}
+
+// Actions row inside the coverage panel: shown only when at least one phase
+// is absent (i.e. there is still ground to cover on this segment).
+function renderCoveragePanelActions(annotation, score) {
+    const anyAbsent = COVERAGE_PHASES.some(p => ((score[p] || {}).status || 'absent') === 'absent');
+    if (!anyAbsent) return '';
+
+    return `
+        <div class="coverage-actions">
+            <span class="coverage-actions-hint">
+                Besoin d'en dire plus sur ce moment ?
+            </span>
+            <div class="coverage-actions-buttons">
+                <button class="btn btn-small coverage-action-btn" onclick="event.stopPropagation(); redoRecording(${annotation.id})" title="Supprime l'ancien enregistrement et en démarre un nouveau sur ce segment.">
+                    <i class="fa-solid fa-microphone"></i> Ré-enregistrer
+                </button>
+                <button class="btn btn-small coverage-action-btn coverage-action-btn--secondary" onclick="event.stopPropagation(); retranscribeAnnotation(${annotation.id})" title="Relance Whisper sur l'audio existant.">
+                    <i class="fa-solid fa-arrows-rotate"></i> Re-transcrire
+                </button>
+            </div>
+        </div>`;
+}
+
+async function retranscribeAnnotation(annotationId) {
+    if (!confirm('Relancer la transcription de cet enregistrement ?\n\nLa transcription actuelle sera remplacée.')) return;
+    try {
+        const resp = await fetch(`${API_BASE}/api/annotations/${annotationId}/retranscribe`, {
+            method: 'POST',
+            headers: MOODLE_JWT ? { 'Authorization': `Bearer ${MOODLE_JWT}` } : {},
+        });
+        if (!resp.ok) throw new Error(await resp.text());
+        // Drop cached score so the next coverage refresh rescores against the
+        // new transcript once WS signals completion.
+        if (state.coverage && state.coverage.scores) {
+            delete state.coverage.scores[annotationId];
+        }
+        showToast('Transcription', 'Re-transcription en cours…', 'info');
+    } catch (e) {
+        showToast('Erreur', `Re-transcription: ${e.message}`, 'error');
+    }
+}
+
+async function redoRecording(annotationId) {
+    const ann = state.annotations.find(a => a.id === annotationId);
+    if (!ann) return;
+
+    if (!confirm(
+        'Ré-enregistrer ce moment ?\n\n' +
+        "L'ancien enregistrement et sa transcription seront supprimés, puis un nouvel enregistrement démarrera automatiquement. " +
+        'La vidéo se positionnera au début du segment.'
+    )) return;
+
+    const startTime = ann.start_time;
+
+    try {
+        // Delete the old annotation first so we don't end up with overlapping
+        // rows. The server removes the audio blob on disk.
+        const resp = await fetch(`${API_BASE}/api/annotations/${annotationId}`, {
+            method: 'DELETE',
+            headers: MOODLE_JWT ? { 'Authorization': `Bearer ${MOODLE_JWT}` } : {},
+        });
+        if (!resp.ok) throw new Error(await resp.text());
+
+        // Drop cached coverage state for this id.
+        if (state.coverage && state.coverage.scores) {
+            delete state.coverage.scores[annotationId];
+        }
+        state.annotations = state.annotations.filter(a => a.id !== annotationId);
+
+        // Seek to the segment start, then arm the recorder. Keeps the normal
+        // recording pipeline (which reads video currentTime as start_time).
+        const player = document.getElementById('videoPlayer');
+        if (player) {
+            player.currentTime = startTime;
+            try { await player.play(); } catch (_) { /* autoplay policies */ }
+        }
+        renderAnnotations();
+        renderTimeline();
+        renderCoverageBanner();
+
+        showToast('Enregistrement', 'Segment prêt à être ré-enregistré.', 'info');
+        await startRecording();
+    } catch (e) {
+        showToast('Erreur', `Ré-enregistrement: ${e.message}`, 'error');
+    }
 }

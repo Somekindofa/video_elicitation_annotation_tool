@@ -3435,12 +3435,26 @@ body {
     padding: 6px 8px;
     background: #fff;
     border: 1px solid var(--border-color);
+    border-left: 3px solid var(--border-color);
     border-radius: 6px;
     font-size: 0.82rem;
 }
-.coverage-row[data-status="absent"]  { opacity: 0.85; }
-.coverage-row[data-status="covered"] { border-color: var(--accent-color); }
-.coverage-row[data-status="partial"] { border-color: var(--warning-color); }
+/* Phase tint on the left edge + faint background, matching transcript marks. */
+.coverage-row[data-phase="quoi"] {
+    border-left-color: var(--primary-color);
+    background: rgba(37, 99, 235, 0.05);
+}
+.coverage-row[data-phase="comment"] {
+    border-left-color: var(--warning-color);
+    background: rgba(245, 158, 11, 0.06);
+}
+.coverage-row[data-phase="pourquoi"] {
+    border-left-color: var(--accent-color);
+    background: rgba(16, 185, 129, 0.06);
+}
+/* Status dims the row so absent phases visibly recede. */
+.coverage-row[data-status="absent"]  { opacity: 0.65; }
+.coverage-row[data-status="partial"] { opacity: 0.9; }
 
 .coverage-row-dot {
     width: 10px;
@@ -3519,4 +3533,63 @@ body {
 .phase-mark--pourquoi {
     background: rgba(16, 185, 129, 0.12);  /* accent */
     border-bottom-color: var(--accent-color);
+}
+
+/* ==========================================================================
+   Weak-annotation badge + redo actions inside the coverage panel
+   ========================================================================== */
+
+.annotation-weak-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 7px;
+    margin-left: 6px;
+    border-radius: 999px;
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--warning-color);
+    font-size: 0.7rem;
+    font-weight: 700;
+    border: 1px solid var(--warning-color);
+    letter-spacing: 0.02em;
+}
+.annotation-weak-badge .fa-triangle-exclamation {
+    font-size: 0.7rem;
+}
+
+.coverage-actions {
+    margin-top: 10px;
+    padding: 10px;
+    border-top: 1px dashed var(--border-color);
+    background: rgba(245, 158, 11, 0.04);
+    border-radius: 6px;
+}
+.coverage-actions-hint {
+    display: block;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    font-style: italic;
+    margin-bottom: 8px;
+}
+.coverage-actions-buttons {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.coverage-action-btn {
+    flex: 1;
+    min-width: 0;
+    padding: 6px 10px;
+    font-size: 0.8rem;
+    background: var(--primary-color);
+    color: #fff;
+    border: 1px solid var(--primary-color);
+    border-radius: 6px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.coverage-action-btn:hover { filter: brightness(0.95); }
+.coverage-action-btn--secondary {
+    background: #fff;
+    color: var(--primary-color);
 }

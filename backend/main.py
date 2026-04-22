@@ -1266,6 +1266,46 @@ async def transcribe_only(
                 pass
 
 
+@app.post("/api/annotations/{annotation_id}/retranscribe")
+async def retranscribe_annotation(
+    annotation_id: int,
+    session: AsyncSession = Depends(db.get_session),
+    current_user: MoodleUser = Depends(verify_moodle_jwt),
+):
+    """Re-run Whisper on the annotation's existing audio file.
+
+    Useful when the original transcription was garbled but the recording is
+    fine. The audio blob on disk is kept; only the transcription and its
+    downstream derived fields are recomputed.
+    """
+    _enforce_rate_limit(f"retranscribe:{current_user.userid}", max_requests=30, window_seconds=3600)
+
+    annotation = await db.get_annotation(session, annotation_id)
+    if not annotation:
+        raise HTTPException(status_code=404, detail="Annotation not found")
+
+    audio_path = str(annotation.audio_filepath or "")
+    if not audio_path or not os.path.exists(audio_path):
+        raise HTTPException(
+            status_code=404,
+            detail="Original audio file is no longer available on disk",
+        )
+
+    # Clear downstream fields so the UI drops stale coverage/tag/review data.
+    await db.update_annotation(
+        session,
+        annotation_id,
+        models.AnnotationUpdate(
+            transcription_status="processing",
+            transcription=None,
+        ),
+    )
+
+    import asyncio
+    asyncio.create_task(process_transcription(annotation_id, audio_path))
+    return {"status": "queued", "annotation_id": annotation_id}
+
+
 @app.post("/api/annotations/{annotation_id}/review")
 async def review_annotation(
     annotation_id: int,
