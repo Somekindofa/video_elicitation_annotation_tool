@@ -36,11 +36,24 @@ class PhaseScore(BaseModel):
     status: PhaseStatus
 
 
+class Marker(BaseModel):
+    text: str
+    char_start: int
+    char_end: int
+
+
+class MarkerBuckets(BaseModel):
+    quoi: list[Marker] = Field(default_factory=list)
+    comment: list[Marker] = Field(default_factory=list)
+    pourquoi: list[Marker] = Field(default_factory=list)
+
+
 class Score(BaseModel):
     token_count: int
     quoi: PhaseScore
     comment: PhaseScore
     pourquoi: PhaseScore
+    markers: MarkerBuckets = Field(default_factory=MarkerBuckets)
 
 
 class ScoreRequest(BaseModel):

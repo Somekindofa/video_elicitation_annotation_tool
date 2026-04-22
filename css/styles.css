@@ -3365,3 +3365,158 @@ body {
     margin-bottom: 4px;
     color: #334155;
 }
+
+/* ==========================================================================
+   Per-annotation coverage panel — Quoi / Comment / Pourquoi
+   Replaces the legacy review-panel (HOW/EVALUATION/FEEDBACK).
+   ========================================================================== */
+
+.coverage-panel-container {
+    margin-top: 10px;
+    border-top: 1px solid var(--border-color);
+}
+
+.coverage-toggle-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 2px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    user-select: none;
+}
+.coverage-toggle-header:hover { color: var(--primary-color); }
+.coverage-toggle-header--loading {
+    cursor: default;
+    font-style: italic;
+}
+
+.coverage-toggle-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+}
+
+.coverage-chip {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #fff;
+    background: #cbd5e1;
+}
+.coverage-chip[data-status="absent"]  { background: #94a3b8; }
+.coverage-chip[data-status="partial"] { background: var(--warning-color); }
+.coverage-chip[data-status="covered"] { background: var(--accent-color); }
+
+.coverage-panel {
+    display: none;
+    padding: 10px 4px 4px;
+}
+.coverage-panel.visible { display: block; }
+
+.coverage-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+.coverage-row {
+    display: grid;
+    grid-template-columns: 12px 1fr auto auto;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    background: #fff;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 0.82rem;
+}
+.coverage-row[data-status="absent"]  { opacity: 0.85; }
+.coverage-row[data-status="covered"] { border-color: var(--accent-color); }
+.coverage-row[data-status="partial"] { border-color: var(--warning-color); }
+
+.coverage-row-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #cbd5e1;
+}
+.coverage-row-dot[data-status="absent"]  { background: #94a3b8; }
+.coverage-row-dot[data-status="partial"] { background: var(--warning-color); }
+.coverage-row-dot[data-status="covered"] { background: var(--accent-color); }
+
+.coverage-row-label {
+    font-weight: 700;
+    color: #1e293b;
+}
+.coverage-row-status {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+.coverage-row-hits {
+    font-variant-numeric: tabular-nums;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    min-width: 1.5em;
+    text-align: right;
+}
+.coverage-row-hint {
+    grid-column: 1 / -1;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    font-style: italic;
+    margin-top: 4px;
+    line-height: 1.35;
+}
+
+.coverage-transcript-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+}
+
+.coverage-transcript {
+    padding: 10px 12px;
+    background: #f8fafc;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 0.88rem;
+    line-height: 1.6;
+    color: #1e293b;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* Phase marker highlights inside the transcript */
+.phase-mark {
+    padding: 1px 3px;
+    border-radius: 3px;
+    background: transparent;
+    border-bottom: 2px solid transparent;
+    color: inherit;
+    font-weight: 500;
+}
+.phase-mark--quoi {
+    background: rgba(37, 99, 235, 0.10);   /* primary */
+    border-bottom-color: var(--primary-color);
+}
+.phase-mark--comment {
+    background: rgba(245, 158, 11, 0.12);  /* warning */
+    border-bottom-color: var(--warning-color);
+}
+.phase-mark--pourquoi {
+    background: rgba(16, 185, 129, 0.12);  /* accent */
+    border-bottom-color: var(--accent-color);
+}

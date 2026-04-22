@@ -1723,107 +1723,10 @@ function renderAnnotations() {
             relaunchTaggingBtn = `<button class="btn btn-icon btn-tiny" onclick="event.stopPropagation(); triggerTagging(${annotation.id});" title="${t('relaunchTagging')}"><i class="fa-solid fa-tags"></i></button>`;
         }
 
-        // --- Review panel ---
-        let reviewPanelHTML = '';
-        if (annotation.review_status === 'processing') {
-            reviewPanelHTML = `<div class="review-panel-container"><div class="ai-pipeline-status"><i class="fa-solid fa-magnifying-glass"></i> <span>AI Review in progress...</span></div></div>`;
-        } else if (annotation.review_status === 'completed' && annotation.review_results) {
-            let rr = annotation.review_results;
-            if (typeof rr === 'string') { try { rr = JSON.parse(rr); } catch(e) { rr = {}; } }
-
-            const tier = rr.completeness_tier || 'MINIMAL';
-            const tierColors = { MINIMAL: '#dc3545', PARTIAL: '#ffc107', SUBSTANTIAL: '#17a2b8', COMPLETE: '#28a745' };
-            const tierLabels = { MINIMAL: 'Minimal', PARTIAL: 'Partiel', SUBSTANTIAL: 'Substantiel', COMPLETE: 'Complet' };
-            const tierColor = tierColors[tier] || '#6c757d';
-            const tierLabel = tierLabels[tier] || tier;
-
-            const sa = rr.sensations_analysis || {};
-            const sensationTypes = [
-                { key: 'visual_mentioned', label: 'Visuel', icon: 'fa-eye', cls: 'visual' },
-                { key: 'tactile_mentioned', label: 'Tactile', icon: 'fa-hand', cls: 'tactile' },
-                { key: 'auditory_mentioned', label: 'Auditif', icon: 'fa-ear-listen', cls: 'auditory' },
-                { key: 'proprioceptive_mentioned', label: 'Proprioceptif', icon: 'fa-person', cls: 'proprioceptive' },
-            ];
-            const sensationBadges = sensationTypes
-                .filter(s => sa[s.key])
-                .map(s => `<span class="sensation-badge ${s.cls}"><i class="fa-solid ${s.icon}"></i> ${s.label}</span>`)
-                .join('');
-
-            const dims = rr.dimensions || {};
-            const dimOrder = ['HOW', 'EVALUATION', 'FEEDBACK'];
-            let dimsHTML = '';
-            dimOrder.forEach(dimKey => {
-                const dim = dims[dimKey];
-                if (!dim) return;
-                const covered = dim.covered;
-                const cardClass = covered ? 'complete' : 'incomplete';
-                const checkIcon = covered ? '✓' : '✗';
-                const statusLabel = covered ? 'Complet' : 'Incomplet';
-
-                let whatIsGoodHTML = '';
-                if (covered && dim.what_is_good && dim.what_is_good.length > 0) {
-                    const items = dim.what_is_good.map(w => `<li>${escapeHtml(w)}</li>`).join('');
-                    whatIsGoodHTML = `<div class="what-is-good"><strong>✓ Ce qui est bien :</strong><ul>${items}</ul></div>`;
-                }
-
-                let missingHTML = '';
-                if (!covered && dim.missing_elements && dim.missing_elements.length > 0) {
-                    missingHTML = `<p class="missing-elements"><em>Manque: ${escapeHtml(dim.missing_elements.join(', '))}</em></p>`;
-                }
-
-                let promptsHTML = '';
-                if (!covered && dim.prompts && dim.prompts.length > 0) {
-                    const promptItems = dim.prompts.map(p => `<div class="prompt-item"><span>${escapeHtml(p)}</span></div>`).join('');
-                    promptsHTML = `<div class="prompts-list">${promptItems}</div>`;
-                }
-
-                const contentStyle = covered ? 'display: none;' : 'display: none;';
-                const clickAttr = covered ? '' : `onclick="toggleDimension(${annotation.id}, '${dimKey}')"`;
-                dimsHTML += `
-                    <div class="dimension-card ${cardClass}" ${clickAttr}>
-                        <div class="dimension-header">
-                            <strong>${checkIcon} ${dimKey}</strong>
-                            <span>${statusLabel}</span>
-                        </div>
-                        <div class="dimension-content" id="dim-${annotation.id}-${dimKey}" style="${contentStyle}">
-                            ${whatIsGoodHTML}${missingHTML}${promptsHTML}
-                        </div>
-                    </div>`;
-            });
-
-            const readyToComplete = rr.ready_to_proceed;
-            const relaunchReviewBtn = `<button class="btn btn-icon btn-tiny" onclick="triggerReview(${annotation.id})" title="${t('relaunchReview')}"><i class="fa-solid fa-arrow-rotate-right"></i></button>`;
-
-            const panelOpen = !!state.showReviewPanels[annotation.id];
-            reviewPanelHTML = `
-                <div class="review-panel-container">
-                    <div class="review-toggle-header" onclick="toggleReviewPanel(${annotation.id})">
-                        <span class="review-toggle-label">
-                            <i class="fa-solid fa-magnifying-glass"></i>
-                            AI Review
-                            <span class="tier-badge" style="background-color: ${tierColor}">${tierLabel}</span>
-                        </span>
-                        <span class="review-toggle-indicator"><i class="fa-solid fa-chevron-${panelOpen ? 'up' : 'down'}"></i></span>
-                    </div>
-                    <div class="review-panel ${panelOpen ? 'visible' : ''}" id="review-panel-${annotation.id}">
-                        <div class="review-header-row">
-                            <div class="review-header">
-                                <div class="sensations-badges">${sensationBadges}</div>
-                            </div>
-                            ${relaunchReviewBtn}
-                        </div>
-                        ${dimsHTML}
-                        <div class="review-actions">
-                            <button class="btn edit-elicitation-btn" onclick="editElicitation(${annotation.id})">
-                                <i class="fa-solid fa-pencil"></i> ${t('modifyElicitation')}
-                            </button>
-                            <button class="btn mark-complete-btn ${readyToComplete ? '' : 'disabled'}" onclick="markElicitationComplete(${annotation.id})" ${readyToComplete ? '' : 'disabled'}>
-                                <i class="fa-solid fa-check"></i> ${t('markComplete')}
-                            </button>
-                        </div>
-                    </div>
-                </div>`;
-        }
+        // --- Coverage panel (Quoi / Comment / Pourquoi, spaCy-driven) ---
+        // Replaces the legacy HOW/EVALUATION/FEEDBACK review. No LLM call per
+        // annotation — everything here comes from the cached coverage score.
+        const reviewPanelHTML = renderCoveragePanel(annotation);
 
         item.innerHTML = `
             <div class="annotation-header">
@@ -1860,7 +1763,13 @@ function renderAnnotations() {
         `;
 
         item.addEventListener('click', (e) => {
-            if (!e.target.closest('button') && !e.target.closest('.review-toggle-header') && !e.target.closest('.dimension-card')) {
+            if (
+                !e.target.closest('button') &&
+                !e.target.closest('.coverage-toggle-header') &&
+                !e.target.closest('.coverage-panel') &&
+                !e.target.closest('.review-toggle-header') &&
+                !e.target.closest('.dimension-card')
+            ) {
                 seekToAnnotation(annotation.start_time);
             }
         });
@@ -4691,6 +4600,9 @@ async function updateCoverageForAnnotations() {
     }
 
     renderCoverageBanner();
+    // Re-render cards so per-annotation coverage panels pick up the new
+    // scores (the first render happened before scores arrived).
+    renderAnnotations();
     renderAnnotationPips();
 }
 
@@ -4817,3 +4729,142 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeBtn = document.getElementById('sessionSummaryCloseBtn');
     if (closeBtn) closeBtn.addEventListener('click', hideSessionSummary);
 });
+
+// ============================================================================
+// Per-annotation coverage panel — replaces the legacy review-panel.
+// Shows three phase rows (Quoi/Comment/Pourquoi) with status + hit count,
+// the transcript with matched markers highlighted, and a one-line hint for
+// absent phases.  Everything below is deterministic (spaCy); no LLM per
+// annotation.  The session-level summary (LLM) is still driven from the
+// "Finir la session" button in the top banner.
+// ============================================================================
+
+const COVERAGE_PHASE_META = {
+    quoi:     { label: 'Quoi',     hint: 'Ajoute une action concrète (« je prends… », « je tourne… »).' },
+    comment:  { label: 'Comment',  hint: 'Précise la manière (vitesse, outil, séquence : « lentement, d\'abord… »).' },
+    pourquoi: { label: 'Pourquoi', hint: 'Explique la raison (« parce que… », « pour éviter… »).' },
+};
+
+const COVERAGE_STATUS_LABEL = {
+    absent:  'Absent',
+    partial: 'Partiel',
+    covered: 'Couvert',
+};
+
+function renderCoveragePanel(annotation) {
+    // Only makes sense once we have a transcript.
+    if (annotation.transcription_status !== 'completed' || !annotation.transcription) {
+        return '';
+    }
+
+    const score = state.coverage.scores[annotation.id];
+    // Score may not have arrived yet (async). Show a loading shell so the
+    // panel slot is stable across renders.
+    if (!score) {
+        return `
+            <div class="coverage-panel-container">
+                <div class="coverage-toggle-header coverage-toggle-header--loading">
+                    <span class="coverage-toggle-label">
+                        <i class="fa-solid fa-wave-square"></i>
+                        Analyse en cours…
+                    </span>
+                </div>
+            </div>`;
+    }
+
+    const panelOpen = !!state.showReviewPanels[annotation.id];
+
+    // Worst phase drives the headline status chip on the toggle.
+    const order = { absent: 0, partial: 1, covered: 2 };
+    let worstStatus = 'covered';
+    COVERAGE_PHASES.forEach(p => {
+        const s = (score[p] || {}).status || 'absent';
+        if (order[s] < order[worstStatus]) worstStatus = s;
+    });
+
+    const rowsHTML = COVERAGE_PHASES.map(p => {
+        const s = score[p] || { hits: 0, status: 'absent' };
+        const label = COVERAGE_PHASE_META[p].label;
+        const hint = s.status === 'absent' ? COVERAGE_PHASE_META[p].hint : '';
+        return `
+            <div class="coverage-row" data-status="${s.status}">
+                <span class="coverage-row-dot" data-status="${s.status}"></span>
+                <span class="coverage-row-label">${label}</span>
+                <span class="coverage-row-status">${COVERAGE_STATUS_LABEL[s.status] || s.status}</span>
+                <span class="coverage-row-hits">${s.hits}</span>
+                ${hint ? `<div class="coverage-row-hint">${escapeHtml(hint)}</div>` : ''}
+            </div>`;
+    }).join('');
+
+    const highlighted = highlightTranscript(annotation.transcription, score.markers || {});
+
+    return `
+        <div class="coverage-panel-container">
+            <div class="coverage-toggle-header" onclick="toggleReviewPanel(${annotation.id})">
+                <span class="coverage-toggle-label">
+                    <i class="fa-solid fa-wave-square"></i>
+                    Quoi / Comment / Pourquoi
+                    <span class="coverage-chip" data-status="${worstStatus}">${COVERAGE_STATUS_LABEL[worstStatus]}</span>
+                </span>
+                <span class="coverage-toggle-indicator">
+                    <i class="fa-solid fa-chevron-${panelOpen ? 'up' : 'down'}"></i>
+                </span>
+            </div>
+            <div class="coverage-panel ${panelOpen ? 'visible' : ''}" id="coverage-panel-${annotation.id}">
+                <div class="coverage-rows">${rowsHTML}</div>
+                <div class="coverage-transcript-label">Transcription (marqueurs surlignés) :</div>
+                <div class="coverage-transcript">${highlighted}</div>
+            </div>
+        </div>`;
+}
+
+// Build an HTML string where marker spans are wrapped in <mark> tags colored
+// by phase. Markers are already char-offset based, so we slice the raw
+// transcript and interleave escaped chunks with escaped marker text.
+function highlightTranscript(transcript, markers) {
+    if (!transcript) return '';
+
+    // Collect (start, end, phase) triples; sort + resolve overlaps by giving
+    // priority to the longest span, then to pourquoi > comment > quoi (why is
+    // usually the most informative marker).
+    const prio = { pourquoi: 2, comment: 1, quoi: 0 };
+    const all = [];
+    COVERAGE_PHASES.forEach(phase => {
+        (markers[phase] || []).forEach(m => {
+            if (typeof m.char_start === 'number' && typeof m.char_end === 'number') {
+                all.push({ start: m.char_start, end: m.char_end, phase });
+            }
+        });
+    });
+
+    all.sort((a, b) => {
+        if (a.start !== b.start) return a.start - b.start;
+        const lenDiff = (b.end - b.start) - (a.end - a.start);
+        if (lenDiff !== 0) return lenDiff;
+        return prio[b.phase] - prio[a.phase];
+    });
+
+    // Drop overlaps: skip any span that starts before the previous one ended.
+    const nonOverlapping = [];
+    let cursor = -1;
+    for (const m of all) {
+        if (m.start >= cursor) {
+            nonOverlapping.push(m);
+            cursor = m.end;
+        }
+    }
+
+    if (nonOverlapping.length === 0) {
+        return escapeHtml(transcript);
+    }
+
+    let out = '';
+    let idx = 0;
+    for (const m of nonOverlapping) {
+        if (m.start > idx) out += escapeHtml(transcript.slice(idx, m.start));
+        out += `<mark class="phase-mark phase-mark--${m.phase}">${escapeHtml(transcript.slice(m.start, m.end))}</mark>`;
+        idx = m.end;
+    }
+    if (idx < transcript.length) out += escapeHtml(transcript.slice(idx));
+    return out;
+}

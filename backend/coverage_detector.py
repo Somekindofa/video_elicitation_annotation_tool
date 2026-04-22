@@ -143,19 +143,24 @@ def score_transcript(text: str) -> dict[str, Any]:
     """
     if not text or not text.strip():
         empty = {"hits": 0, "per_100_tok": 0.0, "status": "absent"}
-        return {"token_count": 0, "quoi": dict(empty), "comment": dict(empty), "pourquoi": dict(empty)}
+        return {
+            "token_count": 0,
+            "quoi": dict(empty),
+            "comment": dict(empty),
+            "pourquoi": dict(empty),
+            "markers": {"quoi": [], "comment": [], "pourquoi": []},
+        }
 
     doc = _NLP(text)
     token_count = len([t for t in doc if not t.is_punct and not t.is_space])
 
-    def count_unique_spans(matches: list[tuple[int, int, int]]) -> int:
-        # matches: list of (match_id, start, end) — dedupe by (start, end) span.
-        return len({(s, e) for _, s, e in matches})
+    def unique_spans(matches: list[tuple[int, int, int]]) -> set[tuple[int, int]]:
+        return {(s, e) for _, s, e in matches}
 
-    # Phrase matches.
-    quoi_hits = count_unique_spans(_MATCHERS["quoi_verbs"](doc))
-    comment_hits = count_unique_spans(_MATCHERS["comment_phrases"](doc))
-    pourquoi_hits = count_unique_spans(_MATCHERS["pourquoi_phrases"](doc))
+    # Phrase-level spans per phase.
+    quoi_spans = unique_spans(_MATCHERS["quoi_verbs"](doc))
+    comment_spans = unique_spans(_MATCHERS["comment_phrases"](doc))
+    pourquoi_spans = unique_spans(_MATCHERS["pourquoi_phrases"](doc))
 
     # Token-level matches — partition by match id.
     tok_matches = _MATCHERS["tok"](doc)
@@ -170,15 +175,41 @@ def score_transcript(text: str) -> dict[str, Any]:
         if label in by_label:
             by_label[label].add((start, end))
 
-    # Generic 1p-verb fallback is weaker evidence than the allowlist: count
-    # every 2 fallback matches as 1 hit. Keeps recall for rare craft verbs
-    # without letting "je fais / je dis / je pense" saturate Quoi.
-    quoi_hits += len(by_label["QUOI_1P_VERB"]) // 2
-    comment_hits += len(by_label["COMMENT_GERUNDIVE"])
-    pourquoi_hits += (
-        len(by_label["POURQUOI_POUR_INF"])
+    # Fold token-level spans into phase buckets for highlighting. The fallback
+    # 1p-verb matches are weak evidence; we still surface them visually so the
+    # user can see *why* the score came out the way it did.
+    quoi_spans |= by_label["QUOI_1P_VERB"]
+    comment_spans |= by_label["COMMENT_GERUNDIVE"]
+    pourquoi_spans |= by_label["POURQUOI_POUR_INF"] | by_label["POURQUOI_INTENT_VERB"]
+
+    # Hit counts: phrase matches count 1:1; the 1p-verb fallback is diluted
+    # (every 2 matches = 1 hit) to keep common verbs from saturating Quoi.
+    quoi_hits = (
+        len(unique_spans(_MATCHERS["quoi_verbs"](doc)))
+        + len(by_label["QUOI_1P_VERB"]) // 2
+    )
+    comment_hits = (
+        len(unique_spans(_MATCHERS["comment_phrases"](doc)))
+        + len(by_label["COMMENT_GERUNDIVE"])
+    )
+    pourquoi_hits = (
+        len(unique_spans(_MATCHERS["pourquoi_phrases"](doc)))
+        + len(by_label["POURQUOI_POUR_INF"])
         + len(by_label["POURQUOI_INTENT_VERB"])
     )
+
+    def spans_to_markers(spans: set[tuple[int, int]]) -> list[dict[str, Any]]:
+        """Turn (token_start, token_end) pairs into char-offset markers sorted by start."""
+        out = []
+        for start, end in spans:
+            span = doc[start:end]
+            out.append({
+                "text": span.text,
+                "char_start": span.start_char,
+                "char_end": span.end_char,
+            })
+        out.sort(key=lambda m: m["char_start"])
+        return out
 
     # Normalise per 100 tokens; avoid divide-by-zero.
     norm = 100.0 / max(token_count, 1)
@@ -192,6 +223,11 @@ def score_transcript(text: str) -> dict[str, Any]:
         "quoi": pack(quoi_hits),
         "comment": pack(comment_hits),
         "pourquoi": pack(pourquoi_hits),
+        "markers": {
+            "quoi": spans_to_markers(quoi_spans),
+            "comment": spans_to_markers(comment_spans),
+            "pourquoi": spans_to_markers(pourquoi_spans),
+        },
     }
 
 
