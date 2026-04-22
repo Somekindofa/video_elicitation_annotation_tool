@@ -3577,16 +3577,19 @@ body {
     flex-wrap: wrap;
 }
 .coverage-action-btn {
-    flex: 1;
+    flex: 1 1 auto;
     min-width: 0;
     padding: 6px 10px;
     font-size: 0.8rem;
+    line-height: 1.2;
     background: var(--primary-color);
     color: #fff;
     border: 1px solid var(--primary-color);
     border-radius: 6px;
     cursor: pointer;
-    white-space: nowrap;
+    white-space: normal;
+    word-break: break-word;
+    text-align: center;
 }
 .coverage-action-btn:hover { filter: brightness(0.95); }
 .coverage-action-btn--secondary {
