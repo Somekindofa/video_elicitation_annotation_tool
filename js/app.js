@@ -1609,6 +1609,10 @@ async function loadAnnotations(videoId) {
 
         renderAnnotations();
         renderTimeline();
+        // Fire-and-forget: score unscored transcripts, aggregate, repaint banner + pips.
+        if (typeof updateCoverageForAnnotations === 'function') {
+            updateCoverageForAnnotations().catch(e => console.warn('coverage update failed', e));
+        }
     } catch (error) {
         console.error('Error loading annotations:', error);
         showToast('Error', 'Failed to load annotations', 'error');
@@ -4579,20 +4583,237 @@ function openTutorialModal() {
 function closeTutorialModal() {
     const modal = document.getElementById('tutorialModal');
     if (modal) modal.classList.remove('active');
-    // Remember that user has seen the tutorial
-    try { localStorage.setItem('tutorialSeen', '1'); } catch (e) {}
+    // Persist server-side so the flag survives across browsers and iframe storage restrictions
+    fetch(`${API_BASE}/api/tutorial-seen`, { method: 'POST' }).catch(() => {});
 }
 
 /**
  * Auto-open tutorial for first-time users.
- * Opens the tutorial on first visit (no localStorage flag set).
+ * Checks server-side flag so the decision survives browser resets and iframe storage restrictions.
  */
 async function maybeShowTutorialForNewcomer() {
     try {
-        const seen = localStorage.getItem('tutorialSeen');
-        if (seen) return; // Already acknowledged
+        const resp = await fetch(`${API_BASE}/api/tutorial-status`);
+        if (!resp.ok) return; // Non-blocking — fail silently
+        const { seen } = await resp.json();
+        if (seen) return;
         openTutorialModal();
     } catch (e) {
         // Non-blocking — ignore errors silently
     }
 }
+
+// ============================================================================
+// Coverage module — Quoi / Comment / Pourquoi tracking via spaCy backend
+// Stateless backend; all per-annotation scores live in state.coverage here.
+// ============================================================================
+
+state.coverage = {
+    // { [annotationId]: { quoi: {hits, per_100_tok, status}, comment: {...}, pourquoi: {...}, token_count } }
+    scores: {},
+    aggregate: null,
+    plateau: false,
+    summaryOpen: false,
+};
+
+const COVERAGE_PHASES = ['quoi', 'comment', 'pourquoi'];
+
+async function _coverageScoreTranscript(transcript) {
+    const resp = await fetch(`${API_BASE}/api/coverage/score`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(MOODLE_JWT ? { 'Authorization': `Bearer ${MOODLE_JWT}` } : {}) },
+        body: JSON.stringify({ transcript }),
+    });
+    if (!resp.ok) throw new Error(`score ${resp.status}`);
+    return resp.json();
+}
+
+async function _coverageAggregate(scoresList) {
+    const resp = await fetch(`${API_BASE}/api/coverage/aggregate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(MOODLE_JWT ? { 'Authorization': `Bearer ${MOODLE_JWT}` } : {}) },
+        body: JSON.stringify({ per_annotation_scores: scoresList }),
+    });
+    if (!resp.ok) throw new Error(`aggregate ${resp.status}`);
+    return resp.json();
+}
+
+async function _coverageSummary(transcript, phase_scores) {
+    const resp = await fetch(`${API_BASE}/api/coverage/summary`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(MOODLE_JWT ? { 'Authorization': `Bearer ${MOODLE_JWT}` } : {}) },
+        body: JSON.stringify({ transcript, phase_scores }),
+    });
+    if (!resp.ok) throw new Error(`summary ${resp.status}`);
+    return resp.json();
+}
+
+// Score any annotation whose transcript is present and unscored. Called after
+// loadAnnotations renders. Chronological order matters for plateau detection.
+async function updateCoverageForAnnotations() {
+    if (!state.annotations || state.annotations.length === 0) {
+        state.coverage.scores = {};
+        state.coverage.aggregate = null;
+        state.coverage.plateau = false;
+        renderCoverageBanner();
+        return;
+    }
+
+    const sorted = [...state.annotations].sort((a, b) =>
+        new Date(a.created_at || 0) - new Date(b.created_at || 0));
+
+    for (const ann of sorted) {
+        const txt = (ann.transcription || '').trim();
+        if (!txt) continue;
+        if (state.coverage.scores[ann.id]) continue;
+        try {
+            state.coverage.scores[ann.id] = await _coverageScoreTranscript(txt);
+        } catch (e) {
+            console.warn('coverage score failed', ann.id, e);
+        }
+    }
+
+    const orderedScores = sorted
+        .map(a => state.coverage.scores[a.id])
+        .filter(Boolean);
+
+    if (orderedScores.length === 0) {
+        state.coverage.aggregate = null;
+        state.coverage.plateau = false;
+    } else {
+        try {
+            const { aggregate, plateau } = await _coverageAggregate(orderedScores);
+            state.coverage.aggregate = aggregate;
+            state.coverage.plateau = !!plateau;
+        } catch (e) {
+            console.warn('coverage aggregate failed', e);
+        }
+    }
+
+    renderCoverageBanner();
+    renderAnnotationPips();
+}
+
+function renderCoverageBanner() {
+    const banner = document.getElementById('coverageBanner');
+    if (!banner) return;
+    const agg = state.coverage.aggregate;
+
+    if (!agg) {
+        banner.style.display = 'none';
+        return;
+    }
+    banner.style.display = '';
+
+    COVERAGE_PHASES.forEach(p => {
+        const phase = agg[p] || { hits: 0, status: 'absent' };
+        const chip = banner.querySelector(`.phase-chip[data-phase="${p}"] .phase-dot`);
+        if (chip) chip.setAttribute('data-status', phase.status || 'absent');
+        const hits = document.getElementById(`phaseHits-${p}`);
+        if (hits) hits.textContent = String(phase.hits || 0);
+    });
+
+    const anyPartial = COVERAGE_PHASES.some(p => (agg[p] || {}).status && agg[p].status !== 'absent');
+    const finishBtn = document.getElementById('finishSessionBtn');
+    if (finishBtn) finishBtn.style.display = anyPartial ? '' : 'none';
+}
+
+function renderAnnotationPips() {
+    document.querySelectorAll('.annotation-item').forEach(el => {
+        const id = parseInt(el.dataset.id, 10);
+        if (!id) return;
+        el.querySelectorAll('.annotation-pips').forEach(n => n.remove());
+        const s = state.coverage.scores[id];
+        if (!s) return;
+
+        const pips = document.createElement('span');
+        pips.className = 'annotation-pips';
+        COVERAGE_PHASES.forEach(p => {
+            const status = (s[p] || {}).status || 'absent';
+            const hits = (s[p] || {}).hits || 0;
+            const dot = document.createElement('span');
+            dot.className = 'annotation-pip';
+            dot.setAttribute('data-status', status);
+            dot.title = `${p}: ${hits} (${status})`;
+            pips.appendChild(dot);
+        });
+
+        const header = el.querySelector('.annotation-header, .annotation-meta, h3, h4') || el.firstElementChild;
+        if (header) header.appendChild(pips);
+        else el.appendChild(pips);
+    });
+}
+
+async function onFinishSessionClick() {
+    const agg = state.coverage.aggregate;
+    if (!agg) return;
+
+    const sorted = [...state.annotations].sort((a, b) =>
+        new Date(a.created_at || 0) - new Date(b.created_at || 0));
+    const transcript = sorted
+        .map(a => (a.transcription || '').trim())
+        .filter(Boolean)
+        .join('\n\n');
+    if (!transcript) {
+        showToast('Synthèse', 'Aucune transcription à résumer.', 'warning');
+        return;
+    }
+
+    const phase_scores = {};
+    COVERAGE_PHASES.forEach(p => {
+        const s = agg[p] || {};
+        phase_scores[p] = {
+            hits: s.hits || 0,
+            per_100_tok: s.per_100_tok || 0,
+            status: s.status || 'absent',
+        };
+    });
+
+    const btn = document.getElementById('finishSessionBtn');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Synthèse…'; }
+
+    try {
+        const res = await _coverageSummary(transcript, phase_scores);
+        renderSessionSummary(res);
+    } catch (e) {
+        showToast('Synthèse', `Erreur: ${e.message}`, 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-flag-checkered"></i> Finir la session'; }
+    }
+}
+
+function renderSessionSummary({ summary, weakest_phase, follow_ups }) {
+    const card = document.getElementById('sessionSummaryCard');
+    const body = document.getElementById('sessionSummaryBody');
+    if (!card || !body) return;
+
+    let html = `<div class="summary-text">${escapeHtml(summary || '')}</div>`;
+    if (follow_ups && follow_ups.length) {
+        const weakTag = weakest_phase
+            ? `<span class="weakest-tag">${escapeHtml(weakest_phase)}</span>`
+            : '';
+        html += `<div class="followups-label">Pour aller plus loin ${weakTag}</div>`;
+        html += `<ul class="followups">${
+            follow_ups.map(q => `<li>${escapeHtml(q)}</li>`).join('')
+        }</ul>`;
+    } else {
+        html += `<div class="followups-label">Session complète</div>`;
+    }
+    body.innerHTML = html;
+    card.style.display = '';
+    state.coverage.summaryOpen = true;
+}
+
+function hideSessionSummary() {
+    const card = document.getElementById('sessionSummaryCard');
+    if (card) card.style.display = 'none';
+    state.coverage.summaryOpen = false;
+}
+
+// Wire buttons once DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    const finishBtn = document.getElementById('finishSessionBtn');
+    if (finishBtn) finishBtn.addEventListener('click', onFinishSessionClick);
+    const closeBtn = document.getElementById('sessionSummaryCloseBtn');
+    if (closeBtn) closeBtn.addEventListener('click', hideSessionSummary);
+});

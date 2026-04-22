@@ -124,6 +124,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Coverage detector endpoints (spaCy-backed, no LLM).
+from coverage_routes import router as coverage_router
+app.include_router(coverage_router)
+
 
 # WebSocket connection manager
 class ConnectionManager:
@@ -1750,8 +1754,18 @@ async def process_review(
     tags: Optional[List[Dict[str, str]]] = None,
     trigger_tagging: bool = True,
 ):
-    """Background task to process AI review using review_service"""
-    from review_service import review_elicitation, assess_salience
+    """Background task to process AI review using review_service.
+
+    Disabled 2026-04-21: replaced by the spaCy coverage detector + single
+    Infomaniak summary call. Kept as a no-op so the 4 call sites don't need
+    touching and the pipeline remains trivially reversible.
+    """
+    logger.debug(
+        f"process_review skipped (deprecated dimensions pipeline) for annotation {annotation_id}"
+    )
+    return
+
+    from review_service import review_elicitation, assess_salience  # type: ignore[unreachable]
     from datetime import datetime, timezone
 
     try:
@@ -2684,6 +2698,25 @@ class NoCacheStaticFiles(StaticFiles):
 
 # Mount static files (frontend) with no-cache for development
 app.mount("/static", NoCacheStaticFiles(directory=str(FRONTEND_DIR)), name="static")
+
+
+# ==================== TUTORIAL SEEN FLAG ====================
+
+TUTORIAL_PREF_KEY = 'local_videoelicit_tutorial_seen'
+
+
+@app.get("/api/tutorial-status")
+async def get_tutorial_status(current_user: MoodleUser = Depends(verify_moodle_jwt)):
+    """Return whether the current user has already seen the tutorial."""
+    value = await moodle_db.get_user_pref(current_user.userid, TUTORIAL_PREF_KEY)
+    return {"seen": value == "1"}
+
+
+@app.post("/api/tutorial-seen")
+async def mark_tutorial_seen(current_user: MoodleUser = Depends(verify_moodle_jwt)):
+    """Persist that the current user has seen and closed the tutorial."""
+    await moodle_db.set_user_pref(current_user.userid, TUTORIAL_PREF_KEY, "1")
+    return {"ok": True}
 
 
 # Serve index.html at root with no-cache headers

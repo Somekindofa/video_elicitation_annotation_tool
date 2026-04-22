@@ -3196,3 +3196,172 @@ body {
     60%  { box-shadow: 0 0 0 14px rgba(220, 38, 38, 0); }
     100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
 }
+
+/* ==========================================================================
+   Coverage banner — per-video Quoi / Comment / Pourquoi progress
+   Kept inside the annotations panel, below the panel header.
+   ========================================================================== */
+
+.coverage-banner {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color);
+    background: #f8fafc;
+}
+
+.coverage-phases {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.phase-chip {
+    padding: 8px 10px;
+    background: #fff;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 0.8rem;
+    line-height: 1.3;
+    min-width: 0;
+}
+
+.phase-chip-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+
+.phase-label {
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+}
+
+.phase-hits {
+    margin-left: auto;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+.phase-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #cbd5e1;
+    flex-shrink: 0;
+}
+.phase-dot[data-status="absent"]  { background: #cbd5e1; }
+.phase-dot[data-status="partial"] { background: var(--warning-color); }
+.phase-dot[data-status="covered"] { background: var(--accent-color); }
+
+.phase-example {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-style: italic;
+    line-height: 1.25;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.coverage-finish-btn {
+    margin-top: 10px;
+    width: 100%;
+}
+
+/* Per-annotation Q/C/P pips (injected into each annotation-item) */
+.annotation-pips {
+    display: inline-flex;
+    gap: 4px;
+    margin-left: 8px;
+    vertical-align: middle;
+}
+.annotation-pip {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #cbd5e1;
+    display: inline-block;
+}
+.annotation-pip[data-status="absent"]  { background: #cbd5e1; }
+.annotation-pip[data-status="partial"] { background: var(--warning-color); }
+.annotation-pip[data-status="covered"] { background: var(--accent-color); }
+.annotation-pip[title] { cursor: help; }
+
+/* Session summary card — slides in below coverage banner */
+.session-summary-card {
+    margin: 12px 16px 0;
+    padding: 14px 16px;
+    background: #fff;
+    border: 1px solid var(--border-color);
+    border-left: 3px solid var(--primary-color);
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+    animation: summarySlide 0.25s ease-out;
+}
+
+@keyframes summarySlide {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.session-summary-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+.session-summary-head h3 {
+    margin: 0;
+    font-size: 0.95rem;
+    color: var(--primary-color);
+}
+.session-summary-close {
+    background: none;
+    border: none;
+    font-size: 1.3rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    line-height: 1;
+    padding: 0 4px;
+}
+.session-summary-close:hover { color: #000; }
+
+.session-summary-body .summary-text {
+    font-size: 0.88rem;
+    line-height: 1.5;
+    color: #1e293b;
+    margin-bottom: 10px;
+}
+.session-summary-body .followups-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 6px;
+}
+.session-summary-body .followups-label .weakest-tag {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    background: var(--warning-color);
+    color: #fff;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+}
+.session-summary-body ul.followups {
+    margin: 0;
+    padding-left: 18px;
+}
+.session-summary-body ul.followups li {
+    font-size: 0.85rem;
+    line-height: 1.4;
+    margin-bottom: 4px;
+    color: #334155;
+}
