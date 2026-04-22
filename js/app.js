@@ -152,6 +152,34 @@ const TRANSLATIONS = {
         noVideosLoaded: 'No videos loaded yet. Click a video below to load it.',
         noSegmentsForVideo: 'No segments for this video',
         loadVideoFirst: 'Load a video first to see segments.',
+
+        // Coverage banner / session summary
+        coveragePhaseExampleQuoi: 'E.g. "I take the clamp, I turn the glass to the left."',
+        coveragePhaseExampleComment: 'E.g. "slowly, first to the right then to the left, with the long clamp."',
+        coveragePhaseExamplePourquoi: 'E.g. "because otherwise the bubble collapses, to avoid streaks."',
+        coverageFinishSession: 'Finish session',
+        sessionSummaryTitle: 'Session summary',
+        sessionSummaryCloseAria: 'Close',
+        coverageFollowUpsLabel: 'To go further',
+        coverageSessionComplete: 'Session complete',
+        coverageSummarizing: 'Summarizing…',
+
+        // Per-annotation coverage panel
+        coverageAnalyzing: 'Analyzing…',
+        coverageStatusAbsent: 'Absent',
+        coverageStatusPartial: 'Partial',
+        coverageStatusCovered: 'Covered',
+        coverageHintQuoi: 'Add a concrete action ("I take…", "I turn…").',
+        coverageHintComment: 'Specify the manner (speed, tool, sequence: "slowly, first…").',
+        coverageHintPourquoi: 'Explain the reason ("because…", "to avoid…").',
+        coverageTranscriptLabel: 'Transcription (markers highlighted):',
+        coverageActionsHint: 'Need to say more about this moment? The add-on is appended to the existing transcription.',
+        coverageAppendRecord: 'Add to transcription',
+        coverageAppendStop: 'Stop and append',
+        coverageAppendTitle: 'Record a top-up clip and append it to the existing transcription.',
+        coverageRetranscribe: 'Re-transcribe',
+        coverageRetranscribeTitle: 'Re-run Whisper on the existing audio. The current transcription will be replaced.',
+        coverageRetranscribeConfirm: 'Re-run the transcription for this recording?\n\nThe current transcription will be replaced.',
     },
     fr: {
         // Header / nav
@@ -298,6 +326,34 @@ const TRANSLATIONS = {
         noVideosLoaded: 'Aucune vidéo chargée. Cliquez sur une vidéo ci-dessous pour la charger.',
         noSegmentsForVideo: 'Aucun segment pour cette vidéo',
         loadVideoFirst: 'Chargez d\'abord une vidéo pour voir les segments.',
+
+        // Coverage banner / session summary
+        coveragePhaseExampleQuoi: 'Ex. « Je prends la pince, je tourne le verre à gauche. »',
+        coveragePhaseExampleComment: 'Ex. « lentement, d\'abord à droite puis à gauche, avec la pince longue. »',
+        coveragePhaseExamplePourquoi: 'Ex. « parce que sinon la bulle s\'effondre, c\'est pour éviter les stries. »',
+        coverageFinishSession: 'Finir la session',
+        sessionSummaryTitle: 'Synthèse de la session',
+        sessionSummaryCloseAria: 'Fermer',
+        coverageFollowUpsLabel: 'Pour aller plus loin',
+        coverageSessionComplete: 'Session complète',
+        coverageSummarizing: 'Synthèse…',
+
+        // Per-annotation coverage panel
+        coverageAnalyzing: 'Analyse en cours…',
+        coverageStatusAbsent: 'Absent',
+        coverageStatusPartial: 'Partiel',
+        coverageStatusCovered: 'Couvert',
+        coverageHintQuoi: 'Ajoute une action concrète (« je prends… », « je tourne… »).',
+        coverageHintComment: 'Précise la manière (vitesse, outil, séquence : « lentement, d\'abord… »).',
+        coverageHintPourquoi: 'Explique la raison (« parce que… », « pour éviter… »).',
+        coverageTranscriptLabel: 'Transcription (marqueurs surlignés) :',
+        coverageActionsHint: 'Besoin d\'en dire plus sur ce moment ? Le complément s\'ajoute à la transcription existante.',
+        coverageAppendRecord: 'Ajouter à la transcription',
+        coverageAppendStop: 'Arrêter et ajouter',
+        coverageAppendTitle: 'Enregistre un complément audio et l\'ajoute à la transcription existante.',
+        coverageRetranscribe: 'Re-transcrire',
+        coverageRetranscribeTitle: 'Relance Whisper sur l\'audio existant. La transcription sera remplacée.',
+        coverageRetranscribeConfirm: 'Relancer la transcription de cet enregistrement ?\n\nLa transcription actuelle sera remplacée.',
     },
 };
 
@@ -414,6 +470,21 @@ function refreshDynamicUIStrings() {
 
     // Segment start/end display (prefix only)
     refreshSegmentDisplayPrefixes();
+
+    // Re-render the elicitation panel — annotation cards and coverage panels
+    // bake t() into their HTML at build time, so a language switch needs a
+    // re-render. Only UI strings are replaced; transcriptions are not.
+    if (typeof renderAnnotations === 'function' && Array.isArray(state.annotations)) {
+        try { renderAnnotations(); } catch (_) { /* early init */ }
+    }
+    if (typeof renderCoverageBanner === 'function') {
+        try { renderCoverageBanner(); } catch (_) { /* early init */ }
+    }
+    // If a session summary is currently displayed, its inner labels are
+    // baked from t() — regenerate them from the cached last response.
+    if (state.coverage && state.coverage.summaryOpen && state.coverage.lastSummary) {
+        try { renderSessionSummary(state.coverage.lastSummary); } catch (_) {}
+    }
 }
 
 /** Keep "Start: X" / "End: X" labels translated when the user switches language. */
@@ -4705,7 +4776,7 @@ async function onFinishSessionClick() {
     });
 
     const btn = document.getElementById('finishSessionBtn');
-    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Synthèse…'; }
+    if (btn) { btn.disabled = true; btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${t('coverageSummarizing')}`; }
 
     try {
         const res = await _coverageSummary(transcript, phase_scores);
@@ -4713,7 +4784,7 @@ async function onFinishSessionClick() {
     } catch (e) {
         showToast('Synthèse', `Erreur: ${e.message}`, 'error');
     } finally {
-        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-flag-checkered"></i> Finir la session'; }
+        if (btn) { btn.disabled = false; btn.innerHTML = `<i class="fas fa-flag-checkered"></i> <span data-i18n="coverageFinishSession">${t('coverageFinishSession')}</span>`; }
     }
 }
 
@@ -4721,18 +4792,20 @@ function renderSessionSummary({ summary, weakest_phase, follow_ups }) {
     const card = document.getElementById('sessionSummaryCard');
     const body = document.getElementById('sessionSummaryBody');
     if (!card || !body) return;
+    // Cache so refreshDynamicUIStrings() can re-render on language switch.
+    state.coverage.lastSummary = { summary, weakest_phase, follow_ups };
 
     let html = `<div class="summary-text">${escapeHtml(summary || '')}</div>`;
     if (follow_ups && follow_ups.length) {
         const weakTag = weakest_phase
             ? `<span class="weakest-tag">${escapeHtml(weakest_phase)}</span>`
             : '';
-        html += `<div class="followups-label">Pour aller plus loin ${weakTag}</div>`;
+        html += `<div class="followups-label">${t('coverageFollowUpsLabel')} ${weakTag}</div>`;
         html += `<ul class="followups">${
             follow_ups.map(q => `<li>${escapeHtml(q)}</li>`).join('')
         }</ul>`;
     } else {
-        html += `<div class="followups-label">Session complète</div>`;
+        html += `<div class="followups-label">${t('coverageSessionComplete')}</div>`;
     }
     body.innerHTML = html;
     card.style.display = '';
@@ -4762,17 +4835,22 @@ document.addEventListener('DOMContentLoaded', () => {
 // "Finir la session" button in the top banner.
 // ============================================================================
 
+// Phase labels are domain terms (Quoi/Comment/Pourquoi) — kept in French in
+// both locales on purpose. Hints and status labels translate.
 const COVERAGE_PHASE_META = {
-    quoi:     { label: 'Quoi',     hint: 'Ajoute une action concrète (« je prends… », « je tourne… »).' },
-    comment:  { label: 'Comment',  hint: 'Précise la manière (vitesse, outil, séquence : « lentement, d\'abord… »).' },
-    pourquoi: { label: 'Pourquoi', hint: 'Explique la raison (« parce que… », « pour éviter… »).' },
+    quoi:     { label: 'Quoi',     hintKey: 'coverageHintQuoi' },
+    comment:  { label: 'Comment',  hintKey: 'coverageHintComment' },
+    pourquoi: { label: 'Pourquoi', hintKey: 'coverageHintPourquoi' },
 };
 
-const COVERAGE_STATUS_LABEL = {
-    absent:  'Absent',
-    partial: 'Partiel',
-    covered: 'Couvert',
-};
+function coverageStatusLabel(status) {
+    switch (status) {
+        case 'absent': return t('coverageStatusAbsent');
+        case 'partial': return t('coverageStatusPartial');
+        case 'covered': return t('coverageStatusCovered');
+        default: return status;
+    }
+}
 
 function renderCoveragePanel(annotation) {
     // Only makes sense once we have a transcript.
@@ -4789,7 +4867,7 @@ function renderCoveragePanel(annotation) {
                 <div class="coverage-toggle-header coverage-toggle-header--loading">
                     <span class="coverage-toggle-label">
                         <i class="fa-solid fa-wave-square"></i>
-                        Analyse en cours…
+                        ${t('coverageAnalyzing')}
                     </span>
                 </div>
             </div>`;
@@ -4808,12 +4886,12 @@ function renderCoveragePanel(annotation) {
     const rowsHTML = COVERAGE_PHASES.map(p => {
         const s = score[p] || { hits: 0, status: 'absent' };
         const label = COVERAGE_PHASE_META[p].label;
-        const hint = s.status === 'absent' ? COVERAGE_PHASE_META[p].hint : '';
+        const hint = s.status === 'absent' ? t(COVERAGE_PHASE_META[p].hintKey) : '';
         return `
             <div class="coverage-row" data-phase="${p}" data-status="${s.status}">
                 <span class="coverage-row-dot" data-status="${s.status}"></span>
                 <span class="coverage-row-label">${label}</span>
-                <span class="coverage-row-status">${COVERAGE_STATUS_LABEL[s.status] || s.status}</span>
+                <span class="coverage-row-status">${coverageStatusLabel(s.status)}</span>
                 <span class="coverage-row-hits">${s.hits}</span>
                 ${hint ? `<div class="coverage-row-hint">${escapeHtml(hint)}</div>` : ''}
             </div>`;
@@ -4827,7 +4905,7 @@ function renderCoveragePanel(annotation) {
                 <span class="coverage-toggle-label">
                     <i class="fa-solid fa-wave-square"></i>
                     Quoi / Comment / Pourquoi
-                    <span class="coverage-chip" data-status="${worstStatus}">${COVERAGE_STATUS_LABEL[worstStatus]}</span>
+                    <span class="coverage-chip" data-status="${worstStatus}">${coverageStatusLabel(worstStatus)}</span>
                 </span>
                 <span class="coverage-toggle-indicator">
                     <i class="fa-solid fa-chevron-${panelOpen ? 'up' : 'down'}"></i>
@@ -4835,7 +4913,7 @@ function renderCoveragePanel(annotation) {
             </div>
             <div class="coverage-panel ${panelOpen ? 'visible' : ''}" id="coverage-panel-${annotation.id}">
                 <div class="coverage-rows">${rowsHTML}</div>
-                <div class="coverage-transcript-label">Transcription (marqueurs surlignés) :</div>
+                <div class="coverage-transcript-label">${t('coverageTranscriptLabel')}</div>
                 <div class="coverage-transcript">${highlighted}</div>
                 ${renderCoveragePanelActions(annotation, score)}
             </div>
@@ -4922,30 +5000,28 @@ function renderCoveragePanelActions(annotation, score) {
 
     const isAppending = state.appendMode && state.appendMode.annotationId === annotation.id;
     const appendLabel = isAppending
-        ? '<i class="fa-solid fa-stop"></i> Arrêter et ajouter'
-        : '<i class="fa-solid fa-microphone-lines"></i> Ajouter à la transcription';
+        ? `<i class="fa-solid fa-stop"></i> ${t('coverageAppendStop')}`
+        : `<i class="fa-solid fa-microphone-lines"></i> ${t('coverageAppendRecord')}`;
     const appendClass = isAppending
         ? 'coverage-action-btn coverage-action-btn--recording'
         : 'coverage-action-btn';
 
     return `
         <div class="coverage-actions">
-            <span class="coverage-actions-hint">
-                Besoin d'en dire plus sur ce moment ? Le complément s'ajoute à la transcription existante.
-            </span>
+            <span class="coverage-actions-hint">${t('coverageActionsHint')}</span>
             <div class="coverage-actions-buttons">
-                <button class="btn btn-small ${appendClass}" id="append-btn-${annotation.id}" onclick="event.stopPropagation(); toggleAppendRecording(${annotation.id})" title="Enregistre un complément audio et l'ajoute à la transcription existante.">
+                <button class="btn btn-small ${appendClass}" id="append-btn-${annotation.id}" onclick="event.stopPropagation(); toggleAppendRecording(${annotation.id})" title="${escapeHtml(t('coverageAppendTitle'))}">
                     ${appendLabel}
                 </button>
-                <button class="btn btn-small coverage-action-btn coverage-action-btn--secondary" onclick="event.stopPropagation(); retranscribeAnnotation(${annotation.id})" title="Relance Whisper sur l'audio existant. La transcription sera remplacée.">
-                    <i class="fa-solid fa-arrows-rotate"></i> Re-transcrire
+                <button class="btn btn-small coverage-action-btn coverage-action-btn--secondary" onclick="event.stopPropagation(); retranscribeAnnotation(${annotation.id})" title="${escapeHtml(t('coverageRetranscribeTitle'))}">
+                    <i class="fa-solid fa-arrows-rotate"></i> ${t('coverageRetranscribe')}
                 </button>
             </div>
         </div>`;
 }
 
 async function retranscribeAnnotation(annotationId) {
-    if (!confirm('Relancer la transcription de cet enregistrement ?\n\nLa transcription actuelle sera remplacée.')) return;
+    if (!confirm(t('coverageRetranscribeConfirm'))) return;
     try {
         const resp = await fetch(`${API_BASE}/api/annotations/${annotationId}/retranscribe`, {
             method: 'POST',
