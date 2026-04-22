@@ -479,6 +479,13 @@ const state = {
         mediaRecorder: null,
         audioChunks: [],
         loopInterval: null,
+    },
+    // Append-to-transcript recording (per-annotation top-up).
+    appendMode: {
+        annotationId: null,
+        mediaRecorder: null,
+        chunks: [],
+        stream: null,
     }
 };
 
@@ -4399,6 +4406,8 @@ window.addVideoToProject = addVideoToProject;
 window.removeVideoFromProject = removeVideoFromProject;
 window.deleteVideo = deleteVideo;
 window.openTutorialModal = openTutorialModal;
+window.toggleAppendRecording = toggleAppendRecording;
+window.retranscribeAnnotation = retranscribeAnnotation;
 
 // =============================================================================
 // TUTORIAL / HELP SYSTEM
@@ -4911,16 +4920,24 @@ function renderCoveragePanelActions(annotation, score) {
     const anyAbsent = COVERAGE_PHASES.some(p => ((score[p] || {}).status || 'absent') === 'absent');
     if (!anyAbsent) return '';
 
+    const isAppending = state.appendMode && state.appendMode.annotationId === annotation.id;
+    const appendLabel = isAppending
+        ? '<i class="fa-solid fa-stop"></i> Arrêter et ajouter'
+        : '<i class="fa-solid fa-microphone-lines"></i> Ajouter à la transcription';
+    const appendClass = isAppending
+        ? 'coverage-action-btn coverage-action-btn--recording'
+        : 'coverage-action-btn';
+
     return `
         <div class="coverage-actions">
             <span class="coverage-actions-hint">
-                Besoin d'en dire plus sur ce moment ?
+                Besoin d'en dire plus sur ce moment ? Le complément s'ajoute à la transcription existante.
             </span>
             <div class="coverage-actions-buttons">
-                <button class="btn btn-small coverage-action-btn" onclick="event.stopPropagation(); redoRecording(${annotation.id})" title="Supprime l'ancien enregistrement et en démarre un nouveau sur ce segment.">
-                    <i class="fa-solid fa-microphone"></i> Ré-enregistrer
+                <button class="btn btn-small ${appendClass}" id="append-btn-${annotation.id}" onclick="event.stopPropagation(); toggleAppendRecording(${annotation.id})" title="Enregistre un complément audio et l'ajoute à la transcription existante.">
+                    ${appendLabel}
                 </button>
-                <button class="btn btn-small coverage-action-btn coverage-action-btn--secondary" onclick="event.stopPropagation(); retranscribeAnnotation(${annotation.id})" title="Relance Whisper sur l'audio existant.">
+                <button class="btn btn-small coverage-action-btn coverage-action-btn--secondary" onclick="event.stopPropagation(); retranscribeAnnotation(${annotation.id})" title="Relance Whisper sur l'audio existant. La transcription sera remplacée.">
                     <i class="fa-solid fa-arrows-rotate"></i> Re-transcrire
                 </button>
             </div>
@@ -4946,47 +4963,91 @@ async function retranscribeAnnotation(annotationId) {
     }
 }
 
-async function redoRecording(annotationId) {
+async function toggleAppendRecording(annotationId) {
+    const mode = state.appendMode;
+
+    // Already recording for this annotation → stop + transcribe + append.
+    if (mode.annotationId === annotationId && mode.mediaRecorder) {
+        try {
+            mode.mediaRecorder.stop();
+        } catch (_) { /* ignore */ }
+        return;
+    }
+
+    // Already recording for a *different* annotation — block to avoid confusion.
+    if (mode.annotationId && mode.annotationId !== annotationId) {
+        showToast('Enregistrement', 'Un autre complément est déjà en cours.', 'warning');
+        return;
+    }
+
     const ann = state.annotations.find(a => a.id === annotationId);
     if (!ann) return;
 
-    if (!confirm(
-        'Ré-enregistrer ce moment ?\n\n' +
-        "L'ancien enregistrement et sa transcription seront supprimés, puis un nouvel enregistrement démarrera automatiquement. " +
-        'La vidéo se positionnera au début du segment.'
-    )) return;
-
-    const startTime = ann.start_time;
-
+    let stream;
     try {
-        // Delete the old annotation first so we don't end up with overlapping
-        // rows. The server removes the audio blob on disk.
-        const resp = await fetch(`${API_BASE}/api/annotations/${annotationId}`, {
-            method: 'DELETE',
-            headers: MOODLE_JWT ? { 'Authorization': `Bearer ${MOODLE_JWT}` } : {},
-        });
-        if (!resp.ok) throw new Error(await resp.text());
-
-        // Drop cached coverage state for this id.
-        if (state.coverage && state.coverage.scores) {
-            delete state.coverage.scores[annotationId];
-        }
-        state.annotations = state.annotations.filter(a => a.id !== annotationId);
-
-        // Seek to the segment start, then arm the recorder. Keeps the normal
-        // recording pipeline (which reads video currentTime as start_time).
-        const player = document.getElementById('videoPlayer');
-        if (player) {
-            player.currentTime = startTime;
-            try { await player.play(); } catch (_) { /* autoplay policies */ }
-        }
-        renderAnnotations();
-        renderTimeline();
-        renderCoverageBanner();
-
-        showToast('Enregistrement', 'Segment prêt à être ré-enregistré.', 'info');
-        await startRecording();
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (e) {
-        showToast('Erreur', `Ré-enregistrement: ${e.message}`, 'error');
+        showToast('Erreur micro', 'Impossible d\'accéder au microphone', 'error');
+        return;
     }
+
+    const recorder = new MediaRecorder(stream);
+    mode.annotationId = annotationId;
+    mode.mediaRecorder = recorder;
+    mode.chunks = [];
+    mode.stream = stream;
+
+    recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) mode.chunks.push(e.data);
+    };
+
+    recorder.onstop = async () => {
+        const chunks = mode.chunks.slice();
+        try { stream.getTracks().forEach(t => t.stop()); } catch (_) {}
+        mode.annotationId = null;
+        mode.mediaRecorder = null;
+        mode.chunks = [];
+        mode.stream = null;
+
+        // Show processing state on the button.
+        const btn = document.getElementById(`append-btn-${annotationId}`);
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Transcription…';
+        }
+
+        try {
+            const blob = new Blob(chunks, { type: 'audio/wav' });
+            const form = new FormData();
+            form.append('audio_blob', blob, 'append.wav');
+            const headers = {};
+            if (MOODLE_JWT) headers['Authorization'] = `Bearer ${MOODLE_JWT}`;
+
+            const resp = await fetch(`${API_BASE}/api/annotations/transcribe-only`, {
+                method: 'POST', headers, body: form,
+            });
+            if (!resp.ok) throw new Error(await resp.text());
+            const data = await resp.json();
+            const addition = (data.transcription || '').trim();
+            if (!addition) {
+                showToast('Transcription', 'Aucune parole détectée.', 'warning');
+                renderAnnotations();
+                return;
+            }
+
+            const current = state.annotations.find(a => a.id === annotationId);
+            const existing = (current && current.transcription ? current.transcription.trim() : '');
+            const combined = existing ? (existing + '\n\n' + addition) : addition;
+
+            await saveElicitationEdit(annotationId, combined);
+            // saveElicitationEdit invalidates coverage + re-renders.
+            showToast('Transcription', 'Complément ajouté.', 'success');
+        } catch (e) {
+            showToast('Erreur', `Ajout: ${e.message}`, 'error');
+            renderAnnotations();
+        }
+    };
+
+    recorder.start();
+    renderAnnotations();
 }
