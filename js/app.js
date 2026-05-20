@@ -125,6 +125,10 @@ const TRANSLATIONS = {
 
         // Video list items
         removeFromPlugin: 'Remove from plugin',
+        renameVideo: 'Rename',
+        renameVideoPrompt: 'Enter a new name for this video (leave blank to clear):',
+        renameSuccess: 'Video renamed',
+        renameFailed: 'Failed to rename video',
 
         // Segment cards
         deleteSegment: 'Delete segment',
@@ -152,6 +156,34 @@ const TRANSLATIONS = {
         noVideosLoaded: 'No videos loaded yet. Click a video below to load it.',
         noSegmentsForVideo: 'No segments for this video',
         loadVideoFirst: 'Load a video first to see segments.',
+
+        // Coverage banner / session summary
+        coveragePhaseExampleQuoi: 'E.g. "I take the clamp, I turn the glass to the left."',
+        coveragePhaseExampleComment: 'E.g. "slowly, first to the right then to the left, with the long clamp."',
+        coveragePhaseExamplePourquoi: 'E.g. "because otherwise the bubble collapses, to avoid streaks."',
+        coverageFinishSession: 'Finish session',
+        sessionSummaryTitle: 'Session summary',
+        sessionSummaryCloseAria: 'Close',
+        coverageFollowUpsLabel: 'To go further',
+        coverageSessionComplete: 'Session complete',
+        coverageSummarizing: 'Summarizing…',
+
+        // Per-annotation coverage panel
+        coverageAnalyzing: 'Analyzing…',
+        coverageStatusAbsent: 'Absent',
+        coverageStatusPartial: 'Partial',
+        coverageStatusCovered: 'Covered',
+        coverageHintQuoi: 'Add a concrete action ("I take…", "I turn…").',
+        coverageHintComment: 'Specify the manner (speed, tool, sequence: "slowly, first…").',
+        coverageHintPourquoi: 'Explain the reason ("because…", "to avoid…").',
+        coverageTranscriptLabel: 'Transcription (markers highlighted):',
+        coverageActionsHint: 'Need to say more about this moment? The add-on is appended to the existing transcription.',
+        coverageAppendRecord: 'Add to transcription',
+        coverageAppendStop: 'Stop and append',
+        coverageAppendTitle: 'Record a top-up clip and append it to the existing transcription.',
+        coverageRetranscribe: 'Re-transcribe',
+        coverageRetranscribeTitle: 'Re-run Whisper on the existing audio. The current transcription will be replaced.',
+        coverageRetranscribeConfirm: 'Re-run the transcription for this recording?\n\nThe current transcription will be replaced.',
     },
     fr: {
         // Header / nav
@@ -271,6 +303,10 @@ const TRANSLATIONS = {
 
         // Video list items
         removeFromPlugin: 'Retirer du plugin',
+        renameVideo: 'Renommer',
+        renameVideoPrompt: 'Entrez un nouveau nom pour cette vidéo (laissez vide pour effacer) :',
+        renameSuccess: 'Vidéo renommée',
+        renameFailed: 'Échec du renommage de la vidéo',
 
         // Segment cards
         deleteSegment: 'Supprimer le segment',
@@ -298,6 +334,34 @@ const TRANSLATIONS = {
         noVideosLoaded: 'Aucune vidéo chargée. Cliquez sur une vidéo ci-dessous pour la charger.',
         noSegmentsForVideo: 'Aucun segment pour cette vidéo',
         loadVideoFirst: 'Chargez d\'abord une vidéo pour voir les segments.',
+
+        // Coverage banner / session summary
+        coveragePhaseExampleQuoi: 'Ex. « Je prends la pince, je tourne le verre à gauche. »',
+        coveragePhaseExampleComment: 'Ex. « lentement, d\'abord à droite puis à gauche, avec la pince longue. »',
+        coveragePhaseExamplePourquoi: 'Ex. « parce que sinon la bulle s\'effondre, c\'est pour éviter les stries. »',
+        coverageFinishSession: 'Finir la session',
+        sessionSummaryTitle: 'Synthèse de la session',
+        sessionSummaryCloseAria: 'Fermer',
+        coverageFollowUpsLabel: 'Pour aller plus loin',
+        coverageSessionComplete: 'Session complète',
+        coverageSummarizing: 'Synthèse…',
+
+        // Per-annotation coverage panel
+        coverageAnalyzing: 'Analyse en cours…',
+        coverageStatusAbsent: 'Absent',
+        coverageStatusPartial: 'Partiel',
+        coverageStatusCovered: 'Couvert',
+        coverageHintQuoi: 'Ajoute une action concrète (« je prends… », « je tourne… »).',
+        coverageHintComment: 'Précise la manière (vitesse, outil, séquence : « lentement, d\'abord… »).',
+        coverageHintPourquoi: 'Explique la raison (« parce que… », « pour éviter… »).',
+        coverageTranscriptLabel: 'Transcription (marqueurs surlignés) :',
+        coverageActionsHint: 'Besoin d\'en dire plus sur ce moment ? Le complément s\'ajoute à la transcription existante.',
+        coverageAppendRecord: 'Ajouter à la transcription',
+        coverageAppendStop: 'Arrêter et ajouter',
+        coverageAppendTitle: 'Enregistre un complément audio et l\'ajoute à la transcription existante.',
+        coverageRetranscribe: 'Re-transcrire',
+        coverageRetranscribeTitle: 'Relance Whisper sur l\'audio existant. La transcription sera remplacée.',
+        coverageRetranscribeConfirm: 'Relancer la transcription de cet enregistrement ?\n\nLa transcription actuelle sera remplacée.',
     },
 };
 
@@ -414,6 +478,21 @@ function refreshDynamicUIStrings() {
 
     // Segment start/end display (prefix only)
     refreshSegmentDisplayPrefixes();
+
+    // Re-render the elicitation panel — annotation cards and coverage panels
+    // bake t() into their HTML at build time, so a language switch needs a
+    // re-render. Only UI strings are replaced; transcriptions are not.
+    if (typeof renderAnnotations === 'function' && Array.isArray(state.annotations)) {
+        try { renderAnnotations(); } catch (_) { /* early init */ }
+    }
+    if (typeof renderCoverageBanner === 'function') {
+        try { renderCoverageBanner(); } catch (_) { /* early init */ }
+    }
+    // If a session summary is currently displayed, its inner labels are
+    // baked from t() — regenerate them from the cached last response.
+    if (state.coverage && state.coverage.summaryOpen && state.coverage.lastSummary) {
+        try { renderSessionSummary(state.coverage.lastSummary); } catch (_) {}
+    }
 }
 
 /** Keep "Start: X" / "End: X" labels translated when the user switches language. */
@@ -479,6 +558,13 @@ const state = {
         mediaRecorder: null,
         audioChunks: [],
         loopInterval: null,
+    },
+    // Append-to-transcript recording (per-annotation top-up).
+    appendMode: {
+        annotationId: null,
+        mediaRecorder: null,
+        chunks: [],
+        stream: null,
     }
 };
 
@@ -1094,6 +1180,8 @@ async function checkMicrophonePermission() {
 }
 
 
+const activeUploads = new Map();
+
 function ensureUploadPanel() {
     let panel = document.getElementById('uploadProgressPanel');
     if (panel) return panel;
@@ -1137,12 +1225,42 @@ function updateUploadRow(fileName, percent, statusText, isError) {
         row.dataset.file = fileName;
         row.style.marginBottom = '10px';
 
+        const header = document.createElement('div');
+        header.style.display = 'flex';
+        header.style.alignItems = 'center';
+        header.style.justifyContent = 'space-between';
+        header.style.gap = '8px';
+        header.style.marginBottom = '4px';
+
         const label = document.createElement('div');
         label.className = 'upload-row-label';
         label.textContent = fileName;
         label.style.fontSize = '12px';
-        label.style.marginBottom = '4px';
-        row.appendChild(label);
+        label.style.flex = '1';
+        label.style.overflow = 'hidden';
+        label.style.textOverflow = 'ellipsis';
+        label.style.whiteSpace = 'nowrap';
+        header.appendChild(label);
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'upload-row-cancel';
+        cancelBtn.title = t('cancel') || 'Cancel';
+        cancelBtn.innerHTML = '<i class="fas fa-times"></i>';
+        cancelBtn.style.background = 'transparent';
+        cancelBtn.style.border = 'none';
+        cancelBtn.style.color = '#888';
+        cancelBtn.style.cursor = 'pointer';
+        cancelBtn.style.fontSize = '12px';
+        cancelBtn.style.padding = '0 4px';
+        cancelBtn.addEventListener('click', () => {
+            const xhr = activeUploads.get(fileName);
+            if (xhr) xhr.abort();
+            removeUploadRow(fileName);
+        });
+        header.appendChild(cancelBtn);
+
+        row.appendChild(header);
 
         const bar = document.createElement('div');
         bar.className = 'upload-progress-bar';
@@ -1203,6 +1321,7 @@ async function uploadVideos(files) {
             await uploadSingleFile(file);
             succeeded++;
         } catch (err) {
+            if (err && err.aborted) continue;
             showToast('Upload failed', err.message || file.name, 'error');
         }
     }
@@ -1226,6 +1345,9 @@ function uploadSingleFile(file) {
             xhr.setRequestHeader('Authorization', `Bearer ${MOODLE_JWT}`);
         }
 
+        activeUploads.set(file.name, xhr);
+        const cleanup = () => activeUploads.delete(file.name);
+
         xhr.upload.onprogress = (event) => {
             if (event.lengthComputable) {
                 const percent = Math.round((event.loaded / event.total) * 100);
@@ -1234,6 +1356,7 @@ function uploadSingleFile(file) {
         };
 
         xhr.onload = () => {
+            cleanup();
             if (xhr.status >= 200 && xhr.status < 300) {
                 updateUploadRow(file.name, 100);
                 resolve();
@@ -1243,7 +1366,15 @@ function uploadSingleFile(file) {
         };
 
         xhr.onerror = () => {
+            cleanup();
             reject(new Error('Upload failed'));
+        };
+
+        xhr.onabort = () => {
+            cleanup();
+            const err = new Error('Upload cancelled');
+            err.aborted = true;
+            reject(err);
         };
 
         const formData = new FormData();
@@ -1291,12 +1422,23 @@ function showVideoModal() {
                 item.classList.add('active');
             }
 
+            const displayName = (video.display_name && video.display_name.trim())
+                ? video.display_name
+                : video.filename;
+            const showRawBelow = displayName !== video.filename;
+
             item.innerHTML = `
-                <div class="video-list-name">${escapeHtml(video.filename)}</div>
+                <div class="video-list-name">${escapeHtml(displayName)}</div>
+                ${showRawBelow ? `<div class="video-list-rawname" title="${escapeHtml(video.filename)}">${escapeHtml(video.filename)}</div>` : ''}
                 <div class="video-list-meta">
                     ${formatFileSize(video.file_size)} • ${video.annotation_count} elicitations
                 </div>
                 <div class="video-list-actions">
+                    <button class="btn btn-icon btn-small video-rename-btn"
+                        title="${t('renameVideo')}"
+                        onclick="event.stopPropagation(); renameVideo(${video.id})">
+                        <i class="fas fa-pen"></i>
+                    </button>
                     <button class="btn btn-icon btn-small btn-danger video-delete-btn"
                         title="${t('removeFromPlugin')}"
                         onclick="event.stopPropagation(); deleteVideo(${video.id})">
@@ -1377,7 +1519,7 @@ async function loadVideo(videoId) {
         videoPlayer.load();
 
         // Update video info
-        document.getElementById('videoName').textContent = video.filename;
+        document.getElementById('videoName').textContent = (video.display_name && video.display_name.trim()) ? video.display_name : video.filename;
         document.getElementById('annotationCount').textContent = video.annotation_count;
 
         // Load annotations
@@ -1609,6 +1751,10 @@ async function loadAnnotations(videoId) {
 
         renderAnnotations();
         renderTimeline();
+        // Fire-and-forget: score unscored transcripts, aggregate, repaint banner + pips.
+        if (typeof updateCoverageForAnnotations === 'function') {
+            updateCoverageForAnnotations().catch(e => console.warn('coverage update failed', e));
+        }
     } catch (error) {
         console.error('Error loading annotations:', error);
         showToast('Error', 'Failed to load annotations', 'error');
@@ -1719,107 +1865,13 @@ function renderAnnotations() {
             relaunchTaggingBtn = `<button class="btn btn-icon btn-tiny" onclick="event.stopPropagation(); triggerTagging(${annotation.id});" title="${t('relaunchTagging')}"><i class="fa-solid fa-tags"></i></button>`;
         }
 
-        // --- Review panel ---
-        let reviewPanelHTML = '';
-        if (annotation.review_status === 'processing') {
-            reviewPanelHTML = `<div class="review-panel-container"><div class="ai-pipeline-status"><i class="fa-solid fa-magnifying-glass"></i> <span>AI Review in progress...</span></div></div>`;
-        } else if (annotation.review_status === 'completed' && annotation.review_results) {
-            let rr = annotation.review_results;
-            if (typeof rr === 'string') { try { rr = JSON.parse(rr); } catch(e) { rr = {}; } }
-
-            const tier = rr.completeness_tier || 'MINIMAL';
-            const tierColors = { MINIMAL: '#dc3545', PARTIAL: '#ffc107', SUBSTANTIAL: '#17a2b8', COMPLETE: '#28a745' };
-            const tierLabels = { MINIMAL: 'Minimal', PARTIAL: 'Partiel', SUBSTANTIAL: 'Substantiel', COMPLETE: 'Complet' };
-            const tierColor = tierColors[tier] || '#6c757d';
-            const tierLabel = tierLabels[tier] || tier;
-
-            const sa = rr.sensations_analysis || {};
-            const sensationTypes = [
-                { key: 'visual_mentioned', label: 'Visuel', icon: 'fa-eye', cls: 'visual' },
-                { key: 'tactile_mentioned', label: 'Tactile', icon: 'fa-hand', cls: 'tactile' },
-                { key: 'auditory_mentioned', label: 'Auditif', icon: 'fa-ear-listen', cls: 'auditory' },
-                { key: 'proprioceptive_mentioned', label: 'Proprioceptif', icon: 'fa-person', cls: 'proprioceptive' },
-            ];
-            const sensationBadges = sensationTypes
-                .filter(s => sa[s.key])
-                .map(s => `<span class="sensation-badge ${s.cls}"><i class="fa-solid ${s.icon}"></i> ${s.label}</span>`)
-                .join('');
-
-            const dims = rr.dimensions || {};
-            const dimOrder = ['HOW', 'EVALUATION', 'FEEDBACK'];
-            let dimsHTML = '';
-            dimOrder.forEach(dimKey => {
-                const dim = dims[dimKey];
-                if (!dim) return;
-                const covered = dim.covered;
-                const cardClass = covered ? 'complete' : 'incomplete';
-                const checkIcon = covered ? '✓' : '✗';
-                const statusLabel = covered ? 'Complet' : 'Incomplet';
-
-                let whatIsGoodHTML = '';
-                if (covered && dim.what_is_good && dim.what_is_good.length > 0) {
-                    const items = dim.what_is_good.map(w => `<li>${escapeHtml(w)}</li>`).join('');
-                    whatIsGoodHTML = `<div class="what-is-good"><strong>✓ Ce qui est bien :</strong><ul>${items}</ul></div>`;
-                }
-
-                let missingHTML = '';
-                if (!covered && dim.missing_elements && dim.missing_elements.length > 0) {
-                    missingHTML = `<p class="missing-elements"><em>Manque: ${escapeHtml(dim.missing_elements.join(', '))}</em></p>`;
-                }
-
-                let promptsHTML = '';
-                if (!covered && dim.prompts && dim.prompts.length > 0) {
-                    const promptItems = dim.prompts.map(p => `<div class="prompt-item"><span>${escapeHtml(p)}</span></div>`).join('');
-                    promptsHTML = `<div class="prompts-list">${promptItems}</div>`;
-                }
-
-                const contentStyle = covered ? 'display: none;' : 'display: none;';
-                const clickAttr = covered ? '' : `onclick="toggleDimension(${annotation.id}, '${dimKey}')"`;
-                dimsHTML += `
-                    <div class="dimension-card ${cardClass}" ${clickAttr}>
-                        <div class="dimension-header">
-                            <strong>${checkIcon} ${dimKey}</strong>
-                            <span>${statusLabel}</span>
-                        </div>
-                        <div class="dimension-content" id="dim-${annotation.id}-${dimKey}" style="${contentStyle}">
-                            ${whatIsGoodHTML}${missingHTML}${promptsHTML}
-                        </div>
-                    </div>`;
-            });
-
-            const readyToComplete = rr.ready_to_proceed;
-            const relaunchReviewBtn = `<button class="btn btn-icon btn-tiny" onclick="triggerReview(${annotation.id})" title="${t('relaunchReview')}"><i class="fa-solid fa-arrow-rotate-right"></i></button>`;
-
-            const panelOpen = !!state.showReviewPanels[annotation.id];
-            reviewPanelHTML = `
-                <div class="review-panel-container">
-                    <div class="review-toggle-header" onclick="toggleReviewPanel(${annotation.id})">
-                        <span class="review-toggle-label">
-                            <i class="fa-solid fa-magnifying-glass"></i>
-                            AI Review
-                            <span class="tier-badge" style="background-color: ${tierColor}">${tierLabel}</span>
-                        </span>
-                        <span class="review-toggle-indicator"><i class="fa-solid fa-chevron-${panelOpen ? 'up' : 'down'}"></i></span>
-                    </div>
-                    <div class="review-panel ${panelOpen ? 'visible' : ''}" id="review-panel-${annotation.id}">
-                        <div class="review-header-row">
-                            <div class="review-header">
-                                <div class="sensations-badges">${sensationBadges}</div>
-                            </div>
-                            ${relaunchReviewBtn}
-                        </div>
-                        ${dimsHTML}
-                        <div class="review-actions">
-                            <button class="btn edit-elicitation-btn" onclick="editElicitation(${annotation.id})">
-                                <i class="fa-solid fa-pencil"></i> ${t('modifyElicitation')}
-                            </button>
-                            <button class="btn mark-complete-btn ${readyToComplete ? '' : 'disabled'}" onclick="markElicitationComplete(${annotation.id})" ${readyToComplete ? '' : 'disabled'}>
-                                <i class="fa-solid fa-check"></i> ${t('markComplete')}
-                            </button>
-                        </div>
-                    </div>
-                </div>`;
-        }
+        // --- Coverage panel (Quoi / Comment / Pourquoi, spaCy-driven) ---
+        // Replaces the legacy HOW/EVALUATION/FEEDBACK review. No LLM call per
+        // annotation — everything here comes from the cached coverage score.
+        const reviewPanelHTML = renderCoveragePanel(annotation);
+        const weakBadgeHTML = isAnnotationWeak(annotation)
+            ? `<span class="annotation-weak-badge" title="Élicitation courte : peu de marqueurs détectés."><i class="fa-solid fa-triangle-exclamation"></i> Élicitation brève</span>`
+            : '';
 
         item.innerHTML = `
             <div class="annotation-header">
@@ -1828,6 +1880,7 @@ function renderAnnotations() {
                         ${formatTime(annotation.start_time)} - ${formatTime(annotation.end_time)}
                         (${duration.toFixed(1)}s)
                     </span>
+                    ${weakBadgeHTML}
                     ${taskBadgeHTML}
                 </div>
                 <div class="annotation-actions">
@@ -1856,7 +1909,13 @@ function renderAnnotations() {
         `;
 
         item.addEventListener('click', (e) => {
-            if (!e.target.closest('button') && !e.target.closest('.review-toggle-header') && !e.target.closest('.dimension-card')) {
+            if (
+                !e.target.closest('button') &&
+                !e.target.closest('.coverage-toggle-header') &&
+                !e.target.closest('.coverage-panel') &&
+                !e.target.closest('.review-toggle-header') &&
+                !e.target.closest('.dimension-card')
+            ) {
                 seekToAnnotation(annotation.start_time);
             }
         });
@@ -2886,9 +2945,19 @@ async function saveTranscriptionEdit(annotationId, newText, itemElement) {
             annotation.transcription_status = updated.transcription_status || annotation.transcription_status;
         }
 
+        // Invalidate this annotation's cached coverage score so the detector
+        // runs again against the new text on the next coverage refresh.
+        if (state.coverage && state.coverage.scores) {
+            delete state.coverage.scores[annotationId];
+        }
+
         // Remove editor and re-render
         renderAnnotations();
         renderTimeline();
+        // Re-score + re-aggregate + repaint banner, pips and panel.
+        if (typeof updateCoverageForAnnotations === 'function') {
+            updateCoverageForAnnotations().catch(e => console.warn('coverage refresh failed', e));
+        }
         showToast('Saved', 'Transcription updated', 'success');
         // Trigger extended transcript regeneration
         await regenerateExtendedTranscript(annotationId);
@@ -4084,6 +4153,46 @@ async function deleteProject(projectId) {
     }
 }
 
+async function renameVideo(videoId) {
+    const video = state.videos.find(v => v.id === videoId);
+    if (!video) return;
+
+    const current = (video.display_name && video.display_name.trim()) ? video.display_name : '';
+    const next = prompt(t('renameVideoPrompt'), current);
+    if (next === null) return;
+
+    const trimmed = next.trim();
+    if (trimmed === current) return;
+
+    try {
+        const response = await fetch(`${API_BASE}/api/videos/${videoId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ display_name: trimmed })
+        });
+
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(errText || 'rename failed');
+        }
+
+        const updated = await response.json();
+        const idx = state.videos.findIndex(v => v.id === videoId);
+        if (idx !== -1) state.videos[idx] = { ...state.videos[idx], display_name: updated.display_name };
+        if (state.currentVideoId === videoId && state.currentVideo) {
+            state.currentVideo.display_name = updated.display_name;
+            const nameEl = document.getElementById('videoName');
+            if (nameEl) nameEl.textContent = updated.display_name || updated.filename;
+        }
+
+        showVideoModal();
+        showToast(t('toastSuccess'), t('renameSuccess'), 'success');
+    } catch (error) {
+        console.error('Error renaming video:', error);
+        showToast(t('toastError'), t('renameFailed'), 'error');
+    }
+}
+
 async function deleteVideo(videoId) {
     const video = state.videos.find(v => v.id === videoId);
     const name = video ? video.filename : `ID ${videoId}`;
@@ -4472,6 +4581,8 @@ window.addVideoToProject = addVideoToProject;
 window.removeVideoFromProject = removeVideoFromProject;
 window.deleteVideo = deleteVideo;
 window.openTutorialModal = openTutorialModal;
+window.toggleAppendRecording = toggleAppendRecording;
+window.retranscribeAnnotation = retranscribeAnnotation;
 
 // =============================================================================
 // TUTORIAL / HELP SYSTEM
@@ -4579,20 +4690,544 @@ function openTutorialModal() {
 function closeTutorialModal() {
     const modal = document.getElementById('tutorialModal');
     if (modal) modal.classList.remove('active');
-    // Remember that user has seen the tutorial
-    try { localStorage.setItem('tutorialSeen', '1'); } catch (e) {}
+    // Persist server-side so the flag survives across browsers and iframe storage restrictions
+    fetch(`${API_BASE}/api/tutorial-seen`, { method: 'POST' }).catch(() => {});
 }
 
 /**
  * Auto-open tutorial for first-time users.
- * Opens the tutorial on first visit (no localStorage flag set).
+ * Checks server-side flag so the decision survives browser resets and iframe storage restrictions.
  */
 async function maybeShowTutorialForNewcomer() {
     try {
-        const seen = localStorage.getItem('tutorialSeen');
-        if (seen) return; // Already acknowledged
+        const resp = await fetch(`${API_BASE}/api/tutorial-status`);
+        if (!resp.ok) return; // Non-blocking — fail silently
+        const { seen } = await resp.json();
+        if (seen) return;
         openTutorialModal();
     } catch (e) {
         // Non-blocking — ignore errors silently
     }
+}
+
+// ============================================================================
+// Coverage module — Quoi / Comment / Pourquoi tracking via spaCy backend
+// Stateless backend; all per-annotation scores live in state.coverage here.
+// ============================================================================
+
+state.coverage = {
+    // { [annotationId]: { quoi: {hits, per_100_tok, status}, comment: {...}, pourquoi: {...}, token_count } }
+    scores: {},
+    aggregate: null,
+    plateau: false,
+    summaryOpen: false,
+};
+
+const COVERAGE_PHASES = ['quoi', 'comment', 'pourquoi'];
+
+async function _coverageScoreTranscript(transcript) {
+    const resp = await fetch(`${API_BASE}/api/coverage/score`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(MOODLE_JWT ? { 'Authorization': `Bearer ${MOODLE_JWT}` } : {}) },
+        body: JSON.stringify({ transcript }),
+    });
+    if (!resp.ok) throw new Error(`score ${resp.status}`);
+    return resp.json();
+}
+
+async function _coverageAggregate(scoresList) {
+    const resp = await fetch(`${API_BASE}/api/coverage/aggregate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(MOODLE_JWT ? { 'Authorization': `Bearer ${MOODLE_JWT}` } : {}) },
+        body: JSON.stringify({ per_annotation_scores: scoresList }),
+    });
+    if (!resp.ok) throw new Error(`aggregate ${resp.status}`);
+    return resp.json();
+}
+
+async function _coverageSummary(transcript, phase_scores) {
+    const resp = await fetch(`${API_BASE}/api/coverage/summary`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(MOODLE_JWT ? { 'Authorization': `Bearer ${MOODLE_JWT}` } : {}) },
+        body: JSON.stringify({ transcript, phase_scores }),
+    });
+    if (!resp.ok) throw new Error(`summary ${resp.status}`);
+    return resp.json();
+}
+
+// Score any annotation whose transcript is present and unscored. Called after
+// loadAnnotations renders. Chronological order matters for plateau detection.
+async function updateCoverageForAnnotations() {
+    if (!state.annotations || state.annotations.length === 0) {
+        state.coverage.scores = {};
+        state.coverage.aggregate = null;
+        state.coverage.plateau = false;
+        renderCoverageBanner();
+        return;
+    }
+
+    const sorted = [...state.annotations].sort((a, b) =>
+        new Date(a.created_at || 0) - new Date(b.created_at || 0));
+
+    for (const ann of sorted) {
+        const txt = (ann.transcription || '').trim();
+        if (!txt) continue;
+        if (state.coverage.scores[ann.id]) continue;
+        try {
+            state.coverage.scores[ann.id] = await _coverageScoreTranscript(txt);
+        } catch (e) {
+            console.warn('coverage score failed', ann.id, e);
+        }
+    }
+
+    const orderedScores = sorted
+        .map(a => state.coverage.scores[a.id])
+        .filter(Boolean);
+
+    if (orderedScores.length === 0) {
+        state.coverage.aggregate = null;
+        state.coverage.plateau = false;
+    } else {
+        try {
+            const { aggregate, plateau } = await _coverageAggregate(orderedScores);
+            state.coverage.aggregate = aggregate;
+            state.coverage.plateau = !!plateau;
+        } catch (e) {
+            console.warn('coverage aggregate failed', e);
+        }
+    }
+
+    renderCoverageBanner();
+    // Re-render cards so per-annotation coverage panels pick up the new
+    // scores (the first render happened before scores arrived).
+    renderAnnotations();
+    renderAnnotationPips();
+}
+
+function renderCoverageBanner() {
+    const banner = document.getElementById('coverageBanner');
+    if (!banner) return;
+    const agg = state.coverage.aggregate;
+
+    if (!agg) {
+        banner.style.display = 'none';
+        return;
+    }
+    banner.style.display = '';
+
+    COVERAGE_PHASES.forEach(p => {
+        const phase = agg[p] || { hits: 0, status: 'absent' };
+        const chip = banner.querySelector(`.phase-chip[data-phase="${p}"] .phase-dot`);
+        if (chip) chip.setAttribute('data-status', phase.status || 'absent');
+        const hits = document.getElementById(`phaseHits-${p}`);
+        if (hits) hits.textContent = String(phase.hits || 0);
+    });
+
+    const anyPartial = COVERAGE_PHASES.some(p => (agg[p] || {}).status && agg[p].status !== 'absent');
+    const finishBtn = document.getElementById('finishSessionBtn');
+    if (finishBtn) finishBtn.style.display = anyPartial ? '' : 'none';
+}
+
+function renderAnnotationPips() {
+    document.querySelectorAll('.annotation-item').forEach(el => {
+        const id = parseInt(el.dataset.id, 10);
+        if (!id) return;
+        el.querySelectorAll('.annotation-pips').forEach(n => n.remove());
+        const s = state.coverage.scores[id];
+        if (!s) return;
+
+        const pips = document.createElement('span');
+        pips.className = 'annotation-pips';
+        COVERAGE_PHASES.forEach(p => {
+            const status = (s[p] || {}).status || 'absent';
+            const hits = (s[p] || {}).hits || 0;
+            const dot = document.createElement('span');
+            dot.className = 'annotation-pip';
+            dot.setAttribute('data-status', status);
+            dot.title = `${p}: ${hits} (${status})`;
+            pips.appendChild(dot);
+        });
+
+        const header = el.querySelector('.annotation-header, .annotation-meta, h3, h4') || el.firstElementChild;
+        if (header) header.appendChild(pips);
+        else el.appendChild(pips);
+    });
+}
+
+async function onFinishSessionClick() {
+    const agg = state.coverage.aggregate;
+    if (!agg) return;
+
+    const sorted = [...state.annotations].sort((a, b) =>
+        new Date(a.created_at || 0) - new Date(b.created_at || 0));
+    const transcript = sorted
+        .map(a => (a.transcription || '').trim())
+        .filter(Boolean)
+        .join('\n\n');
+    if (!transcript) {
+        showToast('Synthèse', 'Aucune transcription à résumer.', 'warning');
+        return;
+    }
+
+    const phase_scores = {};
+    COVERAGE_PHASES.forEach(p => {
+        const s = agg[p] || {};
+        phase_scores[p] = {
+            hits: s.hits || 0,
+            per_100_tok: s.per_100_tok || 0,
+            status: s.status || 'absent',
+        };
+    });
+
+    const btn = document.getElementById('finishSessionBtn');
+    if (btn) { btn.disabled = true; btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${t('coverageSummarizing')}`; }
+
+    try {
+        const res = await _coverageSummary(transcript, phase_scores);
+        renderSessionSummary(res);
+    } catch (e) {
+        showToast('Synthèse', `Erreur: ${e.message}`, 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = `<i class="fas fa-flag-checkered"></i> <span data-i18n="coverageFinishSession">${t('coverageFinishSession')}</span>`; }
+    }
+}
+
+function renderSessionSummary({ summary, weakest_phase, follow_ups }) {
+    const card = document.getElementById('sessionSummaryCard');
+    const body = document.getElementById('sessionSummaryBody');
+    if (!card || !body) return;
+    // Cache so refreshDynamicUIStrings() can re-render on language switch.
+    state.coverage.lastSummary = { summary, weakest_phase, follow_ups };
+
+    let html = `<div class="summary-text">${escapeHtml(summary || '')}</div>`;
+    if (follow_ups && follow_ups.length) {
+        const weakTag = weakest_phase
+            ? `<span class="weakest-tag">${escapeHtml(weakest_phase)}</span>`
+            : '';
+        html += `<div class="followups-label">${t('coverageFollowUpsLabel')} ${weakTag}</div>`;
+        html += `<ul class="followups">${
+            follow_ups.map(q => `<li>${escapeHtml(q)}</li>`).join('')
+        }</ul>`;
+    } else {
+        html += `<div class="followups-label">${t('coverageSessionComplete')}</div>`;
+    }
+    body.innerHTML = html;
+    card.style.display = '';
+    state.coverage.summaryOpen = true;
+}
+
+function hideSessionSummary() {
+    const card = document.getElementById('sessionSummaryCard');
+    if (card) card.style.display = 'none';
+    state.coverage.summaryOpen = false;
+}
+
+// Wire buttons once DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    const finishBtn = document.getElementById('finishSessionBtn');
+    if (finishBtn) finishBtn.addEventListener('click', onFinishSessionClick);
+    const closeBtn = document.getElementById('sessionSummaryCloseBtn');
+    if (closeBtn) closeBtn.addEventListener('click', hideSessionSummary);
+});
+
+// ============================================================================
+// Per-annotation coverage panel — replaces the legacy review-panel.
+// Shows three phase rows (Quoi/Comment/Pourquoi) with status + hit count,
+// the transcript with matched markers highlighted, and a one-line hint for
+// absent phases.  Everything below is deterministic (spaCy); no LLM per
+// annotation.  The session-level summary (LLM) is still driven from the
+// "Finir la session" button in the top banner.
+// ============================================================================
+
+// Phase labels are domain terms (Quoi/Comment/Pourquoi) — kept in French in
+// both locales on purpose. Hints and status labels translate.
+const COVERAGE_PHASE_META = {
+    quoi:     { label: 'Quoi',     hintKey: 'coverageHintQuoi' },
+    comment:  { label: 'Comment',  hintKey: 'coverageHintComment' },
+    pourquoi: { label: 'Pourquoi', hintKey: 'coverageHintPourquoi' },
+};
+
+function coverageStatusLabel(status) {
+    switch (status) {
+        case 'absent': return t('coverageStatusAbsent');
+        case 'partial': return t('coverageStatusPartial');
+        case 'covered': return t('coverageStatusCovered');
+        default: return status;
+    }
+}
+
+function renderCoveragePanel(annotation) {
+    // Only makes sense once we have a transcript.
+    if (annotation.transcription_status !== 'completed' || !annotation.transcription) {
+        return '';
+    }
+
+    const score = state.coverage.scores[annotation.id];
+    // Score may not have arrived yet (async). Show a loading shell so the
+    // panel slot is stable across renders.
+    if (!score) {
+        return `
+            <div class="coverage-panel-container">
+                <div class="coverage-toggle-header coverage-toggle-header--loading">
+                    <span class="coverage-toggle-label">
+                        <i class="fa-solid fa-wave-square"></i>
+                        ${t('coverageAnalyzing')}
+                    </span>
+                </div>
+            </div>`;
+    }
+
+    const panelOpen = !!state.showReviewPanels[annotation.id];
+
+    // Worst phase drives the headline status chip on the toggle.
+    const order = { absent: 0, partial: 1, covered: 2 };
+    let worstStatus = 'covered';
+    COVERAGE_PHASES.forEach(p => {
+        const s = (score[p] || {}).status || 'absent';
+        if (order[s] < order[worstStatus]) worstStatus = s;
+    });
+
+    const rowsHTML = COVERAGE_PHASES.map(p => {
+        const s = score[p] || { hits: 0, status: 'absent' };
+        const label = COVERAGE_PHASE_META[p].label;
+        const hint = s.status === 'absent' ? t(COVERAGE_PHASE_META[p].hintKey) : '';
+        return `
+            <div class="coverage-row" data-phase="${p}" data-status="${s.status}">
+                <span class="coverage-row-dot" data-status="${s.status}"></span>
+                <span class="coverage-row-label">${label}</span>
+                <span class="coverage-row-status">${coverageStatusLabel(s.status)}</span>
+                <span class="coverage-row-hits">${s.hits}</span>
+                ${hint ? `<div class="coverage-row-hint">${escapeHtml(hint)}</div>` : ''}
+            </div>`;
+    }).join('');
+
+    const highlighted = highlightTranscript(annotation.transcription, score.markers || {});
+
+    return `
+        <div class="coverage-panel-container">
+            <div class="coverage-toggle-header" onclick="toggleReviewPanel(${annotation.id})">
+                <span class="coverage-toggle-label">
+                    <i class="fa-solid fa-wave-square"></i>
+                    Quoi / Comment / Pourquoi
+                    <span class="coverage-chip" data-status="${worstStatus}">${coverageStatusLabel(worstStatus)}</span>
+                </span>
+                <span class="coverage-toggle-indicator">
+                    <i class="fa-solid fa-chevron-${panelOpen ? 'up' : 'down'}"></i>
+                </span>
+            </div>
+            <div class="coverage-panel ${panelOpen ? 'visible' : ''}" id="coverage-panel-${annotation.id}">
+                <div class="coverage-rows">${rowsHTML}</div>
+                <div class="coverage-transcript-label">${t('coverageTranscriptLabel')}</div>
+                <div class="coverage-transcript">${highlighted}</div>
+                ${renderCoveragePanelActions(annotation, score)}
+            </div>
+        </div>`;
+}
+
+// Build an HTML string where marker spans are wrapped in <mark> tags colored
+// by phase. Markers are already char-offset based, so we slice the raw
+// transcript and interleave escaped chunks with escaped marker text.
+function highlightTranscript(transcript, markers) {
+    if (!transcript) return '';
+
+    // Collect (start, end, phase) triples; sort + resolve overlaps by giving
+    // priority to the longest span, then to pourquoi > comment > quoi (why is
+    // usually the most informative marker).
+    const prio = { pourquoi: 2, comment: 1, quoi: 0 };
+    const all = [];
+    COVERAGE_PHASES.forEach(phase => {
+        (markers[phase] || []).forEach(m => {
+            if (typeof m.char_start === 'number' && typeof m.char_end === 'number') {
+                all.push({ start: m.char_start, end: m.char_end, phase });
+            }
+        });
+    });
+
+    all.sort((a, b) => {
+        if (a.start !== b.start) return a.start - b.start;
+        const lenDiff = (b.end - b.start) - (a.end - a.start);
+        if (lenDiff !== 0) return lenDiff;
+        return prio[b.phase] - prio[a.phase];
+    });
+
+    // Drop overlaps: skip any span that starts before the previous one ended.
+    const nonOverlapping = [];
+    let cursor = -1;
+    for (const m of all) {
+        if (m.start >= cursor) {
+            nonOverlapping.push(m);
+            cursor = m.end;
+        }
+    }
+
+    if (nonOverlapping.length === 0) {
+        return escapeHtml(transcript);
+    }
+
+    let out = '';
+    let idx = 0;
+    for (const m of nonOverlapping) {
+        if (m.start > idx) out += escapeHtml(transcript.slice(idx, m.start));
+        out += `<mark class="phase-mark phase-mark--${m.phase}">${escapeHtml(transcript.slice(m.start, m.end))}</mark>`;
+        idx = m.end;
+    }
+    if (idx < transcript.length) out += escapeHtml(transcript.slice(idx));
+    return out;
+}
+
+// ============================================================================
+// Weak-annotation signalling + redo actions
+// Weak = transcription completed AND either all three phases absent, OR the
+// transcript is shorter than COVERAGE_MIN_TOKENS. Unknown (no score yet) is
+// NOT weak — avoids flashing the badge on cards mid-scoring.
+// ============================================================================
+
+const COVERAGE_MIN_TOKENS = 10;
+
+function isAnnotationWeak(annotation) {
+    if (!annotation) return false;
+    if (annotation.transcription_status !== 'completed') return false;
+
+    const s = state.coverage && state.coverage.scores && state.coverage.scores[annotation.id];
+    if (!s) return false;
+
+    const allAbsent = COVERAGE_PHASES.every(p => ((s[p] || {}).status || 'absent') === 'absent');
+    const tooShort = (s.token_count || 0) < COVERAGE_MIN_TOKENS;
+    return allAbsent || tooShort;
+}
+
+// Actions row inside the coverage panel: shown only when at least one phase
+// is absent (i.e. there is still ground to cover on this segment).
+function renderCoveragePanelActions(annotation, score) {
+    const anyAbsent = COVERAGE_PHASES.some(p => ((score[p] || {}).status || 'absent') === 'absent');
+    if (!anyAbsent) return '';
+
+    const isAppending = state.appendMode && state.appendMode.annotationId === annotation.id;
+    const appendLabel = isAppending
+        ? `<i class="fa-solid fa-stop"></i> ${t('coverageAppendStop')}`
+        : `<i class="fa-solid fa-microphone-lines"></i> ${t('coverageAppendRecord')}`;
+    const appendClass = isAppending
+        ? 'coverage-action-btn coverage-action-btn--recording'
+        : 'coverage-action-btn';
+
+    return `
+        <div class="coverage-actions">
+            <span class="coverage-actions-hint">${t('coverageActionsHint')}</span>
+            <div class="coverage-actions-buttons">
+                <button class="btn btn-small ${appendClass}" id="append-btn-${annotation.id}" onclick="event.stopPropagation(); toggleAppendRecording(${annotation.id})" title="${escapeHtml(t('coverageAppendTitle'))}">
+                    ${appendLabel}
+                </button>
+                <button class="btn btn-small coverage-action-btn coverage-action-btn--secondary" onclick="event.stopPropagation(); retranscribeAnnotation(${annotation.id})" title="${escapeHtml(t('coverageRetranscribeTitle'))}">
+                    <i class="fa-solid fa-arrows-rotate"></i> ${t('coverageRetranscribe')}
+                </button>
+            </div>
+        </div>`;
+}
+
+async function retranscribeAnnotation(annotationId) {
+    if (!confirm(t('coverageRetranscribeConfirm'))) return;
+    try {
+        const resp = await fetch(`${API_BASE}/api/annotations/${annotationId}/retranscribe`, {
+            method: 'POST',
+            headers: MOODLE_JWT ? { 'Authorization': `Bearer ${MOODLE_JWT}` } : {},
+        });
+        if (!resp.ok) throw new Error(await resp.text());
+        // Drop cached score so the next coverage refresh rescores against the
+        // new transcript once WS signals completion.
+        if (state.coverage && state.coverage.scores) {
+            delete state.coverage.scores[annotationId];
+        }
+        showToast('Transcription', 'Re-transcription en cours…', 'info');
+    } catch (e) {
+        showToast('Erreur', `Re-transcription: ${e.message}`, 'error');
+    }
+}
+
+async function toggleAppendRecording(annotationId) {
+    const mode = state.appendMode;
+
+    // Already recording for this annotation → stop + transcribe + append.
+    if (mode.annotationId === annotationId && mode.mediaRecorder) {
+        try {
+            mode.mediaRecorder.stop();
+        } catch (_) { /* ignore */ }
+        return;
+    }
+
+    // Already recording for a *different* annotation — block to avoid confusion.
+    if (mode.annotationId && mode.annotationId !== annotationId) {
+        showToast('Enregistrement', 'Un autre complément est déjà en cours.', 'warning');
+        return;
+    }
+
+    const ann = state.annotations.find(a => a.id === annotationId);
+    if (!ann) return;
+
+    let stream;
+    try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (e) {
+        showToast('Erreur micro', 'Impossible d\'accéder au microphone', 'error');
+        return;
+    }
+
+    const recorder = new MediaRecorder(stream);
+    mode.annotationId = annotationId;
+    mode.mediaRecorder = recorder;
+    mode.chunks = [];
+    mode.stream = stream;
+
+    recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) mode.chunks.push(e.data);
+    };
+
+    recorder.onstop = async () => {
+        const chunks = mode.chunks.slice();
+        try { stream.getTracks().forEach(t => t.stop()); } catch (_) {}
+        mode.annotationId = null;
+        mode.mediaRecorder = null;
+        mode.chunks = [];
+        mode.stream = null;
+
+        // Show processing state on the button.
+        const btn = document.getElementById(`append-btn-${annotationId}`);
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Transcription…';
+        }
+
+        try {
+            const blob = new Blob(chunks, { type: 'audio/wav' });
+            const form = new FormData();
+            form.append('audio_blob', blob, 'append.wav');
+            const headers = {};
+            if (MOODLE_JWT) headers['Authorization'] = `Bearer ${MOODLE_JWT}`;
+
+            const resp = await fetch(`${API_BASE}/api/annotations/transcribe-only`, {
+                method: 'POST', headers, body: form,
+            });
+            if (!resp.ok) throw new Error(await resp.text());
+            const data = await resp.json();
+            const addition = (data.transcription || '').trim();
+            if (!addition) {
+                showToast('Transcription', 'Aucune parole détectée.', 'warning');
+                renderAnnotations();
+                return;
+            }
+
+            const current = state.annotations.find(a => a.id === annotationId);
+            const existing = (current && current.transcription ? current.transcription.trim() : '');
+            const combined = existing ? (existing + '\n\n' + addition) : addition;
+
+            await saveElicitationEdit(annotationId, combined);
+            // saveElicitationEdit invalidates coverage + re-renders.
+            showToast('Transcription', 'Complément ajouté.', 'success');
+        } catch (e) {
+            showToast('Erreur', `Ajout: ${e.message}`, 'error');
+            renderAnnotations();
+        }
+    };
+
+    recorder.start();
+    renderAnnotations();
 }

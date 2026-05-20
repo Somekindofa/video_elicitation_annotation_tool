@@ -177,6 +177,50 @@
                     </div>
                 </div>
 
+                <!-- Coverage banner: per-video Quoi/Comment/Pourquoi progress -->
+                <div class="coverage-banner" id="coverageBanner" style="display:none;">
+                    <div class="coverage-phases" id="coveragePhases">
+                        <div class="phase-chip" data-phase="quoi">
+                            <div class="phase-chip-head">
+                                <span class="phase-dot" data-status="absent"></span>
+                                <span class="phase-label">Quoi</span>
+                                <span class="phase-hits" id="phaseHits-quoi">0</span>
+                            </div>
+                            <div class="phase-example" data-i18n="coveragePhaseExampleQuoi">Ex. « Je prends la pince, je tourne le verre à gauche. »</div>
+                        </div>
+                        <div class="phase-chip" data-phase="comment">
+                            <div class="phase-chip-head">
+                                <span class="phase-dot" data-status="absent"></span>
+                                <span class="phase-label">Comment</span>
+                                <span class="phase-hits" id="phaseHits-comment">0</span>
+                            </div>
+                            <div class="phase-example" data-i18n="coveragePhaseExampleComment">Ex. « lentement, d'abord à droite puis à gauche, avec la pince longue. »</div>
+                        </div>
+                        <div class="phase-chip" data-phase="pourquoi">
+                            <div class="phase-chip-head">
+                                <span class="phase-dot" data-status="absent"></span>
+                                <span class="phase-label">Pourquoi</span>
+                                <span class="phase-hits" id="phaseHits-pourquoi">0</span>
+                            </div>
+                            <div class="phase-example" data-i18n="coveragePhaseExamplePourquoi">Ex. « parce que sinon la bulle s'effondre, c'est pour éviter les stries. »</div>
+                        </div>
+                    </div>
+                    <button id="finishSessionBtn" class="btn btn-primary btn-small coverage-finish-btn" style="display:none;">
+                        <i class="fas fa-flag-checkered"></i> <span data-i18n="coverageFinishSession">Finir la session</span>
+                    </button>
+                </div>
+
+                <!-- Session summary card: appears after /api/coverage/summary -->
+                <div class="session-summary-card" id="sessionSummaryCard" style="display:none;">
+                    <div class="session-summary-head">
+                        <h3><i class="fas fa-wand-magic-sparkles"></i> <span data-i18n="sessionSummaryTitle">Synthèse de la session</span></h3>
+                        <button class="session-summary-close" id="sessionSummaryCloseBtn" data-i18n-aria-label="sessionSummaryCloseAria" aria-label="Fermer">&times;</button>
+                    </div>
+                    <div class="session-summary-body" id="sessionSummaryBody">
+                        <!-- Rendered by JS -->
+                    </div>
+                </div>
+
                 <div class="annotations-list" id="annotationsList">
                     <div class="empty-state">
                         <i class="fas fa-pen-to-square empty-icon"></i>

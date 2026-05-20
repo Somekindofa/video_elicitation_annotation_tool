@@ -124,6 +124,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Coverage detector endpoints (spaCy-backed, no LLM).
+from coverage_routes import router as coverage_router
+app.include_router(coverage_router)
+
 
 # WebSocket connection manager
 class ConnectionManager:
@@ -432,16 +436,28 @@ async def update_video(
             raise HTTPException(status_code=404, detail="Video not found")
 
         # Update allowed fields
+        update_payload = {}
         if "project_id" in video_update:
-            video.project_id = video_update["project_id"]
+            update_payload["project_id"] = video_update["project_id"]
         if "batch_position" in video_update:
-            video.batch_position = video_update["batch_position"]
+            update_payload["batch_position"] = video_update["batch_position"]
+        if "display_name" in video_update:
+            new_name = video_update["display_name"]
+            if isinstance(new_name, str):
+                new_name = new_name.strip()
+                update_payload["display_name"] = new_name if new_name else None
+            elif new_name is None:
+                update_payload["display_name"] = None
 
-        await session.commit()
-        await session.refresh(video)
+        video = await db.update_video(session, video_id, update_payload)
+        if not video:
+            raise HTTPException(status_code=404, detail="Video not found")
 
         video_response = models.VideoResponse.model_validate(video)
-        video_response.annotation_count = len(video.annotations)
+        try:
+            video_response.annotation_count = await db.get_annotation_count(session, video_id)
+        except Exception:
+            video_response.annotation_count = 0
 
         logger.info(f"Video updated: ID={video_id}")
         return video_response
@@ -1262,6 +1278,46 @@ async def transcribe_only(
                 pass
 
 
+@app.post("/api/annotations/{annotation_id}/retranscribe")
+async def retranscribe_annotation(
+    annotation_id: int,
+    session: AsyncSession = Depends(db.get_session),
+    current_user: MoodleUser = Depends(verify_moodle_jwt),
+):
+    """Re-run Whisper on the annotation's existing audio file.
+
+    Useful when the original transcription was garbled but the recording is
+    fine. The audio blob on disk is kept; only the transcription and its
+    downstream derived fields are recomputed.
+    """
+    _enforce_rate_limit(f"retranscribe:{current_user.userid}", max_requests=30, window_seconds=3600)
+
+    annotation = await db.get_annotation(session, annotation_id)
+    if not annotation:
+        raise HTTPException(status_code=404, detail="Annotation not found")
+
+    audio_path = str(annotation.audio_filepath or "")
+    if not audio_path or not os.path.exists(audio_path):
+        raise HTTPException(
+            status_code=404,
+            detail="Original audio file is no longer available on disk",
+        )
+
+    # Clear downstream fields so the UI drops stale coverage/tag/review data.
+    await db.update_annotation(
+        session,
+        annotation_id,
+        models.AnnotationUpdate(
+            transcription_status="processing",
+            transcription=None,
+        ),
+    )
+
+    import asyncio
+    asyncio.create_task(process_transcription(annotation_id, audio_path))
+    return {"status": "queued", "annotation_id": annotation_id}
+
+
 @app.post("/api/annotations/{annotation_id}/review")
 async def review_annotation(
     annotation_id: int,
@@ -1750,8 +1806,18 @@ async def process_review(
     tags: Optional[List[Dict[str, str]]] = None,
     trigger_tagging: bool = True,
 ):
-    """Background task to process AI review using review_service"""
-    from review_service import review_elicitation, assess_salience
+    """Background task to process AI review using review_service.
+
+    Disabled 2026-04-21: replaced by the spaCy coverage detector + single
+    Infomaniak summary call. Kept as a no-op so the 4 call sites don't need
+    touching and the pipeline remains trivially reversible.
+    """
+    logger.debug(
+        f"process_review skipped (deprecated dimensions pipeline) for annotation {annotation_id}"
+    )
+    return
+
+    from review_service import review_elicitation, assess_salience  # type: ignore[unreachable]
     from datetime import datetime, timezone
 
     try:
@@ -2684,6 +2750,25 @@ class NoCacheStaticFiles(StaticFiles):
 
 # Mount static files (frontend) with no-cache for development
 app.mount("/static", NoCacheStaticFiles(directory=str(FRONTEND_DIR)), name="static")
+
+
+# ==================== TUTORIAL SEEN FLAG ====================
+
+TUTORIAL_PREF_KEY = 'local_videoelicit_tutorial_seen'
+
+
+@app.get("/api/tutorial-status")
+async def get_tutorial_status(current_user: MoodleUser = Depends(verify_moodle_jwt)):
+    """Return whether the current user has already seen the tutorial."""
+    value = await moodle_db.get_user_pref(current_user.userid, TUTORIAL_PREF_KEY)
+    return {"seen": value == "1"}
+
+
+@app.post("/api/tutorial-seen")
+async def mark_tutorial_seen(current_user: MoodleUser = Depends(verify_moodle_jwt)):
+    """Persist that the current user has seen and closed the tutorial."""
+    await moodle_db.set_user_pref(current_user.userid, TUTORIAL_PREF_KEY, "1")
+    return {"ok": True}
 
 
 # Serve index.html at root with no-cache headers

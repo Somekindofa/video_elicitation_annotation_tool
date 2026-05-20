@@ -46,6 +46,7 @@ class Video(Base):
         Integer, ForeignKey("projects.id"), nullable=True
     )  # Optional: videos can exist without project
     filename = Column(String, nullable=False)
+    display_name = Column(String, nullable=True)
     filepath = Column(String, nullable=False, unique=True)
     duration = Column(Float, nullable=True)  # in seconds
     file_size = Column(Integer, nullable=True)  # in bytes
@@ -255,6 +256,7 @@ class VideoResponse(BaseModel):
     id: int
     project_id: Optional[int] = None
     filename: str
+    display_name: Optional[str] = None
     filepath: str
     batch_position: Optional[int] = None
     duration: Optional[float] = None

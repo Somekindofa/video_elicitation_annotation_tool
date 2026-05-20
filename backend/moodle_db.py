@@ -286,7 +286,47 @@ class MoodleDBAdapter:
     async def delete_video(self, video_id: int) -> bool:
         """Async wrapper for delete_video"""
         return await self._run_in_executor(self.delete_video_sync, video_id)
-    
+
+    def update_video_sync(self, video_id: int, update_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Update video metadata. Only whitelisted fields are written."""
+        # Map model field names -> DB column names
+        column_map = {
+            'display_name': 'displayname',
+            'displayname': 'displayname',
+            'project_id': 'projectid',
+            'projectid': 'projectid',
+            'batch_position': 'batchposition',
+            'batchposition': 'batchposition',
+        }
+
+        sets = []
+        params: List[Any] = []
+        for key, value in update_data.items():
+            col = column_map.get(key)
+            if not col:
+                continue
+            sets.append(f"{col} = %s")
+            params.append(value)
+
+        if not sets:
+            return self.get_video_sync(video_id)
+
+        sets.append("timemodified = %s")
+        params.append(int(datetime.now(timezone.utc).timestamp()))
+        params.append(video_id)
+
+        with self.get_connection() as conn:
+            cursor = conn.cursor(cursor_factory=RealDictCursor if DB_TYPE == 'postgresql' else None)
+            query = f"UPDATE {self._table('videos')} SET {', '.join(sets)} WHERE id = %s"
+            cursor.execute(query, tuple(params))
+            conn.commit()
+
+        return self.get_video_sync(video_id)
+
+    async def update_video(self, video_id: int, update_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Async wrapper for update_video"""
+        return await self._run_in_executor(self.update_video_sync, video_id, update_data)
+
     # ==================== VIDEO SEGMENTS ====================
     
     def create_video_segment_sync(self, segment_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -896,6 +936,47 @@ class MoodleDBAdapter:
     async def delete_task(self, name: str, craft: str) -> bool:
         """Async wrapper for delete_task"""
         return await self._run_in_executor(self.delete_task_sync, name, craft)
+
+    # ==================== USER PREFERENCES ====================
+
+    def get_user_pref_sync(self, userid: int, name: str) -> Optional[str]:
+        """Return the value of a Moodle user preference, or None if not set."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor(cursor_factory=RealDictCursor if DB_TYPE == 'postgresql' else None)
+            cursor.execute(
+                f"SELECT value FROM {self.table_prefix}user_preferences WHERE userid = %s AND name = %s LIMIT 1",
+                (userid, name),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return None
+            return row['value'] if isinstance(row, dict) else row[0]
+
+    async def get_user_pref(self, userid: int, name: str) -> Optional[str]:
+        return await self._run_in_executor(self.get_user_pref_sync, userid, name)
+
+    def set_user_pref_sync(self, userid: int, name: str, value: str) -> None:
+        """Insert or update a Moodle user preference."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor(cursor_factory=RealDictCursor if DB_TYPE == 'postgresql' else None)
+            if DB_TYPE == 'postgresql':
+                cursor.execute(
+                    f"""INSERT INTO {self.table_prefix}user_preferences (userid, name, value)
+                        VALUES (%s, %s, %s)
+                        ON CONFLICT (userid, name) DO UPDATE SET value = EXCLUDED.value""",
+                    (userid, name, value),
+                )
+            else:
+                cursor.execute(
+                    f"""INSERT INTO {self.table_prefix}user_preferences (userid, name, value)
+                        VALUES (%s, %s, %s)
+                        ON DUPLICATE KEY UPDATE value = VALUES(value)""",
+                    (userid, name, value),
+                )
+            conn.commit()
+
+    async def set_user_pref(self, userid: int, name: str, value: str) -> None:
+        return await self._run_in_executor(self.set_user_pref_sync, userid, name, value)
 
 
 # Singleton instance

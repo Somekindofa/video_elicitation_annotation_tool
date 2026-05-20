@@ -80,7 +80,8 @@ def _dict_to_model(data: Optional[Dict], model_class):
         'feedbackchoices': 'feedback_choices',
         'thumbnailpath': 'thumbnail_path',
         'usagecount': 'usage_count',
-        'ispublished': 'is_published'
+        'ispublished': 'is_published',
+        'displayname': 'display_name'
     }
     
     # Convert Unix timestamps to datetime strings (ISO format)
@@ -174,6 +175,12 @@ async def get_videos_by_user(session: FakeSession, userid: int, skip: int = 0, l
 async def delete_video(session: FakeSession, video_id: int) -> bool:
     """Delete video"""
     return await moodle_db.delete_video(video_id)
+
+
+async def update_video(session: FakeSession, video_id: int, update_data: Dict[str, Any]) -> Optional[Video]:
+    """Update video metadata"""
+    result = await moodle_db.update_video(video_id, update_data)
+    return _dict_to_model(result, Video)
 
 
 # ==================== VIDEO SEGMENT OPERATIONS ====================
