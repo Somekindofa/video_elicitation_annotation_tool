@@ -125,6 +125,10 @@ const TRANSLATIONS = {
 
         // Video list items
         removeFromPlugin: 'Remove from plugin',
+        renameVideo: 'Rename',
+        renameVideoPrompt: 'Enter a new name for this video (leave blank to clear):',
+        renameSuccess: 'Video renamed',
+        renameFailed: 'Failed to rename video',
 
         // Segment cards
         deleteSegment: 'Delete segment',
@@ -299,6 +303,10 @@ const TRANSLATIONS = {
 
         // Video list items
         removeFromPlugin: 'Retirer du plugin',
+        renameVideo: 'Renommer',
+        renameVideoPrompt: 'Entrez un nouveau nom pour cette vidéo (laissez vide pour effacer) :',
+        renameSuccess: 'Vidéo renommée',
+        renameFailed: 'Échec du renommage de la vidéo',
 
         // Segment cards
         deleteSegment: 'Supprimer le segment',
@@ -1172,6 +1180,8 @@ async function checkMicrophonePermission() {
 }
 
 
+const activeUploads = new Map();
+
 function ensureUploadPanel() {
     let panel = document.getElementById('uploadProgressPanel');
     if (panel) return panel;
@@ -1215,12 +1225,42 @@ function updateUploadRow(fileName, percent, statusText, isError) {
         row.dataset.file = fileName;
         row.style.marginBottom = '10px';
 
+        const header = document.createElement('div');
+        header.style.display = 'flex';
+        header.style.alignItems = 'center';
+        header.style.justifyContent = 'space-between';
+        header.style.gap = '8px';
+        header.style.marginBottom = '4px';
+
         const label = document.createElement('div');
         label.className = 'upload-row-label';
         label.textContent = fileName;
         label.style.fontSize = '12px';
-        label.style.marginBottom = '4px';
-        row.appendChild(label);
+        label.style.flex = '1';
+        label.style.overflow = 'hidden';
+        label.style.textOverflow = 'ellipsis';
+        label.style.whiteSpace = 'nowrap';
+        header.appendChild(label);
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'upload-row-cancel';
+        cancelBtn.title = t('cancel') || 'Cancel';
+        cancelBtn.innerHTML = '<i class="fas fa-times"></i>';
+        cancelBtn.style.background = 'transparent';
+        cancelBtn.style.border = 'none';
+        cancelBtn.style.color = '#888';
+        cancelBtn.style.cursor = 'pointer';
+        cancelBtn.style.fontSize = '12px';
+        cancelBtn.style.padding = '0 4px';
+        cancelBtn.addEventListener('click', () => {
+            const xhr = activeUploads.get(fileName);
+            if (xhr) xhr.abort();
+            removeUploadRow(fileName);
+        });
+        header.appendChild(cancelBtn);
+
+        row.appendChild(header);
 
         const bar = document.createElement('div');
         bar.className = 'upload-progress-bar';
@@ -1281,6 +1321,7 @@ async function uploadVideos(files) {
             await uploadSingleFile(file);
             succeeded++;
         } catch (err) {
+            if (err && err.aborted) continue;
             showToast('Upload failed', err.message || file.name, 'error');
         }
     }
@@ -1304,6 +1345,9 @@ function uploadSingleFile(file) {
             xhr.setRequestHeader('Authorization', `Bearer ${MOODLE_JWT}`);
         }
 
+        activeUploads.set(file.name, xhr);
+        const cleanup = () => activeUploads.delete(file.name);
+
         xhr.upload.onprogress = (event) => {
             if (event.lengthComputable) {
                 const percent = Math.round((event.loaded / event.total) * 100);
@@ -1312,6 +1356,7 @@ function uploadSingleFile(file) {
         };
 
         xhr.onload = () => {
+            cleanup();
             if (xhr.status >= 200 && xhr.status < 300) {
                 updateUploadRow(file.name, 100);
                 resolve();
@@ -1321,7 +1366,15 @@ function uploadSingleFile(file) {
         };
 
         xhr.onerror = () => {
+            cleanup();
             reject(new Error('Upload failed'));
+        };
+
+        xhr.onabort = () => {
+            cleanup();
+            const err = new Error('Upload cancelled');
+            err.aborted = true;
+            reject(err);
         };
 
         const formData = new FormData();
@@ -1369,12 +1422,23 @@ function showVideoModal() {
                 item.classList.add('active');
             }
 
+            const displayName = (video.display_name && video.display_name.trim())
+                ? video.display_name
+                : video.filename;
+            const showRawBelow = displayName !== video.filename;
+
             item.innerHTML = `
-                <div class="video-list-name">${escapeHtml(video.filename)}</div>
+                <div class="video-list-name">${escapeHtml(displayName)}</div>
+                ${showRawBelow ? `<div class="video-list-rawname" title="${escapeHtml(video.filename)}">${escapeHtml(video.filename)}</div>` : ''}
                 <div class="video-list-meta">
                     ${formatFileSize(video.file_size)} • ${video.annotation_count} elicitations
                 </div>
                 <div class="video-list-actions">
+                    <button class="btn btn-icon btn-small video-rename-btn"
+                        title="${t('renameVideo')}"
+                        onclick="event.stopPropagation(); renameVideo(${video.id})">
+                        <i class="fas fa-pen"></i>
+                    </button>
                     <button class="btn btn-icon btn-small btn-danger video-delete-btn"
                         title="${t('removeFromPlugin')}"
                         onclick="event.stopPropagation(); deleteVideo(${video.id})">
@@ -1455,7 +1519,7 @@ async function loadVideo(videoId) {
         videoPlayer.load();
 
         // Update video info
-        document.getElementById('videoName').textContent = video.filename;
+        document.getElementById('videoName').textContent = (video.display_name && video.display_name.trim()) ? video.display_name : video.filename;
         document.getElementById('annotationCount').textContent = video.annotation_count;
 
         // Load annotations
@@ -4086,6 +4150,46 @@ async function deleteProject(projectId) {
     } catch (error) {
         console.error('Error deleting project:', error);
         showToast('Error', 'Failed to delete project', 'error');
+    }
+}
+
+async function renameVideo(videoId) {
+    const video = state.videos.find(v => v.id === videoId);
+    if (!video) return;
+
+    const current = (video.display_name && video.display_name.trim()) ? video.display_name : '';
+    const next = prompt(t('renameVideoPrompt'), current);
+    if (next === null) return;
+
+    const trimmed = next.trim();
+    if (trimmed === current) return;
+
+    try {
+        const response = await fetch(`${API_BASE}/api/videos/${videoId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ display_name: trimmed })
+        });
+
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(errText || 'rename failed');
+        }
+
+        const updated = await response.json();
+        const idx = state.videos.findIndex(v => v.id === videoId);
+        if (idx !== -1) state.videos[idx] = { ...state.videos[idx], display_name: updated.display_name };
+        if (state.currentVideoId === videoId && state.currentVideo) {
+            state.currentVideo.display_name = updated.display_name;
+            const nameEl = document.getElementById('videoName');
+            if (nameEl) nameEl.textContent = updated.display_name || updated.filename;
+        }
+
+        showVideoModal();
+        showToast(t('toastSuccess'), t('renameSuccess'), 'success');
+    } catch (error) {
+        console.error('Error renaming video:', error);
+        showToast(t('toastError'), t('renameFailed'), 'error');
     }
 }
 
