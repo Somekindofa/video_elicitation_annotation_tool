@@ -436,16 +436,28 @@ async def update_video(
             raise HTTPException(status_code=404, detail="Video not found")
 
         # Update allowed fields
+        update_payload = {}
         if "project_id" in video_update:
-            video.project_id = video_update["project_id"]
+            update_payload["project_id"] = video_update["project_id"]
         if "batch_position" in video_update:
-            video.batch_position = video_update["batch_position"]
+            update_payload["batch_position"] = video_update["batch_position"]
+        if "display_name" in video_update:
+            new_name = video_update["display_name"]
+            if isinstance(new_name, str):
+                new_name = new_name.strip()
+                update_payload["display_name"] = new_name if new_name else None
+            elif new_name is None:
+                update_payload["display_name"] = None
 
-        await session.commit()
-        await session.refresh(video)
+        video = await db.update_video(session, video_id, update_payload)
+        if not video:
+            raise HTTPException(status_code=404, detail="Video not found")
 
         video_response = models.VideoResponse.model_validate(video)
-        video_response.annotation_count = len(video.annotations)
+        try:
+            video_response.annotation_count = await db.get_annotation_count(session, video_id)
+        except Exception:
+            video_response.annotation_count = 0
 
         logger.info(f"Video updated: ID={video_id}")
         return video_response
