@@ -3675,13 +3675,23 @@ body::before {
     border-bottom: 1px solid var(--line);
     box-shadow: none;
     padding: 14px 24px;
-    gap: 16px;
+    gap: 14px;
+    justify-content: flex-start;
+}
+.header-content {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.15;
+    padding-left: 16px;
+    border-left: 1px solid var(--line);
+    margin-right: auto;
 }
 .header-content h1 {
     font-size: 17px;
     font-weight: 700;
     letter-spacing: -0.015em;
     color: var(--slate-900);
+    margin-bottom: 0;
 }
 .header-content .subtitle {
     font-size: 11px;
@@ -3690,6 +3700,45 @@ body::before {
     text-transform: uppercase;
     font-weight: 500;
     margin-top: 2px;
+}
+
+/* Tutorial FAB (the "?" button) — restyled to match Studio */
+#tutorialFab.btn-tutorial {
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border-radius: 50%;
+    background: var(--blue);
+    color: #FFFFFF;
+    border: none;
+    box-shadow: 0 4px 12px -3px rgba(0, 102, 204, 0.45), inset 0 1px 0 rgba(255,255,255,0.18);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 700;
+    flex-shrink: 0;
+    transition: transform var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+}
+#tutorialFab.btn-tutorial:hover {
+    background: var(--blue-hover);
+    box-shadow: 0 8px 18px -4px rgba(0, 102, 204, 0.55);
+    transform: translateY(-1px);
+}
+
+/* Language toggle button — Studio refresh */
+.btn-lang {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    color: var(--slate-700);
+    border-radius: var(--radius-md);
+    font-weight: 500;
+    box-shadow: var(--shadow-xs);
+}
+.btn-lang:hover {
+    background: var(--sky-50);
+    border-color: var(--sky-300);
+    color: var(--blue);
 }
 
 .back-to-moodle-btn {
@@ -3743,6 +3792,9 @@ body::before {
     padding: 16px 24px 20px;
     gap: 18px;
     background: transparent;
+    max-width: none;
+    margin: 0;
+    width: auto;
 }
 
 /* Video panel and stage ----------------------------------- */
