@@ -774,8 +774,7 @@ async function loadCustomCrafts(selectEl, addBtn) {
         }
         const crafts = await resp.json();
         crafts.forEach(({ craft_key, craft_label }) => {
-            const safeKey = String(craft_key).replace(/"/g, '');
-            if (!selectEl.querySelector(`option[value="${safeKey}"]`)) {
+            if (!selectEl.querySelector(`option[value="${CSS.escape(craft_key)}"]`)) {
                 const opt = document.createElement('option');
                 opt.value = craft_key;
                 opt.textContent = craft_label;
@@ -789,6 +788,88 @@ async function loadCustomCrafts(selectEl, addBtn) {
     } catch (_) {
         if (addBtn) addBtn.style.display = 'none';
     }
+}
+
+function showAddCraftInput(wrapperEl, selectEl, addBtn) {
+    addBtn.style.display = 'none';
+
+    const inputRow = document.createElement('div');
+    inputRow.style.cssText = 'display:flex;align-items:center;gap:4px;margin-top:4px;';
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = t('addCraftPlaceholder') || 'New domain name';
+    input.maxLength = 100;
+    input.style.cssText = 'padding:4px 6px;border-radius:4px;border:1px solid #ccc;font-size:0.85rem;width:160px;';
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.textContent = t('addCraftConfirm') || 'Add';
+    confirmBtn.style.cssText = 'padding:4px 8px;border-radius:4px;border:1px solid #aaa;cursor:pointer;font-size:0.85rem;';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = '×';
+    cancelBtn.style.cssText = 'padding:4px 7px;border-radius:4px;border:1px solid #aaa;cursor:pointer;font-size:0.85rem;';
+
+    const msgEl = document.createElement('span');
+    msgEl.style.cssText = 'font-size:0.8rem;color:#c00;margin-left:4px;';
+
+    const restore = () => {
+        inputRow.remove();
+        addBtn.style.display = '';
+    };
+
+    cancelBtn.addEventListener('click', restore);
+
+    confirmBtn.addEventListener('click', async () => {
+        const label = input.value.trim();
+        if (!label) { msgEl.textContent = t('addCraftEmpty') || 'Enter a name'; return; }
+        if (label.length > 100) { msgEl.textContent = t('addCraftTooLong') || 'Max 100 chars'; return; }
+        if (!slugifyCraft(label)) { msgEl.textContent = t('addCraftInvalid') || 'Invalid name'; return; }
+
+        confirmBtn.disabled = true;
+        msgEl.textContent = '';
+        try {
+            const resp = await fetch(`${API_BASE}/api/crafts`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${MOODLE_JWT || ''}`
+                },
+                body: JSON.stringify({ craft_label: label })
+            });
+            if (resp.status === 409) {
+                msgEl.textContent = t('addCraftDuplicate') || 'Already exists';
+                confirmBtn.disabled = false;
+                return;
+            }
+            if (!resp.ok) throw new Error('Server error');
+            const { craft_key, craft_label } = await resp.json();
+            const opt = document.createElement('option');
+            opt.value = craft_key;
+            opt.textContent = craft_label;
+            opt.setAttribute('data-custom', '1');
+            selectEl.appendChild(opt);
+            selectEl.value = craft_key;
+            state.craft = craft_key;
+            try { localStorage.setItem('craft', craft_key); } catch (_) {}
+            restore();
+        } catch (_) {
+            msgEl.textContent = t('addCraftError') || 'Could not save';
+            confirmBtn.disabled = false;
+        }
+    });
+
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') confirmBtn.click();
+        if (e.key === 'Escape') restore();
+    });
+
+    inputRow.appendChild(input);
+    inputRow.appendChild(confirmBtn);
+    inputRow.appendChild(cancelBtn);
+    inputRow.appendChild(msgEl);
+    wrapperEl.appendChild(inputRow);
+    input.focus();
 }
 
 // Create a small craft selector UI under the recording controls
@@ -835,8 +916,21 @@ function createElicitControlsUI() {
             try { localStorage.setItem('craft', state.craft); } catch (e) { }
         });
 
+        const addCraftBtn = document.createElement('button');
+        addCraftBtn.textContent = '+';
+        addCraftBtn.title = t('addCraftTitle') || 'Add custom domain';
+        addCraftBtn.style.cssText = 'padding:4px 8px;border-radius:4px;border:1px solid #ccc;cursor:pointer;font-size:0.85rem;margin-left:6px;vertical-align:middle;';
+        addCraftBtn.addEventListener('click', () => showAddCraftInput(wrapper, craftSelect, addCraftBtn));
+
         wrapper.appendChild(craftLabel);
-        wrapper.appendChild(craftSelect);
+
+        const craftRow = document.createElement('div');
+        craftRow.style.cssText = 'display:flex;align-items:center;';
+        craftRow.appendChild(craftSelect);
+        craftRow.appendChild(addCraftBtn);
+        wrapper.appendChild(craftRow);
+
+        loadCustomCrafts(craftSelect, addCraftBtn);
 
         // --- Segment selector ---
         const segWrapper = document.createElement('div');
