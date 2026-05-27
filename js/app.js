@@ -755,6 +755,42 @@ async function initializeApp() {
     console.log('Application initialized successfully');
 }
 
+function slugifyCraft(label) {
+    return label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+async function loadCustomCrafts(selectEl, addBtn) {
+    if (!window.USER_ID) {
+        if (addBtn) addBtn.style.display = 'none';
+        return;
+    }
+    try {
+        const resp = await fetch(`${API_BASE}/api/crafts`, {
+            headers: { 'Authorization': `Bearer ${MOODLE_JWT || ''}` }
+        });
+        if (!resp.ok) {
+            if (addBtn) addBtn.style.display = 'none';
+            return;
+        }
+        const crafts = await resp.json();
+        crafts.forEach(({ craft_key, craft_label }) => {
+            const safeKey = String(craft_key).replace(/"/g, '');
+            if (!selectEl.querySelector(`option[value="${safeKey}"]`)) {
+                const opt = document.createElement('option');
+                opt.value = craft_key;
+                opt.textContent = craft_label;
+                opt.setAttribute('data-custom', '1');
+                selectEl.appendChild(opt);
+            }
+        });
+        if (state.craft && selectEl.querySelector(`option[value="${CSS.escape(state.craft)}"]`)) {
+            selectEl.value = state.craft;
+        }
+    } catch (_) {
+        if (addBtn) addBtn.style.display = 'none';
+    }
+}
+
 // Create a small craft selector UI under the recording controls
 function createElicitControlsUI() {
     try {
@@ -764,6 +800,7 @@ function createElicitControlsUI() {
         const wrapper = document.createElement('div');
         wrapper.className = 'elicit-controls';
         wrapper.style.margin = '10px 0';
+        wrapper.style.width = 'fit-content';
 
         // --- Craft domain selector ---
         const craftLabel = document.createElement('div');
@@ -776,6 +813,7 @@ function createElicitControlsUI() {
         craftSelect.style.padding = '6px 8px';
         craftSelect.style.borderRadius = '4px';
         craftSelect.style.border = '1px solid #ccc';
+        craftSelect.style.width = 'fit-content';
 
         [
             { value: 'glassblowing', key: 'craft_glassblowing' },
