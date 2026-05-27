@@ -360,3 +360,27 @@ async def delete_task(session: FakeSession, name: str, craft: str) -> bool:
 
 # NOTE: AsyncSessionLocal is defined above as a function returning _AsyncSessionLocalCtx.
 # Do NOT reassign it here — the function definition is the correct drop-in.
+
+
+async def get_custom_crafts_by_user(userid: str) -> list:
+    """Return custom crafts for a user as dicts with craft_key and craft_label."""
+    rows = await moodle_db.get_custom_crafts_by_user(userid)
+    return [{'craft_key': r['craft_key'], 'craft_label': r['craft_label']} for r in rows]
+
+
+async def create_custom_craft(userid: str, craft_label: str) -> dict:
+    """Slugify label, insert row, return {craft_key, craft_label}.
+
+    Security: craft_key is derived entirely server-side from the label;
+    the client never supplies a raw key.
+    """
+    import re
+    craft_key = re.sub(r'[^a-z0-9]+', '_', craft_label.lower()).strip('_')
+    if not craft_key:
+        raise ValueError('craft_label produces an empty key after slugification')
+    row = await moodle_db.create_custom_craft({
+        'userid': userid,
+        'craft_key': craft_key,
+        'craft_label': craft_label,
+    })
+    return {'craft_key': row['craft_key'], 'craft_label': row['craft_label']}

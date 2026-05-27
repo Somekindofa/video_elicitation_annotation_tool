@@ -36,6 +36,7 @@ import database_compat as db
 from auth import verify_moodle_jwt, MoodleUser
 from database_compat import AsyncSession  # Type alias for compatibility
 import models
+from moodle_db import moodle_db
 from models import Task
 import httpx
 import time
@@ -173,6 +174,9 @@ async def startup_event():
 
     await db.init_db()
     logger.info("Database initialized")
+
+    await moodle_db.ensure_crafts_table()
+    logger.info("Custom crafts table verified")
 
     # Preload Whisper model in background
     import asyncio
@@ -1077,6 +1081,41 @@ async def delete_task(
     except Exception as e:
         logger.error(f"Error deleting task: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/crafts", response_model=List[models.CustomCraftResponse])
+async def list_custom_crafts(
+    current_user: MoodleUser = Depends(verify_moodle_jwt),
+):
+    """Return the authenticated user's custom craft domains."""
+    try:
+        crafts = await db.get_custom_crafts_by_user(str(current_user.userid))
+        return [models.CustomCraftResponse(**c) for c in crafts]
+    except Exception as e:
+        logger.error(f"Error listing custom crafts: {e}")
+        raise HTTPException(status_code=500, detail="Could not load custom crafts")
+
+
+@app.post("/api/crafts", response_model=models.CustomCraftResponse, status_code=201)
+async def create_custom_craft_endpoint(
+    payload: models.CustomCraftCreate,
+    current_user: MoodleUser = Depends(verify_moodle_jwt),
+):
+    """Create a new personal craft domain for the authenticated user.
+
+    Security: user_id is taken exclusively from the verified JWT — never from
+    the request body — so one user cannot create crafts on behalf of another.
+    """
+    try:
+        craft = await db.create_custom_craft(str(current_user.userid), payload.craft_label)
+        return models.CustomCraftResponse(**craft)
+    except IntegrityError:
+        raise HTTPException(status_code=409, detail="This craft domain already exists")
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error creating custom craft: {e}")
+        raise HTTPException(status_code=500, detail="Could not save custom craft")
 
 
 async def push_annotation_to_rag(annotation_id: int, transcription: str) -> None:
