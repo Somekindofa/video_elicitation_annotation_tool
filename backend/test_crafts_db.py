@@ -53,3 +53,22 @@ def test_get_custom_crafts_by_user_returns_list():
     sql = cursor.execute.call_args[0][0]
     assert 'userid' in sql
     assert cursor.execute.call_args[0][1] == ('u1',)
+
+
+def test_create_custom_craft_inserts_row():
+    from moodle_db import MoodleDB
+    db = MoodleDB.__new__(MoodleDB)
+    db.table_prefix = 'mdl_'
+    inserted_row = {'id': 1, 'userid': 'u1', 'craft_key': 'woodworking',
+                    'craft_label': 'Woodworking', 'timecreated': 0}
+    conn, cursor = make_mock_conn([inserted_row])
+    cursor.fetchone.return_value = inserted_row
+    with patch.object(db, 'get_connection', return_value=conn):
+        with patch.object(db, '_insert', return_value=1):
+            result = db.create_custom_craft_sync({
+                'userid': 'u1',
+                'craft_key': 'woodworking',
+                'craft_label': 'Woodworking',
+            })
+    assert result['craft_key'] == 'woodworking'
+    assert result['userid'] == 'u1'

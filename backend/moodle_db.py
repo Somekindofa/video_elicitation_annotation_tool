@@ -204,6 +204,34 @@ class MoodleDBAdapter:
     async def get_custom_crafts_by_user(self, userid: str) -> List[Dict[str, Any]]:
         return await self._run_in_executor(self.get_custom_crafts_by_user_sync, userid)
 
+    def create_custom_craft_sync(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Insert a new custom craft row. Raises IntegrityError on duplicate (userid, craft_key)."""
+        table = self._table('crafts')
+        with self.get_connection() as conn:
+            cursor = conn.cursor(cursor_factory=RealDictCursor if DB_TYPE == 'postgresql' else None)
+            now = int(datetime.now(timezone.utc).timestamp())
+            query = f"""
+                INSERT INTO {table} (userid, craft_key, craft_label, timecreated)
+                VALUES (%s, %s, %s, %s)
+                RETURNING id
+            """
+            row_id = self._insert(cursor, query, (
+                data['userid'],
+                data['craft_key'],
+                data['craft_label'],
+                now,
+            ))
+            conn.commit()
+            cursor.execute(
+                f"SELECT id, userid, craft_key, craft_label, timecreated FROM {table} WHERE id = %s",
+                (row_id,)
+            )
+            row = cursor.fetchone()
+            return dict(row)
+
+    async def create_custom_craft(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        return await self._run_in_executor(self.create_custom_craft_sync, data)
+
     # ==================== VIDEOS ====================
     
     def create_video_sync(self, video_data: Dict[str, Any]) -> Dict[str, Any]:
