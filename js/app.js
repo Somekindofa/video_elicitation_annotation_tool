@@ -184,6 +184,16 @@ const TRANSLATIONS = {
         coverageRetranscribe: 'Re-transcribe',
         coverageRetranscribeTitle: 'Re-run Whisper on the existing audio. The current transcription will be replaced.',
         coverageRetranscribeConfirm: 'Re-run the transcription for this recording?\n\nThe current transcription will be replaced.',
+
+        // Custom craft domain UI
+        addCraftPlaceholder: 'New domain name',
+        addCraftConfirm: 'Add',
+        addCraftTitle: 'Add custom domain',
+        addCraftEmpty: 'Enter a name',
+        addCraftTooLong: 'Max 100 characters',
+        addCraftInvalid: 'Invalid name (use letters and numbers)',
+        addCraftDuplicate: 'This domain already exists',
+        addCraftError: 'Could not save, please try again',
     },
     fr: {
         // Header / nav
@@ -362,6 +372,16 @@ const TRANSLATIONS = {
         coverageRetranscribe: 'Re-transcrire',
         coverageRetranscribeTitle: 'Relance Whisper sur l\'audio existant. La transcription sera remplacée.',
         coverageRetranscribeConfirm: 'Relancer la transcription de cet enregistrement ?\n\nLa transcription actuelle sera remplacée.',
+
+        // Custom craft domain UI
+        addCraftPlaceholder: 'Nouveau domaine',
+        addCraftConfirm: 'Ajouter',
+        addCraftTitle: 'Ajouter un domaine personnalisé',
+        addCraftEmpty: 'Saisissez un nom',
+        addCraftTooLong: 'Maximum 100 caractères',
+        addCraftInvalid: 'Nom invalide (lettres et chiffres uniquement)',
+        addCraftDuplicate: 'Ce domaine existe déjà',
+        addCraftError: 'Impossible de sauvegarder, réessayez',
     },
 };
 
