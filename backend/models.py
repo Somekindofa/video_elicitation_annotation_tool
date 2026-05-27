@@ -513,3 +513,26 @@ class StatusResponse(BaseModel):
     status: str
     message: str
     data: Optional[dict] = None
+
+
+class CustomCraftCreate(BaseModel):
+    """Input schema for creating a custom craft domain."""
+    craft_label: str
+
+    @field_validator('craft_label')
+    @classmethod
+    def validate_label(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError('craft_label must not be empty')
+        if len(v) > 100:
+            raise ValueError('craft_label must be 100 characters or fewer')
+        return v
+
+
+class CustomCraftResponse(BaseModel):
+    """Output schema for a custom craft domain."""
+    craft_key: str
+    craft_label: str
+
+    model_config = {"from_attributes": True}
