@@ -6,6 +6,7 @@ Uses direct SQL with psycopg2 wrapped in async executors
 import os
 import json
 import asyncio
+import threading
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 from contextlib import contextmanager
@@ -13,7 +14,10 @@ from concurrent.futures import ThreadPoolExecutor
 from dotenv import load_dotenv
 
 # Load .env early so MOODLE_DB_TYPE is available at import time
-load_dotenv()
+try:
+    load_dotenv()
+except Exception:
+    pass  # .env may be missing or unreadable in test environments
 
 # Import appropriate database driver based on environment
 DB_TYPE = os.getenv('MOODLE_DB_TYPE', 'postgresql')
@@ -68,15 +72,23 @@ class MoodleDBAdapter:
             'password': os.getenv('MOODLE_DB_PASSWORD', ''),
             'port': int(os.getenv('MOODLE_DB_PORT', '5432' if DB_TYPE == 'postgresql' else '3306'))
         }
-        
+
         self.table_prefix = os.getenv('MOODLE_TABLE_PREFIX', 'mdl_')
-        
+
+        self._pool_lock = threading.Lock()
+
         if DB_TYPE == 'postgresql':
-            self._pool = psycopg2.pool.ThreadedConnectionPool(
-                minconn=2,
-                maxconn=10,
-                **config
-            )
+            try:
+                self._pool = psycopg2.pool.ThreadedConnectionPool(
+                    minconn=2,
+                    maxconn=10,
+                    **config
+                )
+            except Exception:
+                # Defer pool creation; pool will be None until DB is reachable.
+                # This allows module import and unit-test instantiation without a live DB.
+                self._pool = None
+                self._pg_config = config
         elif DB_TYPE == 'mysql':
             # MySQL - simplified connection (no pooling for now)
             self._config = config
@@ -85,6 +97,15 @@ class MoodleDBAdapter:
     def get_connection(self):
         """Get database connection from pool"""
         if DB_TYPE == 'postgresql':
+            if self._pool is None:
+                with self._pool_lock:
+                    if self._pool is None:  # double-checked locking
+                        # Lazy pool creation (pool was deferred at startup due to DB unavailability)
+                        self._pool = psycopg2.pool.ThreadedConnectionPool(
+                            minconn=2,
+                            maxconn=10,
+                            **self._pg_config
+                        )
             conn = self._pool.getconn()
             try:
                 yield conn
@@ -133,7 +154,56 @@ class MoodleDBAdapter:
     async def init_db(self):
         """Async wrapper for init_db"""
         return await self._run_in_executor(self.init_db_sync)
-    
+
+    def ensure_crafts_table_sync(self):
+        """Create the custom crafts table if it doesn't exist yet."""
+        table = self._table('crafts')
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            if DB_TYPE == 'postgresql':
+                cursor.execute(f"""
+                    CREATE TABLE IF NOT EXISTS {table} (
+                        id          SERIAL PRIMARY KEY,
+                        userid      VARCHAR(255) NOT NULL,
+                        craft_key   VARCHAR(100) NOT NULL,
+                        craft_label VARCHAR(255) NOT NULL,
+                        timecreated INT NOT NULL DEFAULT 0,
+                        UNIQUE (userid, craft_key)
+                    )
+                """)
+            else:
+                cursor.execute(f"""
+                    CREATE TABLE IF NOT EXISTS {table} (
+                        id          INT AUTO_INCREMENT PRIMARY KEY,
+                        userid      VARCHAR(255) NOT NULL,
+                        craft_key   VARCHAR(100) NOT NULL,
+                        craft_label VARCHAR(255) NOT NULL,
+                        timecreated INT NOT NULL DEFAULT 0,
+                        UNIQUE KEY uq_user_craft (userid, craft_key)
+                    )
+                """)
+            conn.commit()
+
+    async def ensure_crafts_table(self):
+        return await self._run_in_executor(self.ensure_crafts_table_sync)
+
+    # ==================== CUSTOM CRAFTS ====================
+
+    def get_custom_crafts_by_user_sync(self, userid: str) -> List[Dict[str, Any]]:
+        """Return all custom crafts for a user, ordered by creation time."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor(cursor_factory=RealDictCursor if DB_TYPE == 'postgresql' else None)
+            cursor.execute(
+                f"SELECT id, userid, craft_key, craft_label, timecreated"
+                f" FROM {self._table('crafts')} WHERE userid = %s ORDER BY timecreated ASC",
+                (userid,)
+            )
+            rows = cursor.fetchall()
+            return [dict(r) for r in rows]
+
+    async def get_custom_crafts_by_user(self, userid: str) -> List[Dict[str, Any]]:
+        return await self._run_in_executor(self.get_custom_crafts_by_user_sync, userid)
+
     # ==================== VIDEOS ====================
     
     def create_video_sync(self, video_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -978,6 +1048,9 @@ class MoodleDBAdapter:
     async def set_user_pref(self, userid: int, name: str, value: str) -> None:
         return await self._run_in_executor(self.set_user_pref_sync, userid, name, value)
 
+
+# Alias for backwards compatibility and test imports
+MoodleDB = MoodleDBAdapter
 
 # Singleton instance
 moodle_db = MoodleDBAdapter()
