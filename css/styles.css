@@ -251,21 +251,24 @@ body {
 
 #videoPlayer {
     width: 100%;
-    max-height: 600px;
-    border-radius: 0 0 var(--radius-md) var(--radius-md);  /* Only round bottom corners */
+    height: auto;
+    max-height: 55vh;
+    border-radius: 0;
     background: #000;
     display: block;
+    object-fit: contain;
 }
 
 /* Segment player — constrained size and centered */
 #segmentPlayer {
     width: 100%;
-    max-width: 760px;
     height: auto;
+    max-height: 55vh;
     margin: 0 auto;
     display: block;
     border-radius: var(--radius-md);
     background: #000;
+    object-fit: contain;
 }
 
 /* Segment timeline (two-handle range selector) */
@@ -3795,6 +3798,7 @@ body::before {
     max-width: none;
     margin: 0;
     width: auto;
+    overflow-y: auto;
 }
 
 /* Video panel and stage ----------------------------------- */
@@ -3805,44 +3809,39 @@ body::before {
     box-shadow: var(--shadow-sm);
     display: flex;
     flex-direction: column;
-    overflow: hidden;
-    min-height: 0;
+    overflow: visible;
     padding: 0;
 }
 .video-player-container {
-    flex: 1;
-    min-height: 0;
-    padding: 14px 14px 0;
+    padding: 14px;
     background: transparent;
 }
 .video-with-controls {
-    height: 100%;
     background: transparent;
     border-radius: 0;
 }
 .video-content {
     display: flex;
     flex-direction: column;
-    height: 100%;
-    min-height: 0;
     gap: 0;
 }
 
 .video-stage {
-    flex: 1;
-    min-height: 0;
-    display: grid;
-    place-items: center;
-    container-type: size;
+    width: 100%;
+    min-height: 180px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background: var(--ink);
     border-radius: var(--radius-md);
     overflow: hidden;
 }
 .video-stage > video {
-    width: min(100cqw, 100cqh * 16 / 9);
+    width: 100%;
     height: auto;
-    aspect-ratio: 16 / 9;
+    max-height: 55vh;
     display: block;
+    object-fit: contain;
     background: var(--ink);
     border-radius: 0;
     box-shadow: none;
@@ -3957,10 +3956,9 @@ body::before {
 /* Timeline ------------------------------------------------ */
 .timeline-container {
     margin: 12px 0 0;
-    padding: 0;
+    padding: 0 0 4px;
     background: transparent;
     border: none;
-    flex: 0 0 auto;
 }
 .timeline-track {
     background: var(--sky-50);
