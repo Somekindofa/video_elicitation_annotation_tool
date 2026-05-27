@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Studio — Theme Mockup</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+<style>
+/* ============================================================
+   STUDIO THEME — Calm Professional Workbench
+   Palette: #CBECFF / #0066CC / #64748B / #FFFFFF
+   ============================================================ */
+:root {
+    /* Brand */
+    --sky:        #CBECFF;
+    --sky-50:     #F2FAFF;
+    --sky-100:    #E4F4FF;
+    --sky-200:    #CBECFF;
+    --sky-300:    #A8DCFB;
+    --blue:       #0066CC;
+    --blue-hover: #0052A8;
+    --blue-soft:  #1D7FD9;
+    --slate:      #64748B;
+    --slate-700:  #475569;
+    --slate-900:  #1F2A37;
+    --ink:        #0B1220;
+    --white:      #FFFFFF;
+    --canvas:     #F8FBFE;   /* page background */
+    --line:       #E6EEF6;   /* hairline borders */
+    --line-soft:  #EFF4F9;
+
+    /* Functional accents (kept restrained, tinted toward blue) */
+    --rec:        #E03A5C;   /* recording red, slightly muted */
+    --success:    #1F9D6B;
+    --warn:       #D78A2A;
+
+    /* Type */
+    --font-sans: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+    /* Radii */
+    --r-sm: 8px;
+    --r-md: 12px;
+    --r-lg: 16px;
+    --r-xl: 22px;
+
+    /* Shadows — soft, layered, never harsh */
+    --shadow-xs: 0 1px 2px rgba(15, 31, 60, 0.04);
+    --shadow-sm: 0 2px 4px rgba(15, 31, 60, 0.04), 0 1px 2px rgba(15, 31, 60, 0.03);
+    --shadow-md: 0 8px 24px -8px rgba(15, 31, 60, 0.10), 0 2px 6px rgba(15, 31, 60, 0.04);
+    --shadow-lg: 0 24px 60px -20px rgba(15, 31, 60, 0.18), 0 8px 16px -8px rgba(15, 31, 60, 0.06);
+    --shadow-focus: 0 0 0 4px rgba(0, 102, 204, 0.14);
+
+    /* Motion */
+    --ease: cubic-bezier(0.22, 1, 0.36, 1);
+    --t-fast: 140ms;
+    --t-base: 240ms;
+    --t-slow: 420ms;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+    height: 100%;
+    background: var(--canvas);
+    color: var(--slate-900);
+    font-family: var(--font-sans);
+    font-size: 14.5px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "ss01", "cv11";
+}
+
+/* Ambient atmosphere — subtle blue mesh, never busy */
+body::before {
+    content: "";
+    position: fixed; inset: 0;
+    background:
+        radial-gradient(900px 600px at 85% -10%, rgba(168, 220, 251, 0.40), transparent 60%),
+        radial-gradient(700px 500px at -10% 110%, rgba(203, 236, 255, 0.55), transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+}
+
+.app {
+    position: relative;
+    z-index: 1;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* ───────────── HEADER ───────────── */
+.header {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 18px 28px;
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: saturate(140%) blur(12px);
+    -webkit-backdrop-filter: saturate(140%) blur(12px);
+    border-bottom: 1px solid var(--line);
+}
+
+.brand {
+    display: flex; flex-direction: column; line-height: 1.15;
+    padding-right: 22px;
+    border-right: 1px solid var(--line);
+}
+.brand-title {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+    color: var(--slate-900);
+}
+.brand-sub {
+    font-size: 11px;
+    color: var(--slate);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 500;
+    margin-top: 2px;
+}
+
+.back-link {
+    display: inline-flex; align-items: center; gap: 8px;
+    color: var(--slate);
+    font-size: 13px;
+    font-weight: 500;
+    text-decoration: none;
+    padding: 7px 12px;
+    border-radius: var(--r-md);
+    transition: all var(--t-fast) var(--ease);
+}
+.back-link:hover { color: var(--blue); background: var(--sky-50); }
+
+.header-spacer { flex: 1; }
+
+.header-actions { display: flex; align-items: center; gap: 8px; }
+
+/* Buttons ------------------------------------------------- */
+.btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    height: 36px;
+    padding: 0 14px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    border: 1px solid transparent;
+    border-radius: var(--r-md);
+    background: transparent;
+    color: var(--slate-900);
+    cursor: pointer;
+    transition: transform var(--t-fast) var(--ease),
+                background var(--t-fast) var(--ease),
+                border-color var(--t-fast) var(--ease),
+                box-shadow var(--t-fast) var(--ease),
+                color var(--t-fast) var(--ease);
+    white-space: nowrap;
+}
+.btn:hover { transform: translateY(-1px); }
+.btn:active { transform: translateY(0); }
+.btn:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
+
+.btn-primary {
+    background: var(--blue);
+    color: var(--white);
+    box-shadow: 0 4px 12px -3px rgba(0, 102, 204, 0.45), inset 0 1px 0 rgba(255,255,255,0.18);
+}
+.btn-primary:hover { background: var(--blue-hover); box-shadow: 0 8px 18px -4px rgba(0, 102, 204, 0.55); }
+
+.btn-ghost {
+    background: var(--white);
+    border-color: var(--line);
+    color: var(--slate-700);
+    box-shadow: var(--shadow-xs);
+}
+.btn-ghost:hover { border-color: var(--sky-300); color: var(--blue); background: var(--sky-50); }
+
+.btn-soft {
+    background: var(--sky-100);
+    color: var(--blue);
+}
+.btn-soft:hover { background: var(--sky-200); }
+
+.btn-icon {
+    width: 36px; padding: 0;
+    justify-content: center;
+}
+
+.btn-sm { height: 30px; padding: 0 11px; font-size: 12.5px; gap: 6px; }
+
+/* Tab nav ------------------------------------------------- */
+.tabs {
+    display: flex;
+    gap: 4px;
+    padding: 14px 28px 0;
+    border-bottom: 1px solid var(--line);
+    background: transparent;
+}
+.tab {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 16px 12px;
+    border: none;
+    background: transparent;
+    font-family: inherit;
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--slate);
+    cursor: pointer;
+    position: relative;
+    border-radius: 10px 10px 0 0;
+    transition: color var(--t-fast) var(--ease);
+}
+.tab i { font-size: 12px; opacity: 0.85; }
+.tab:hover { color: var(--slate-900); }
+.tab.active { color: var(--blue); }
+.tab.active::after {
+    content: "";
+    position: absolute; left: 12px; right: 12px; bottom: -1px;
+    height: 2px;
+    background: var(--blue);
+    border-radius: 2px 2px 0 0;
+}
+.tab.disabled { color: #B8C2CF; cursor: not-allowed; }
+
+/* ───────────── MAIN GRID ───────────── */
+.main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 400px;
+    gap: 18px;
+    padding: 16px 24px 22px;
+    min-height: 0;
+}
+
+/* Cards / panels */
+.panel {
+    background: var(--white);
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+}
+
+/* ───────────── VIDEO PANEL ───────────── */
+.video-panel { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.video-panel > .panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+}
+
+.player-card {
+    padding: 14px 14px 0;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
+/* Video stage absorbs all leftover height; video-frame sizes to fit perfectly */
+.video-stage {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    place-items: center;
+    container-type: size;
+}
+
+/* Horizontal recording control bar */
+.control-bar {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 16px;
+    margin-top: 12px;
+    padding: 10px 14px;
+    background: linear-gradient(180deg, var(--sky-50), var(--white));
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+}
+.control-left, .control-right {
+    display: flex; align-items: center; gap: 10px;
+}
+.control-right { justify-content: flex-end; }
+.control-center {
+    display: flex; align-items: center; gap: 14px;
+}
+
+.status-pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 5px 11px 5px 9px;
+    background: var(--white);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    font-size: 11.5px;
+    color: var(--slate-700);
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+.status-pill .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--success);
+    box-shadow: 0 0 0 3px rgba(31, 157, 107, 0.18);
+}
+
+.timer-display {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--slate);
+    font-variant-numeric: tabular-nums;
+}
+
+.skip-btn {
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    border: 1px solid var(--line);
+    background: var(--white);
+    color: var(--slate-700);
+    cursor: pointer;
+    display: grid; place-items: center;
+    box-shadow: var(--shadow-xs);
+    transition: all var(--t-fast) var(--ease);
+    font-size: 12px;
+}
+.skip-btn:hover { color: var(--blue); border-color: var(--sky-300); transform: translateY(-1px); }
+
+.record-btn {
+    width: 52px; height: 52px;
+    border-radius: 50%;
+    border: none;
+    background: linear-gradient(160deg, #ED4F71 0%, var(--rec) 100%);
+    color: var(--white);
+    cursor: pointer;
+    display: grid; place-items: center;
+    font-size: 18px;
+    box-shadow: 0 8px 18px -6px rgba(224, 58, 92, 0.55), inset 0 1px 0 rgba(255,255,255,0.22);
+    position: relative;
+    transition: transform var(--t-base) var(--ease);
+}
+.record-btn::before {
+    content: ""; position: absolute; inset: -5px;
+    border-radius: 50%;
+    border: 2px solid rgba(224, 58, 92, 0.25);
+    animation: pulse 2.4s var(--ease) infinite;
+}
+@keyframes pulse {
+    0%,100% { transform: scale(1); opacity: 0.55; }
+    50%     { transform: scale(1.14); opacity: 0; }
+}
+.record-btn:hover { transform: scale(1.05); }
+
+.video-frame {
+    background: var(--ink);
+    border-radius: var(--r-md);
+    aspect-ratio: 16/9;
+    width: min(100cqw, 100cqh * 16 / 9);
+    height: auto;
+    position: relative;
+    overflow: hidden;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03);
+    background-image:
+        radial-gradient(circle at 30% 40%, rgba(255,255,255,0.05), transparent 50%),
+        linear-gradient(135deg, #1a2740 0%, #0b1220 100%);
+    display: grid; place-items: center;
+}
+.video-frame .play-glyph {
+    width: 78px; height: 78px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.10);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.18);
+    color: var(--white);
+    display: grid; place-items: center;
+    font-size: 22px;
+    cursor: pointer;
+    transition: all var(--t-base) var(--ease);
+}
+.video-frame .play-glyph:hover { background: rgba(255,255,255,0.18); transform: scale(1.04); }
+.video-frame .frame-label {
+    position: absolute; top: 14px; left: 16px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: rgba(255,255,255,0.55);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+/* Timeline */
+.timeline-block { padding: 10px 14px 12px; }
+.timeline {
+    position: relative;
+    height: 30px;
+    background: var(--sky-50);
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    overflow: hidden;
+}
+.timeline-progress {
+    position: absolute; top: 0; bottom: 0; left: 0;
+    width: 32%;
+    background: linear-gradient(90deg, rgba(0, 102, 204, 0.10), rgba(0, 102, 204, 0.18));
+    border-right: 2px solid var(--blue);
+}
+.timeline-marker {
+    position: absolute; top: 6px; bottom: 6px;
+    border-radius: 4px;
+    background: rgba(0, 102, 204, 0.85);
+    box-shadow: 0 2px 6px rgba(0, 102, 204, 0.35);
+    cursor: pointer;
+    transition: transform var(--t-fast) var(--ease);
+}
+.timeline-marker:hover { transform: scaleY(1.08); }
+.timeline-marker.m1 { left: 8%;  width: 8%;  background: rgba(0, 102, 204, 0.9); }
+.timeline-marker.m2 { left: 22%; width: 11%; background: rgba(29, 127, 217, 0.85); }
+.timeline-marker.m3 { left: 44%; width: 6%;  background: rgba(0, 102, 204, 0.9); }
+.timeline-marker.m4 { left: 58%; width: 14%; background: rgba(29, 127, 217, 0.85); }
+.timeline-marker.m5 { left: 78%; width: 9%;  background: rgba(0, 102, 204, 0.9); }
+
+.timeline-labels {
+    display: flex; justify-content: space-between;
+    margin-top: 8px;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--slate);
+}
+
+/* Video meta strip */
+.meta-strip {
+    display: flex; align-items: center; gap: 22px;
+    padding: 10px 16px;
+    background: var(--sky-50);
+    border-top: 1px solid var(--line);
+}
+.meta-item { display: flex; align-items: baseline; gap: 6px; font-size: 13px; }
+.meta-label {
+    color: var(--slate);
+    text-transform: uppercase;
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    font-weight: 600;
+}
+.meta-value { color: var(--slate-900); font-weight: 500; }
+.meta-strip .grow { flex: 1; }
+
+/* ───────────── ELICITATIONS PANEL ───────────── */
+.elicit-panel { display: flex; flex-direction: column; min-height: 0; }
+
+.panel-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 16px 18px 14px;
+    border-bottom: 1px solid var(--line);
+}
+.panel-title {
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+    color: var(--slate-900);
+    line-height: 1.1;
+}
+.panel-count {
+    display: inline-flex; align-items: center;
+    height: 22px; padding: 0 9px;
+    background: var(--sky-100);
+    color: var(--blue);
+    border-radius: 999px;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+.panel-header .spacer { flex: 1; }
+
+/* Coverage banner */
+.coverage {
+    margin: 16px 18px 4px;
+    padding: 14px;
+    background: linear-gradient(180deg, var(--sky-50), var(--white));
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+}
+.coverage-title {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--slate);
+    font-weight: 600;
+    margin-bottom: 10px;
+}
+.coverage-title i { color: var(--blue); }
+.phases { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.phase {
+    display: grid;
+    grid-template-columns: 14px 70px 1fr auto;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 11px;
+    background: var(--white);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    transition: border-color var(--t-fast) var(--ease);
+}
+.phase:hover { border-color: var(--sky-300); }
+.phase-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: #DCE3EC;
+    box-shadow: 0 0 0 3px rgba(220, 227, 236, 0.4);
+}
+.phase[data-status="present"] .phase-dot { background: var(--success); box-shadow: 0 0 0 3px rgba(31,157,107,0.18); }
+.phase[data-status="partial"] .phase-dot { background: var(--warn); box-shadow: 0 0 0 3px rgba(215,138,42,0.18); }
+.phase-label {
+    font-size: 13.5px;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    color: var(--slate-900);
+}
+.phase-eg {
+    font-size: 12px;
+    color: var(--slate);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.phase-hits {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--blue);
+    background: var(--sky-100);
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-weight: 500;
+}
+
+/* Annotation list */
+.annot-list {
+    padding: 14px 18px 22px;
+    overflow-y: auto;
+    flex: 1;
+    display: flex; flex-direction: column; gap: 10px;
+}
+
+.annot {
+    position: relative;
+    padding: 14px 14px 14px 18px;
+    background: var(--white);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-xs);
+    cursor: pointer;
+    transition: all var(--t-base) var(--ease);
+}
+.annot::before {
+    content: "";
+    position: absolute; left: 0; top: 14px; bottom: 14px;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background: var(--blue);
+    opacity: 0.85;
+}
+.annot:hover {
+    border-color: var(--sky-300);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+}
+.annot-head {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 6px;
+}
+.annot-time {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--blue);
+    background: var(--sky-100);
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-weight: 500;
+}
+.annot-tag {
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--slate);
+    font-weight: 600;
+}
+.annot-actions { margin-left: auto; display: flex; gap: 2px; opacity: 0; transition: opacity var(--t-fast) var(--ease); }
+.annot:hover .annot-actions { opacity: 1; }
+.annot-actions button {
+    width: 26px; height: 26px;
+    border: none; background: transparent;
+    color: var(--slate);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 11.5px;
+}
+.annot-actions button:hover { color: var(--blue); background: var(--sky-50); }
+
+.annot-text {
+    font-size: 14px;
+    color: var(--slate-900);
+    line-height: 1.55;
+}
+.annot-text em { color: var(--blue); font-style: normal; background: linear-gradient(180deg, transparent 60%, var(--sky-200) 60%); padding: 0 1px; }
+
+.annot-foot {
+    margin-top: 8px;
+    display: flex; align-items: center; gap: 10px;
+    font-size: 11.5px;
+    color: var(--slate);
+}
+.annot-foot .chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 2px 8px;
+    background: var(--sky-50);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    font-size: 11px;
+    color: var(--slate-700);
+}
+
+/* Empty hint */
+.hint-strip {
+    margin: 14px 18px 18px;
+    padding: 12px 14px;
+    background: var(--sky-50);
+    border: 1px dashed var(--sky-300);
+    border-radius: var(--r-md);
+    display: flex; align-items: flex-start; gap: 10px;
+    font-size: 12.5px;
+    color: var(--slate-700);
+}
+.hint-strip i { color: var(--blue); margin-top: 2px; }
+
+/* Theme demo panel */
+.theme-card {
+    margin: 22px 28px 0;
+    padding: 20px 22px;
+    background: var(--white);
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-sm);
+    display: grid;
+    grid-template-columns: 1.2fr 1fr 1fr;
+    gap: 24px;
+}
+.theme-card h3 {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+    color: var(--slate-900);
+    margin-bottom: 6px;
+}
+.theme-card p { font-size: 13px; color: var(--slate); }
+.swatches { display: flex; gap: 10px; flex-wrap: wrap; }
+.swatch {
+    width: 60px; height: 60px;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    display: flex; align-items: flex-end; justify-content: flex-start;
+    padding: 6px;
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    color: var(--slate);
+    box-shadow: var(--shadow-xs);
+}
+.swatch[data-c="sky"] { background: var(--sky); }
+.swatch[data-c="blue"] { background: var(--blue); color: #cfe1ff; border-color: var(--blue); }
+.swatch[data-c="slate"] { background: var(--slate); color: #dbe1ea; border-color: var(--slate); }
+.swatch[data-c="white"] { background: var(--white); }
+.type-stack { display: flex; flex-direction: column; gap: 6px; }
+.type-stack .a { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; color: var(--slate-900); line-height: 1; }
+.type-stack .b { font-size: 14px; font-weight: 500; color: var(--slate-700); }
+.type-stack .c { font-family: var(--font-mono); font-size: 12px; color: var(--slate); }
+
+/* Footer note */
+.note {
+    text-align: center;
+    padding: 28px;
+    color: var(--slate);
+    font-size: 12px;
+}
+.note kbd {
+    font-family: var(--font-mono);
+    background: var(--white);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 1px 6px;
+    font-size: 11px;
+}
+
+/* Stagger entry */
+@keyframes rise {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.annot, .phase, .player-card, .panel-header, .theme-card { animation: rise var(--t-slow) var(--ease) both; }
+.annot:nth-child(1) { animation-delay: 60ms; }
+.annot:nth-child(2) { animation-delay: 120ms; }
+.annot:nth-child(3) { animation-delay: 180ms; }
+.annot:nth-child(4) { animation-delay: 240ms; }
+.phase:nth-child(1) { animation-delay: 80ms; }
+.phase:nth-child(2) { animation-delay: 140ms; }
+.phase:nth-child(3) { animation-delay: 200ms; }
+
+/* Responsive */
+@media (max-width: 1100px) {
+    .main { grid-template-columns: 1fr; }
+    .theme-card { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+    <!-- Header -->
+    <header class="header">
+        <a href="#" class="back-link"><i class="fas fa-arrow-left"></i> Back to Moodle</a>
+        <div class="brand">
+            <span class="brand-title">Video Elicitation</span>
+            <span class="brand-sub">ReSource · Expert Knowledge</span>
+        </div>
+
+        <div class="header-spacer"></div>
+
+        <div class="header-actions">
+            <button class="btn btn-ghost btn-icon" title="Help"><i class="fas fa-question"></i></button>
+            <button class="btn btn-ghost btn-sm"><span>🇬🇧</span> EN</button>
+            <button class="btn btn-soft btn-sm"><i class="fas fa-upload"></i> Upload</button>
+            <button class="btn btn-primary btn-sm"><i class="fas fa-video"></i> Select Video</button>
+        </div>
+    </header>
+
+    <!-- Tabs -->
+    <nav class="tabs">
+        <button class="tab active"><i class="fas fa-pen-to-square"></i> Elicit</button>
+        <button class="tab"><i class="fas fa-scissors"></i> Segment</button>
+        <button class="tab disabled"><i class="fas fa-folder-tree"></i> Projects</button>
+    </nav>
+
+    <!-- Main grid -->
+    <main class="main">
+
+        <!-- LEFT: video -->
+        <section class="video-panel">
+            <div class="panel">
+                <div class="player-card">
+                    <div class="video-stage">
+                        <div class="video-frame">
+                            <span class="frame-label">Master · Glass · 04:32</span>
+                            <button class="play-glyph"><i class="fas fa-play"></i></button>
+                        </div>
+                    </div>
+
+                    <div class="control-bar">
+                        <div class="control-left">
+                            <span class="status-pill"><span class="dot"></span> Ready</span>
+                        </div>
+                        <div class="control-center">
+                            <button class="skip-btn" title="Skip back 10s"><i class="fas fa-backward"></i></button>
+                            <button class="record-btn" title="Start recording"><i class="fas fa-microphone"></i></button>
+                            <button class="skip-btn" title="Skip forward 10s"><i class="fas fa-forward"></i></button>
+                        </div>
+                        <div class="control-right">
+                            <span class="timer-display"><i class="fas fa-clock"></i> 00:00</span>
+                            <button class="btn btn-ghost btn-icon btn-sm" title="Settings" style="width:30px;"><i class="fas fa-sliders"></i></button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="timeline-block">
+                    <div class="timeline">
+                        <div class="timeline-progress"></div>
+                        <div class="timeline-marker m1" title="Quoi"></div>
+                        <div class="timeline-marker m2" title="Comment"></div>
+                        <div class="timeline-marker m3" title="Quoi"></div>
+                        <div class="timeline-marker m4" title="Pourquoi"></div>
+                        <div class="timeline-marker m5" title="Comment"></div>
+                    </div>
+                    <div class="timeline-labels">
+                        <span>0:00</span>
+                        <span>04:32</span>
+                    </div>
+                </div>
+
+                <div class="meta-strip">
+                    <div class="meta-item"><span class="meta-label">Video</span><span class="meta-value">M-Cardin · Cueillage à la canne</span></div>
+                    <div class="meta-item"><span class="meta-label">Elicitations</span><span class="meta-value">12</span></div>
+                    <div class="grow"></div>
+                    <button class="btn btn-ghost btn-sm"><i class="fas fa-download"></i> Export</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- RIGHT: elicitations -->
+        <aside class="panel elicit-panel">
+            <div class="panel-header">
+                <h2 class="panel-title">Elicitations</h2>
+                <span class="panel-count">12</span>
+                <div class="spacer"></div>
+                <button class="btn btn-ghost btn-icon" title="Sort"><i class="fas fa-sort"></i></button>
+                <button class="btn btn-ghost btn-icon" title="Refresh"><i class="fas fa-sync-alt"></i></button>
+            </div>
+
+            <!-- Coverage banner -->
+            <div class="coverage">
+                <div class="coverage-title">
+                    <i class="fas fa-compass-drafting"></i>
+                    Session coverage
+                </div>
+                <div class="phases">
+                    <div class="phase" data-status="present">
+                        <span class="phase-dot"></span>
+                        <span class="phase-label">Quoi</span>
+                        <span class="phase-eg">« Je prends la pince, je tourne le verre à gauche. »</span>
+                        <span class="phase-hits">4</span>
+                    </div>
+                    <div class="phase" data-status="partial">
+                        <span class="phase-dot"></span>
+                        <span class="phase-label">Comment</span>
+                        <span class="phase-eg">« lentement, d'abord à droite puis à gauche… »</span>
+                        <span class="phase-hits">2</span>
+                    </div>
+                    <div class="phase" data-status="absent">
+                        <span class="phase-dot"></span>
+                        <span class="phase-label">Pourquoi</span>
+                        <span class="phase-eg">« parce que sinon la bulle s'effondre… »</span>
+                        <span class="phase-hits">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="hint-strip">
+                <i class="fas fa-lightbulb"></i>
+                <span>Capturez au moins un <em>Pourquoi</em> pour boucler la séquence et terminer la session.</span>
+            </div>
+
+            <!-- Annotations -->
+            <div class="annot-list">
+                <article class="annot">
+                    <div class="annot-head">
+                        <span class="annot-time">01:14</span>
+                        <span class="annot-tag">Quoi</span>
+                        <div class="annot-actions">
+                            <button><i class="fas fa-play"></i></button>
+                            <button><i class="fas fa-pen"></i></button>
+                            <button><i class="fas fa-trash"></i></button>
+                        </div>
+                    </div>
+                    <p class="annot-text">Le maître saisit la <em>canne</em> et la fait tourner d'un quart de tour, paume vers le haut, pour cueillir le paraison.</p>
+                    <div class="annot-foot">
+                        <span class="chip"><i class="fas fa-user-tie"></i> M. Cardin</span>
+                        <span class="chip"><i class="fas fa-tag"></i> Cueillage</span>
+                    </div>
+                </article>
+
+                <article class="annot">
+                    <div class="annot-head">
+                        <span class="annot-time">01:42</span>
+                        <span class="annot-tag">Comment</span>
+                        <div class="annot-actions">
+                            <button><i class="fas fa-play"></i></button>
+                            <button><i class="fas fa-pen"></i></button>
+                            <button><i class="fas fa-trash"></i></button>
+                        </div>
+                    </div>
+                    <p class="annot-text">Mouvement <em>lent et continu</em>, sans à-coup ; l'épaule gauche guide, le poignet droit ajuste l'angle de la canne.</p>
+                    <div class="annot-foot">
+                        <span class="chip"><i class="fas fa-clock"></i> 28s</span>
+                        <span class="chip"><i class="fas fa-waveform-lines"></i> Audio</span>
+                    </div>
+                </article>
+
+                <article class="annot">
+                    <div class="annot-head">
+                        <span class="annot-time">02:08</span>
+                        <span class="annot-tag">Pourquoi</span>
+                        <div class="annot-actions">
+                            <button><i class="fas fa-play"></i></button>
+                            <button><i class="fas fa-pen"></i></button>
+                            <button><i class="fas fa-trash"></i></button>
+                        </div>
+                    </div>
+                    <p class="annot-text">La rotation continue empêche la <em>bulle de s'effondrer</em> sous son propre poids — sinon des stries apparaissent au refroidissement.</p>
+                    <div class="annot-foot">
+                        <span class="chip"><i class="fas fa-triangle-exclamation"></i> Risque</span>
+                        <span class="chip"><i class="fas fa-temperature-high"></i> 1100°C</span>
+                    </div>
+                </article>
+
+                <article class="annot">
+                    <div class="annot-head">
+                        <span class="annot-time">02:51</span>
+                        <span class="annot-tag">Quoi</span>
+                        <div class="annot-actions">
+                            <button><i class="fas fa-play"></i></button>
+                            <button><i class="fas fa-pen"></i></button>
+                            <button><i class="fas fa-trash"></i></button>
+                        </div>
+                    </div>
+                    <p class="annot-text">Transfert du paraison sur le <em>pontil</em> ; main gauche en appui, la canne d'origine est cassée d'un coup sec.</p>
+                    <div class="annot-foot">
+                        <span class="chip"><i class="fas fa-arrows-rotate"></i> Transfert</span>
+                    </div>
+                </article>
+            </div>
+        </aside>
+    </main>
+
+    <!-- Theme guide -->
+    <section class="theme-card" style="display:none;">
+        <div>
+            <h3>Studio — calm professional workbench</h3>
+            <p>Soft sky atmospheres, white panels floating on hairline borders, deep blue as the single point of authority. Restrained, daily-use friendly, never fatigues the eye.</p>
+        </div>
+        <div>
+            <div class="meta-label" style="margin-bottom: 10px;">Palette</div>
+            <div class="swatches">
+                <div class="swatch" data-c="sky">#CBECFF</div>
+                <div class="swatch" data-c="blue">#0066CC</div>
+                <div class="swatch" data-c="slate">#64748B</div>
+                <div class="swatch" data-c="white">#FFFFFF</div>
+            </div>
+        </div>
+        <div>
+            <div class="meta-label" style="margin-bottom: 10px;">Type</div>
+            <div class="type-stack">
+                <div class="a">Geist 700 — Headings</div>
+                <div class="b">Geist 500 — Body &amp; UI</div>
+                <div class="c">JetBrains Mono — Timecodes</div>
+            </div>
+        </div>
+    </section>
+
+</div>
+</body>
+</html>
