@@ -14,7 +14,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 CHROMA_DIR = BASE_DIR / "chroma_langchain_db"
 ELICITATION_DIR = CHROMA_DIR / "elicitations_db"
 DATA_DIR = BASE_DIR / "data"
-VIDEOS_DIR = DATA_DIR / "videos"
+# VIDEOS_DIR can be overridden via env var to store uploads outside the install dir
+VIDEOS_DIR = Path(os.getenv("VIDEOS_DIR", str(DATA_DIR / "videos")))
 AUDIO_DIR = DATA_DIR / "audio"
 EXPORTS_DIR = DATA_DIR / "exports"
 FRONTEND_DIR = BASE_DIR  # Static files (css/, js/, index.html) are at project root
