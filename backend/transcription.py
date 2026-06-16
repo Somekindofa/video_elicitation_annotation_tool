@@ -1,132 +1,136 @@
 """
-Whisper transcription service using Fireworks.ai API
+Whisper transcription service using Infomaniak async batch API.
+
+Flow: POST audio → receive batch_id → poll /results/{batch_id} until done.
 """
-import os
 import asyncio
-from typing import Optional
+import os
 from pathlib import Path
+from typing import Optional
 import logging
 
 import aiohttp
 
 from config import (
-    FIREWORKS_API_KEY, 
-    FIREWORKS_API_URL, 
-    FIREWORKS_MODEL,
-    FIREWORKS_TEMPERATURE,
-    FIREWORKS_VAD_MODEL,
-    FIREWORKS_LANGUAGE
+    INFOMANIAK_API_KEY,
+    INFOMANIAK_STT_API_URL,
+    INFOMANIAK_RESULTS_BASE_URL,
+    INFOMANIAK_STT_MODEL,
+    INFOMANIAK_STT_LANGUAGE,
 )
 
 logger = logging.getLogger(__name__)
 
+_POLL_INTERVAL = 2.0   # seconds between status checks
+_POLL_TIMEOUT  = 300.0 # seconds before giving up
+
 
 async def transcribe_audio(audio_path: str) -> dict:
     """
-    Transcribe audio file using Fireworks.ai Whisper API
-    
-    Args:
-        audio_path: Path to audio file
-        
-    Returns:
-        dict with transcription results including text, language, segments
+    Transcribe audio using Infomaniak Whisper batch API.
+
+    Returns dict with keys: text, language, segments, duration.
     """
-    try:
-        # Ensure file exists (convert Path to string if needed)
-        audio_path_str = str(audio_path)
+    audio_path_str = str(audio_path)
 
-        # Wait a moment for file to be fully written
-        await asyncio.sleep(0.1)
+    await asyncio.sleep(0.1)  # let file flush to disk
 
-        # More detailed logging
-        logger.info(f"Checking file: {audio_path_str}")
-        logger.info(f"Path exists: {os.path.exists(audio_path_str)}")
+    if not os.path.exists(audio_path_str):
+        raise FileNotFoundError(f"Audio file not found: {audio_path_str}")
 
-        if not os.path.exists(audio_path_str):
-            logger.error(f"File not found: {audio_path_str}")
-            raise FileNotFoundError(f"Audio file not found: {audio_path_str}")
+    if not INFOMANIAK_API_KEY:
+        raise ValueError("INFOMANIAK_API_KEY is not set.")
 
-        # Check API key
-        if not FIREWORKS_API_KEY:
-            raise ValueError("FIREWORKS_API_KEY is not set. Please set it in config.py or as an environment variable.")
+    logger.info(f"Transcribing audio with Infomaniak Whisper: {audio_path_str}")
 
-        logger.info(f"Transcribing audio with Fireworks.ai: {audio_path_str}")
+    # Authorization only — Content-Type is set automatically by aiohttp for multipart
+    headers = {"Authorization": f"Bearer {INFOMANIAK_API_KEY}"}
 
-        # Prepare the request
-        async with aiohttp.ClientSession() as session:
-            with open(audio_path_str, 'rb') as audio_file:
-                # Create form data
-                form = aiohttp.FormData()
-                form.add_field('file', audio_file, filename=os.path.basename(audio_path_str))
-                form.add_field('model', FIREWORKS_MODEL)
-                form.add_field('temperature', FIREWORKS_TEMPERATURE)
-                form.add_field("vad_model", FIREWORKS_VAD_MODEL)
-                form.add_field('language', FIREWORKS_LANGUAGE)
+    _mime_map = {".wav": "audio/wav", ".webm": "audio/webm", ".ogg": "audio/ogg",
+                 ".mp3": "audio/mpeg", ".mp4": "audio/mp4", ".m4a": "audio/mp4"}
+    audio_content_type = _mime_map.get(Path(audio_path_str).suffix.lower(), "audio/webm")
 
-                # Make API request
-                headers = {
-                    "Authorization": f"Bearer {FIREWORKS_API_KEY}"
+    form = aiohttp.FormData()
+    form.add_field(
+        "file",
+        open(audio_path_str, "rb"),
+        filename=Path(audio_path_str).name,
+        content_type=audio_content_type,
+    )
+    form.add_field("model", INFOMANIAK_STT_MODEL)
+    form.add_field("language", INFOMANIAK_STT_LANGUAGE)
+    form.add_field("response_format", "verbose_json")
+
+    async with aiohttp.ClientSession() as session:
+        # Step 1: submit the job via multipart/form-data
+        async with session.post(
+            INFOMANIAK_STT_API_URL, headers=headers, data=form
+        ) as response:
+            if response.status != 200:
+                error_text = await response.text()
+                logger.error(f"Infomaniak STT submit error: {response.status} - {error_text}")
+                raise Exception(f"Transcription submit error: {response.status} - {error_text}")
+            submit_result = await response.json()
+
+        batch_id = submit_result.get("batch_id")
+        if not batch_id:
+            raise Exception(f"No batch_id in Infomaniak STT response: {submit_result}")
+
+        logger.info(f"Transcription job submitted, batch_id={batch_id}")
+
+        # Step 2: poll until done
+        # Status values: pending | processing | success | failed | cancelled
+        results_url = f"{INFOMANIAK_RESULTS_BASE_URL}/{batch_id}"
+        elapsed = 0.0
+        while elapsed < _POLL_TIMEOUT:
+            await asyncio.sleep(_POLL_INTERVAL)
+            elapsed += _POLL_INTERVAL
+
+            async with session.get(results_url, headers=headers) as poll_response:
+                if poll_response.status != 200:
+                    error_text = await poll_response.text()
+                    logger.warning(f"Infomaniak STT poll error: {poll_response.status} - {error_text}")
+                    continue
+                poll_result = await poll_response.json()
+
+            status = poll_result.get("status", "")
+            logger.info(f"Transcription batch_id={batch_id} status={status} ({elapsed:.0f}s)")
+
+            if status == "success":
+                # data is a JSON string when response_format=verbose_json
+                import json as _json
+                raw = poll_result.get("data", "")
+                result_data = _json.loads(raw) if isinstance(raw, str) else raw
+                return {
+                    "text": result_data.get("text", "").strip(),
+                    "language": result_data.get("language", "unknown"),
+                    "segments": result_data.get("segments", []),
+                    "duration": result_data.get("duration", 0),
                 }
 
-                async with session.post(
-                    FIREWORKS_API_URL, headers=headers, data=form
-                ) as response:
-                    if response.status != 200:
-                        error_text = await response.text()
-                        logger.error(f"Fireworks.ai API error: {response.status} - {error_text}")
-                        raise Exception(f"Transcription API error: {response.status} - {error_text}")
+            if status in ("failed", "cancelled"):
+                raise Exception(f"Transcription job {status}: {poll_result}")
 
-                    result = await response.json()
-
-        # Extract transcription text from Fireworks.ai response
-        transcription_text = result.get("text", "").strip()
-        language = result.get("language", "unknown")
-
-        logger.info(f"Transcription completed. Length: {len(transcription_text)} chars")
-
-        return {
-            "text": transcription_text,
-            "language": language,
-            "segments": result.get("segments", []),
-            "duration": result.get("duration", 0)
-        }
-
-    except Exception as e:
-        logger.error(f"Transcription error: {str(e)}")
-        raise
+        raise TimeoutError(f"Transcription job {batch_id} did not complete within {_POLL_TIMEOUT}s")
 
 
 async def transcribe_audio_simple(audio_path: str) -> str:
-    """
-    Simple transcription that returns just the text
-    
-    Args:
-        audio_path: Path to audio file
-        
-    Returns:
-        Transcribed text
-    """
+    """Simple wrapper that returns just the transcribed text."""
     result = await transcribe_audio(audio_path)
     return result["text"]
 
 
 def get_model_info() -> dict:
-    """Get information about the Fireworks.ai Whisper API configuration"""
     return {
-        "provider": "Fireworks.ai",
-        "model": FIREWORKS_MODEL,
-        "api_configured": bool(FIREWORKS_API_KEY),
-        "temperature": FIREWORKS_TEMPERATURE,
-        "vad_model": FIREWORKS_VAD_MODEL
+        "provider": "Infomaniak",
+        "model": INFOMANIAK_STT_MODEL,
+        "api_configured": bool(INFOMANIAK_API_KEY),
+        "language": INFOMANIAK_STT_LANGUAGE,
     }
 
 
 async def preload_model():
-    """Check Fireworks.ai API configuration"""
-    try:
-        if not FIREWORKS_API_KEY:
-            logger.warning("FIREWORKS_API_KEY is not set. Transcription will fail until configured.")
-        else:
-            logger.info("Fireworks.ai API key is configured")
-    except Exception as e:
-        logger.error(f"Failed to check API configuration: {str(e)}")
+    if not INFOMANIAK_API_KEY:
+        logger.warning("INFOMANIAK_API_KEY is not set. Transcription will fail until configured.")
+    else:
+        logger.info("Infomaniak STT API key is configured")

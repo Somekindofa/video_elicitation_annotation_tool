@@ -64,24 +64,27 @@ CORS_ORIGINS = [o for o in [
     *_extra_origins,
 ] if o]
 
-# Fireworks.ai API settings
-FIREWORKS_API_KEY = os.getenv(
-    "FIREWORKS_API_KEY", ""
-)  # Set this in environment variable or replace with your key
-FIREWORKS_API_URL = (
-    "https://audio-turbo.us-virginia-1.direct.fireworks.ai/v1/audio/transcriptions"
+# Admin test runner — sent as Authorization: Bearer header (fetch) or
+# exchanged for a short-lived SSE token via POST /api/admin/token.
+ADMIN_SECRET = os.getenv("ADMIN_SECRET", "")
+
+# Infomaniak AI — OpenAI-compatible, used for all active LLM inference
+INFOMANIAK_API_KEY = os.getenv("INFOMANIAK_API_KEY", "")
+INFOMANIAK_PRODUCT_ID = os.getenv("INFOMANIAK_PRODUCT_ID", "")
+INFOMANIAK_LLM_API_URL = (
+    f"https://api.infomaniak.com/2/ai/{INFOMANIAK_PRODUCT_ID}/openai/v1/chat/completions"
 )
+INFOMANIAK_LLM_MODEL = "swiss-ai/Apertus-70B-Instruct-2509"
 
-FIREWORKS_MODEL = "whisper-v3-turbo"
-FIREWORKS_TEMPERATURE = "0"
-FIREWORKS_VAD_MODEL = "silero"
-FIREWORKS_LANGUAGE = "fr"
-
-# Fireworks.ai LLM settings for extended transcripts
-FIREWORKS_LLM_API_URL = "https://api.fireworks.ai/inference/v1/completions"
-FIREWORKS_LLM_MODEL = "accounts/fireworks/models/llama-v3p3-70b-instruct"
-FIREWORKS_LLM_MAX_TOKENS = 4096
-FIREWORKS_LLM_TEMPERATURE = 1
+# Infomaniak STT (Whisper) — async batch API, note /1/ prefix (different from LLM /2/)
+INFOMANIAK_STT_API_URL = (
+    f"https://api.infomaniak.com/1/ai/{INFOMANIAK_PRODUCT_ID}/openai/audio/transcriptions"
+)
+INFOMANIAK_RESULTS_BASE_URL = (
+    f"https://api.infomaniak.com/1/ai/{INFOMANIAK_PRODUCT_ID}/results"
+)
+INFOMANIAK_STT_MODEL = "whisper"
+INFOMANIAK_STT_LANGUAGE = "fr"
 
 # Google Drive API settings
 GOOGLE_DRIVE_API_KEY = os.getenv(

@@ -107,6 +107,13 @@ Brand block (title + subtitle) sits immediately to the right of the back-to-Mood
 
 ---
 
+## Environment constraints
+
+- **No `sudo` access.** Any command requiring elevated privileges (e.g. `systemctl restart`, `apt install`) must be run by the user. Suggest the command using `! <command>` so they can run it directly in the session.
+- **No access to `.env` files or secrets.** Environment variables (API keys, tokens, DB passwords) are managed by the system outside this repo. Never read, print, or suggest committing `.env` files. Infer configuration from the code (e.g. `os.getenv(...)` calls) without accessing the actual values.
+
+---
+
 ## Workflow rules (learned during this build)
 
 - **Always branch from `main`** before frontend work: `git checkout main && git pull && git checkout -b feat/<name>`. Don't pile changes onto an existing feature branch.

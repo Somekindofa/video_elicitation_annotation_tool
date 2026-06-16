@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Integration Tests — Admin</title>
+<style>
+:root {
+  --sky:       #CBECFF;
+  --blue:      #0066CC;
+  --blue-h:    #0052A8;
+  --slate:     #64748B;
+  --slate-7:   #475569;
+  --ink:       #0B1220;
+  --white:     #FFFFFF;
+  --green:     #16A34A;
+  --green-bg:  #F0FDF4;
+  --red:       #DC2626;
+  --red-bg:    #FEF2F2;
+  --amber:     #D97706;
+  --amber-bg:  #FFFBEB;
+  --gray-50:   #F8FAFC;
+  --gray-100:  #F1F5F9;
+  --gray-200:  #E2E8F0;
+  --gray-300:  #CBD5E1;
+  --radius:    8px;
+  --font:      -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --mono:      'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font);
+  background: var(--gray-50);
+  color: var(--ink);
+  min-height: 100vh;
+  padding: 32px 24px;
+}
+
+.page {
+  max-width: 960px;
+  margin: 0 auto;
+  display: grid;
+  gap: 24px;
+}
+
+/* Header */
+.header { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+.header-left h1 { font-size: 22px; font-weight: 700; color: var(--ink); }
+.header-left p  { font-size: 13px; color: var(--slate); margin-top: 4px; }
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  background: var(--sky);
+  color: var(--blue);
+}
+
+/* Token row */
+.token-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+}
+.token-row label { font-size: 13px; color: var(--slate-7); white-space: nowrap; }
+.token-row input {
+  flex: 1;
+  font-size: 13px;
+  font-family: var(--mono);
+  border: 1px solid var(--gray-300);
+  border-radius: 6px;
+  padding: 6px 10px;
+  color: var(--ink);
+  outline: none;
+}
+.token-row input:focus { border-color: var(--blue); box-shadow: 0 0 0 2px rgba(0,102,204,.15); }
+.token-note { font-size: 11px; color: var(--slate); margin-top: 4px; }
+
+/* Action bar */
+.actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 18px;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s, opacity .15s;
+}
+button:disabled { opacity: .45; cursor: not-allowed; }
+
+.btn-primary   { background: var(--blue);  color: var(--white); }
+.btn-primary:hover:not(:disabled)  { background: var(--blue-h); }
+.btn-secondary { background: var(--gray-100); color: var(--slate-7); border: 1px solid var(--gray-200); }
+.btn-secondary:hover:not(:disabled) { background: var(--gray-200); }
+.btn-danger    { background: var(--red-bg); color: var(--red); border: 1px solid #FECACA; }
+.btn-danger:hover:not(:disabled)   { background: #FEE2E2; }
+
+/* Summary bar */
+.summary {
+  display: none;
+  align-items: center;
+  gap: 20px;
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  padding: 12px 18px;
+  font-size: 13px;
+}
+.summary.visible { display: flex; }
+.sum-item { display: flex; align-items: center; gap: 6px; }
+.sum-dot { width: 8px; height: 8px; border-radius: 50%; }
+.dot-pass { background: var(--green); }
+.dot-fail { background: var(--red); }
+.dot-run  { background: var(--amber); }
+.sum-label { color: var(--slate); }
+.sum-count { font-weight: 700; }
+.sum-count.pass { color: var(--green); }
+.sum-count.fail { color: var(--red); }
+.sum-status { margin-left: auto; font-weight: 600; }
+.sum-status.ok   { color: var(--green); }
+.sum-status.fail { color: var(--red); }
+.sum-status.run  { color: var(--amber); }
+
+/* Test list */
+.section-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--slate);
+  margin-bottom: 8px;
+}
+
+.test-list {
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.test-group-label {
+  padding: 8px 16px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--slate);
+  background: var(--gray-100);
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.test-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--gray-100);
+  transition: background .1s;
+}
+.test-row:last-child { border-bottom: none; }
+.test-row:hover { background: var(--gray-50); }
+
+.test-status {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 10px;
+}
+.status-idle    { background: var(--gray-200); }
+.status-running { background: var(--amber-bg); border: 2px solid var(--amber); animation: pulse 1s infinite; }
+.status-pass    { background: var(--green-bg); color: var(--green); }
+.status-fail    { background: var(--red-bg);   color: var(--red); }
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.5; } }
+
+.test-info { flex: 1; min-width: 0; }
+.test-name  { font-size: 13px; font-weight: 500; }
+.test-id    { font-size: 11px; font-family: var(--mono); color: var(--slate); margin-top: 1px; }
+
+.test-run-btn {
+  padding: 4px 12px;
+  font-size: 12px;
+  background: var(--gray-100);
+  color: var(--slate-7);
+  border: 1px solid var(--gray-200);
+  border-radius: 6px;
+}
+.test-run-btn:hover:not(:disabled) { background: var(--sky); color: var(--blue); border-color: var(--sky); }
+
+/* Output terminal */
+.terminal-wrap {
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.terminal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: var(--gray-100);
+  border-bottom: 1px solid var(--gray-200);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--slate-7);
+}
+.terminal {
+  background: #0D1117;
+  color: #E6EDF3;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 16px;
+  height: 420px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.terminal:empty::before {
+  content: "No output yet. Run a test suite to see live results here.";
+  color: #6E7681;
+  font-style: italic;
+}
+.out-pass  { color: #3FB950; }
+.out-fail  { color: #F85149; }
+.out-info  { color: #79C0FF; }
+.out-output{ color: #E6EDF3; }
+.out-error { color: #F85149; font-weight: bold; }
+
+.clear-btn {
+  padding: 3px 10px;
+  font-size: 11px;
+  background: transparent;
+  color: var(--slate);
+  border: 1px solid var(--gray-300);
+  border-radius: 5px;
+}
+.clear-btn:hover { background: var(--gray-200); }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <h1>Integration Tests <span class="badge">Admin</span></h1>
+      <p>Run the full test suite or individual tests against live Infomaniak APIs. Results stream in real time.</p>
+    </div>
+  </div>
+
+  <!-- Admin secret (matches ADMIN_SECRET in .env) -->
+  <div>
+    <div class="token-row">
+      <label>Admin secret</label>
+      <input type="password" id="tokenInput" placeholder="Value of ADMIN_SECRET in .env (leave empty if not set)" />
+    </div>
+    <p class="token-note">
+      Set <code>ADMIN_SECRET=your_secret</code> in <code>.env</code> to protect this page.
+      If not set, the endpoints are open (trusted network only).
+    </p>
+  </div>
+
+  <!-- Action buttons -->
+  <div class="actions">
+    <button class="btn-primary" id="btnAll" onclick="runSuite('all')">
+      ▶ Run All Tests
+    </button>
+    <button class="btn-secondary" id="btnLight" onclick="runSuite('light')">
+      ⚡ Run Light Tests (01–04)
+    </button>
+    <button class="btn-danger" id="btnStop" onclick="stopRun()" style="display:none">
+      ■ Stop
+    </button>
+  </div>
+
+  <!-- Summary bar -->
+  <div class="summary" id="summary">
+    <div class="sum-item">
+      <div class="sum-dot dot-pass"></div>
+      <span class="sum-label">Passed</span>
+      <span class="sum-count pass" id="sumPassed">0</span>
+    </div>
+    <div class="sum-item">
+      <div class="sum-dot dot-fail"></div>
+      <span class="sum-label">Failed</span>
+      <span class="sum-count fail" id="sumFailed">0</span>
+    </div>
+    <div class="sum-item">
+      <div class="sum-dot dot-run"></div>
+      <span class="sum-label">Running</span>
+      <span class="sum-count" id="sumRunning" style="color:var(--amber)">—</span>
+    </div>
+    <span class="sum-status run" id="sumStatus">Running…</span>
+  </div>
+
+  <!-- Test list -->
+  <div>
+    <div class="section-title">Test catalogue</div>
+    <div class="test-list" id="testList">
+      <!-- populated by JS -->
+    </div>
+  </div>
+
+  <!-- Live output -->
+  <div class="terminal-wrap">
+    <div class="terminal-header">
+      <span>Live output</span>
+      <div style="display:flex;gap:6px">
+        <button class="clear-btn" id="copyBtn" onclick="copyTerminal()">Copy</button>
+        <button class="clear-btn" onclick="clearTerminal()">Clear</button>
+      </div>
+    </div>
+    <div class="terminal" id="terminal"></div>
+  </div>
+
+</div>
+
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+let tests = [];
+let es = null;       // current EventSource
+let running = false;
+
+// ── Boot ─────────────────────────────────────────────────────────────────────
+async function loadTests() {
+  const secret = getSecret();
+  const headers = secret ? { 'Authorization': `Bearer ${secret}` } : {};
+  try {
+    const r = await fetch('/api/admin/tests', { headers });
+    if (r.status === 403) {
+      appendLine('Access denied — enter your ADMIN_SECRET above, then click Run.', 'error');
+      return false;
+    }
+    const data = await r.json();
+    tests = data.tests || [];
+    renderTestList();
+    return true;
+  } catch (e) {
+    appendLine('Could not reach /api/admin/tests — is the backend running?', 'error');
+    return false;
+  }
+}
+
+window.addEventListener('DOMContentLoaded', () => loadTests());
+
+// ── Token helper ─────────────────────────────────────────────────────────────
+function getSecret() {
+  return document.getElementById('tokenInput').value.trim();
+}
+
+async function buildUrl(suite) {
+  const secret = getSecret();
+  let tokenParam = '';
+  if (secret) {
+    try {
+      const r = await fetch('/api/admin/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ secret }),
+      });
+      if (r.ok) {
+        const { token } = await r.json();
+        tokenParam = `&token=${encodeURIComponent(token)}`;
+      }
+    } catch (_) { /* open mode or network error — proceed without token */ }
+  }
+  return `/api/admin/run?suite=${encodeURIComponent(suite)}${tokenParam}`;
+}
+
+// ── Render test list ──────────────────────────────────────────────────────────
+function renderTestList() {
+  const container = document.getElementById('testList');
+  container.innerHTML = '';
+
+  const groups = [
+    { label: 'Independent — safe to run individually', filter: t => t.independent },
+    { label: 'Pipeline — must run as a suite (share state via test_05+)', filter: t => !t.independent },
+  ];
+
+  for (const g of groups) {
+    const label = document.createElement('div');
+    label.className = 'test-group-label';
+    label.textContent = g.label;
+    container.appendChild(label);
+
+    for (const t of tests.filter(g.filter)) {
+      const row = document.createElement('div');
+      row.className = 'test-row';
+      row.id = `row-${t.id}`;
+      row.innerHTML = `
+        <div class="test-status status-idle" id="status-${t.id}"></div>
+        <div class="test-info">
+          <div class="test-name">${t.label}</div>
+          <div class="test-id">${t.id}</div>
+        </div>
+        ${t.independent
+          ? `<button class="test-run-btn" id="btn-${t.id}" onclick="runSuite('${t.id}')">Run</button>`
+          : ''}
+      `;
+      container.appendChild(row);
+    }
+  }
+}
+
+// ── Run suite ─────────────────────────────────────────────────────────────────
+async function runSuite(suite) {
+  if (running) return;
+  // If test list failed to load (e.g. secret was empty on boot), reload now
+  if (tests.length === 0) {
+    const ok = await loadTests();
+    if (!ok) return;
+  }
+
+  // Reset UI
+  clearTerminal();
+  resetTestStatuses();
+  setRunning(true);
+  document.getElementById('summary').classList.add('visible');
+  setSummary(0, 0, suite === 'all' ? tests.length : suite === 'light' ? tests.filter(t=>t.independent).length : 1);
+
+  // Mark first relevant test as running
+  const first = suite === 'all' ? tests[0]
+    : suite === 'light' ? tests.find(t => t.independent)
+    : tests.find(t => t.id === suite);
+  if (first) setTestStatus(first.id, 'running');
+
+  es = new EventSource(await buildUrl(suite));
+
+  es.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+
+    if (msg.type === 'done') {
+      es.close(); es = null;
+      setRunning(false);
+      const ok = msg.returncode === 0;
+      const statusEl = document.getElementById('sumStatus');
+      statusEl.textContent = ok ? `✓ All passed (${msg.passed})` : `✗ ${msg.failed} failed`;
+      statusEl.className = 'sum-status ' + (ok ? 'ok' : 'fail');
+      document.getElementById('sumRunning').textContent = '0';
+      updateSummaryCount(msg.passed, msg.failed);
+      appendLine('', 'output');
+      appendLine(`─── Done — ${msg.passed} passed, ${msg.failed} failed (exit ${msg.returncode}) ───`, ok ? 'pass' : 'fail');
+      return;
+    }
+
+    if (msg.type === 'error') {
+      es.close(); es = null;
+      setRunning(false);
+      appendLine(msg.line, 'error');
+      return;
+    }
+
+    // Backend now emits test_id on every PASS/FAIL/start event
+    if (msg.event === 'start' && msg.test_id) {
+      setTestStatus(msg.test_id, 'running');
+    } else if (msg.type === 'pass' && msg.test_id) {
+      setTestStatus(msg.test_id, 'pass');
+      updateSummaryCount(null, null); // live count updated via done event
+    } else if (msg.type === 'fail' && msg.test_id) {
+      setTestStatus(msg.test_id, 'fail');
+    }
+
+    if (msg.line) appendLine(msg.line, msg.type);
+  };
+
+  es.onerror = () => {
+    if (running) {
+      appendLine('Connection lost — the server may have restarted.', 'error');
+      es.close(); es = null;
+      setRunning(false);
+    }
+  };
+}
+
+function stopRun() {
+  if (es) { es.close(); es = null; }
+  setRunning(false);
+  appendLine('─── Stopped by user ───', 'error');
+}
+
+// ── Status helpers ────────────────────────────────────────────────────────────
+function setTestStatus(id, state) {
+  const el = document.getElementById(`status-${id}`);
+  if (!el) return;
+  el.className = `test-status status-${state}`;
+  el.textContent = state === 'pass' ? '✓' : state === 'fail' ? '✗' : '';
+}
+
+function resetTestStatuses() {
+  for (const t of tests) setTestStatus(t.id, 'idle');
+}
+
+
+function setRunning(state) {
+  running = state;
+  document.getElementById('btnAll').disabled   = state;
+  document.getElementById('btnLight').disabled = state;
+  document.getElementById('btnStop').style.display = state ? '' : 'none';
+  // per-test buttons
+  for (const t of tests) {
+    const btn = document.getElementById(`btn-${t.id}`);
+    if (btn) btn.disabled = state;
+  }
+  if (state) {
+    document.getElementById('sumStatus').textContent = 'Running…';
+    document.getElementById('sumStatus').className = 'sum-status run';
+  }
+}
+
+function setSummary(passed, failed, total) {
+  document.getElementById('sumPassed').textContent = passed;
+  document.getElementById('sumFailed').textContent = failed;
+  document.getElementById('sumRunning').textContent = total - passed - failed;
+}
+
+function updateSummaryCount(passed, failed) {
+  if (passed !== null) document.getElementById('sumPassed').textContent = passed;
+  if (failed !== null) document.getElementById('sumFailed').textContent = failed;
+}
+
+// ── Terminal ──────────────────────────────────────────────────────────────────
+function appendLine(text, type) {
+  const term = document.getElementById('terminal');
+  const span = document.createElement('span');
+  span.className = `out-${type}`;
+  span.textContent = text + '\n';
+  term.appendChild(span);
+  term.scrollTop = term.scrollHeight;
+}
+
+function clearTerminal() {
+  document.getElementById('terminal').innerHTML = '';
+}
+
+async function copyTerminal() {
+  const text = document.getElementById('terminal').innerText;
+  try {
+    await navigator.clipboard.writeText(text);
+    const btn = document.getElementById('copyBtn');
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = 'Copy', 1500);
+  } catch {
+    // Fallback for HTTP contexts where clipboard API is unavailable
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    const btn = document.getElementById('copyBtn');
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = 'Copy', 1500);
+  }
+}
+</script>
+</body>
+</html>

@@ -161,7 +161,8 @@ const TRANSLATIONS = {
         coveragePhaseExampleQuoi: 'E.g. "I take the clamp, I turn the glass to the left."',
         coveragePhaseExampleComment: 'E.g. "slowly, first to the right then to the left, with the long clamp."',
         coveragePhaseExamplePourquoi: 'E.g. "because otherwise the bubble collapses, to avoid streaks."',
-        coverageFinishSession: 'Finish session',
+        coverageFinishSession: 'Analyze my session',
+        coverageRecordingActive: 'Recording in progress…',
         sessionSummaryTitle: 'Session summary',
         sessionSummaryCloseAria: 'Close',
         coverageFollowUpsLabel: 'To go further',
@@ -349,7 +350,8 @@ const TRANSLATIONS = {
         coveragePhaseExampleQuoi: 'Ex. « Je prends la pince, je tourne le verre à gauche. »',
         coveragePhaseExampleComment: 'Ex. « lentement, d\'abord à droite puis à gauche, avec la pince longue. »',
         coveragePhaseExamplePourquoi: 'Ex. « parce que sinon la bulle s\'effondre, c\'est pour éviter les stries. »',
-        coverageFinishSession: 'Finir la session',
+        coverageFinishSession: 'Analyser ma session',
+        coverageRecordingActive: 'Enregistrement en cours…',
         sessionSummaryTitle: 'Synthèse de la session',
         sessionSummaryCloseAria: 'Fermer',
         coverageFollowUpsLabel: 'Pour aller plus loin',
@@ -461,8 +463,8 @@ function refreshDynamicUIStrings() {
     }
 
     // Elicit controls (craft label + segment selector placeholder)
-    const craftLabelEl = document.querySelector('.elicit-controls > div');
-    if (craftLabelEl && !craftLabelEl.id) {
+    const craftLabelEl = document.querySelector('.elicit-controls label[for="craftSelector"]');
+    if (craftLabelEl) {
         craftLabelEl.textContent = t('craftDomainLabel');
     }
     // Update craft option labels for current language
@@ -473,7 +475,7 @@ function refreshDynamicUIStrings() {
             if (key) opt.textContent = t(key);
         });
     }
-    const segLabelEl = document.querySelector('#segmentSelectorWrapper > div');
+    const segLabelEl = document.querySelector('#segmentSelectorWrapper label[for="segmentSelector"]');
     if (segLabelEl) segLabelEl.textContent = t('segmentSelectorLabel');
     const segPlaceholder = document.querySelector('#segmentSelector option[disabled]');
     if (segPlaceholder) segPlaceholder.textContent = t('segmentSelectorPlaceholder');
@@ -504,6 +506,7 @@ function refreshDynamicUIStrings() {
     // re-render. Only UI strings are replaced; transcriptions are not.
     if (typeof renderAnnotations === 'function' && Array.isArray(state.annotations)) {
         try { renderAnnotations(); } catch (_) { /* early init */ }
+        try { renderAnnotationPips(); } catch (_) { /* early init */ }
     }
     if (typeof renderCoverageBanner === 'function') {
         try { renderCoverageBanner(); } catch (_) { /* early init */ }
@@ -691,6 +694,11 @@ function resetInterface() {
     videoPlayer.currentTime = 0;
     videoSource.src = '';
     videoPlayer.load(); // Important: reload to clear the source properly
+
+    // Reset coverage state and hide the banner + summary modal
+    state.coverage = { scores: {}, aggregate: null, plateau: false, summaryOpen: false };
+    renderCoverageBanner();
+    hideSessionSummary();
 
     console.log('Interface reset complete');
 }
@@ -900,14 +908,13 @@ function createElicitControlsUI() {
 
         const wrapper = document.createElement('div');
         wrapper.className = 'elicit-controls';
-        wrapper.style.margin = '10px 0';
-        wrapper.style.width = 'fit-content';
+        wrapper.style.cssText = 'display:flex;flex-direction:row;align-items:center;gap:12px;flex-shrink:0;';
 
         // --- Craft domain selector ---
-        const craftLabel = document.createElement('div');
+        const craftLabel = document.createElement('label');
         craftLabel.textContent = t('craftDomainLabel');
-        craftLabel.style.fontSize = '0.9rem';
-        craftLabel.style.marginBottom = '6px';
+        craftLabel.htmlFor = 'craftSelector';
+        craftLabel.style.cssText = 'font-size:0.8rem;font-weight:500;color:#4b5563;white-space:nowrap;cursor:default;';
 
         const craftSelect = document.createElement('select');
         craftSelect.id = 'craftSelector';
@@ -942,10 +949,10 @@ function createElicitControlsUI() {
         addCraftBtn.style.cssText = 'padding:4px 8px;border-radius:4px;border:1px solid #ccc;cursor:pointer;font-size:0.85rem;margin-left:6px;vertical-align:middle;';
         addCraftBtn.addEventListener('click', () => showAddCraftInput(wrapper, craftSelect, addCraftBtn));
 
-        wrapper.appendChild(craftLabel);
-
+        // Craft label + select + add-button, all inline
         const craftRow = document.createElement('div');
-        craftRow.style.cssText = 'display:flex;align-items:center;';
+        craftRow.style.cssText = 'display:flex;align-items:center;gap:6px;';
+        craftRow.appendChild(craftLabel);
         craftRow.appendChild(craftSelect);
         craftRow.appendChild(addCraftBtn);
         wrapper.appendChild(craftRow);
@@ -955,13 +962,12 @@ function createElicitControlsUI() {
         // --- Segment selector ---
         const segWrapper = document.createElement('div');
         segWrapper.id = 'segmentSelectorWrapper';
-        segWrapper.style.marginTop = '10px';
         segWrapper.style.display = 'none'; // hidden until segments exist
 
-        const segLabel = document.createElement('div');
+        const segLabel = document.createElement('label');
         segLabel.textContent = t('segmentSelectorLabel');
-        segLabel.style.fontSize = '0.9rem';
-        segLabel.style.marginBottom = '6px';
+        segLabel.htmlFor = 'segmentSelector';
+        segLabel.style.cssText = 'font-size:0.8rem;font-weight:500;color:#4b5563;white-space:nowrap;cursor:default;';
 
         const segSelect = document.createElement('select');
         segSelect.id = 'segmentSelector';
@@ -980,12 +986,19 @@ function createElicitControlsUI() {
             }
         });
 
+        // Segment label + select, inline
+        segWrapper.style.cssText = 'display:none;align-items:center;gap:6px;';
         segWrapper.appendChild(segLabel);
         segWrapper.appendChild(segSelect);
         wrapper.appendChild(segWrapper);
 
-        // Insert at top of recording controls
-        controls.insertBefore(wrapper, controls.firstChild);
+        // Append inside control-buttons-group so everything shares one horizontal line
+        const controlButtonsGroup = controls.querySelector('.control-buttons-group');
+        if (controlButtonsGroup) {
+            controlButtonsGroup.appendChild(wrapper);
+        } else {
+            controls.insertBefore(wrapper, controls.firstChild);
+        }
     } catch (e) {
         console.error('Failed to create elicit controls UI', e);
     }
@@ -1022,7 +1035,7 @@ function refreshSegmentSelector() {
         segSelect.appendChild(opt);
     });
 
-    wrapper.style.display = 'block';
+    wrapper.style.display = 'flex';
 }
 
 // Task selector removed — only craft domain selection is shown in the Elicit tab.
@@ -1714,7 +1727,10 @@ async function startRecording() {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
+        // Let the browser choose the codec — do NOT specify mimeType explicitly,
+        // as forcing 'audio/webm;codecs=opus' causes Brave to produce near-empty recordings.
         state.mediaRecorder = new MediaRecorder(stream);
+        state.recordingMimeType = state.mediaRecorder.mimeType || 'audio/webm';
         state.audioChunks = [];
 
         state.mediaRecorder.ondataavailable = (event) => {
@@ -1786,8 +1802,10 @@ async function handleRecordingStop() {
     document.getElementById('recordingTimer').style.display = 'none';
 
     try {
-        // Create audio blob
-        const audioBlob = new Blob(state.audioChunks, { type: 'audio/wav' });
+        // Create audio blob with the actual MIME type the recorder used.
+        const actualMime = state.recordingMimeType || 'audio/webm';
+        const audioExt = actualMime.startsWith('audio/ogg') ? 'ogg' : 'webm';
+        const audioBlob = new Blob(state.audioChunks, { type: actualMime });
 
         // Send to server using FormData
         showLoading('Saving annotation...');
@@ -1798,7 +1816,7 @@ async function handleRecordingStop() {
 
         // Create FormData for multipart upload
         const formData = new FormData();
-        formData.append('audio_blob', audioBlob, 'recording.wav');
+        formData.append('audio_blob', audioBlob, `recording.${audioExt}`);
         // Attach craft/domain selection so backend can use domain-specific prompts
         try {
             formData.append('craft', state.craft || 'glassblowing');
@@ -2045,6 +2063,11 @@ function renderAnnotations() {
                     <button class="btn btn-icon btn-small" onclick="deleteAnnotation(${annotation.id})" title="${t('deleteAnnotation')}">
                         <i class="fas fa-trash"></i>
                     </button>
+                    ${(() => {
+                        const score = state.coverage && state.coverage.scores && state.coverage.scores[annotation.id];
+                        const anyAbsent = score && COVERAGE_PHASES.some(p => ((score[p] || {}).status || 'absent') === 'absent');
+                        return anyAbsent ? `<button class="btn btn-icon btn-small coverage-action-btn coverage-action-btn--secondary" onclick="event.stopPropagation(); retranscribeAnnotation(${annotation.id})" title="${escapeHtml(t('coverageRetranscribeTitle'))}"><i class="fa-solid fa-microphone"></i></button>` : '';
+                    })()}
                 </div>
             </div>
             <div class="annotation-transcription">
@@ -2059,18 +2082,6 @@ function renderAnnotations() {
             ${tagsHTML}
             ${reviewPanelHTML}
         `;
-
-        item.addEventListener('click', (e) => {
-            if (
-                !e.target.closest('button') &&
-                !e.target.closest('.coverage-toggle-header') &&
-                !e.target.closest('.coverage-panel') &&
-                !e.target.closest('.review-toggle-header') &&
-                !e.target.closest('.dimension-card')
-            ) {
-                seekToAnnotation(annotation.start_time);
-            }
-        });
 
         container.appendChild(item);
     });
@@ -2453,6 +2464,7 @@ async function startGuidedRecording() {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         state.guidedQA.mediaRecorder = new MediaRecorder(stream);
+        state.guidedQA.recordingMimeType = state.guidedQA.mediaRecorder.mimeType || 'audio/webm';
         state.guidedQA.audioChunks = [];
 
         state.guidedQA.mediaRecorder.ondataavailable = (event) => {
@@ -2484,9 +2496,11 @@ async function stopGuidedRecording() {
 }
 
 async function handleGuidedRecordingStop() {
-    const audioBlob = new Blob(state.guidedQA.audioChunks, { type: 'audio/wav' });
+    const actualMime = state.guidedQA.recordingMimeType || 'audio/webm';
+    const audioExt = actualMime.startsWith('audio/ogg') ? 'ogg' : 'webm';
+    const audioBlob = new Blob(state.guidedQA.audioChunks, { type: actualMime });
     const formData = new FormData();
-    formData.append('audio_blob', audioBlob, 'answer.wav');
+    formData.append('audio_blob', audioBlob, `answer.${audioExt}`);
 
     const btn = document.getElementById('qaRecordBtn');
     const label = document.getElementById('qaRecordLabel');
@@ -2609,6 +2623,7 @@ async function startInPlaceRecording(annotationId) {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         state.guidedQA.mediaRecorder = new MediaRecorder(stream);
+        state.guidedQA.recordingMimeType = state.guidedQA.mediaRecorder.mimeType || 'audio/webm';
         state.guidedQA.audioChunks = [];
 
         state.guidedQA.mediaRecorder.ondataavailable = (e) => {
@@ -2639,9 +2654,11 @@ async function stopInPlaceRecording(annotationId) {
 }
 
 async function handleInPlaceRecordingStop(annotationId) {
-    const audioBlob = new Blob(state.guidedQA.audioChunks, { type: 'audio/wav' });
+    const actualMime = state.guidedQA.recordingMimeType || 'audio/webm';
+    const audioExt = actualMime.startsWith('audio/ogg') ? 'ogg' : 'webm';
+    const audioBlob = new Blob(state.guidedQA.audioChunks, { type: actualMime });
     const formData = new FormData();
-    formData.append('audio_blob', audioBlob, 'answer.wav');
+    formData.append('audio_blob', audioBlob, `answer.${audioExt}`);
 
     const btn = document.getElementById(`eip-record-btn-${annotationId}`);
     const hint = document.getElementById(`eip-hint-${annotationId}`);
@@ -4978,6 +4995,17 @@ function renderCoverageBanner() {
     const anyPartial = COVERAGE_PHASES.some(p => (agg[p] || {}).status && agg[p].status !== 'absent');
     const finishBtn = document.getElementById('finishSessionBtn');
     if (finishBtn) finishBtn.style.display = anyPartial ? '' : 'none';
+
+    const indicator = document.getElementById('coverageRecordingIndicator');
+    if (indicator) {
+        const isRecording = !!(state.appendMode && state.appendMode.annotationId);
+        indicator.style.display = isRecording ? '' : 'none';
+    }
+}
+
+function stopActiveAppendRecording() {
+    const id = state.appendMode && state.appendMode.annotationId;
+    if (id != null) toggleAppendRecording(id);
 }
 
 function renderAnnotationPips() {
@@ -5040,7 +5068,7 @@ async function onFinishSessionClick() {
     } catch (e) {
         showToast('Synthèse', `Erreur: ${e.message}`, 'error');
     } finally {
-        if (btn) { btn.disabled = false; btn.innerHTML = `<i class="fas fa-flag-checkered"></i> <span data-i18n="coverageFinishSession">${t('coverageFinishSession')}</span>`; }
+        if (btn) { btn.disabled = false; btn.innerHTML = `<i class="fas fa-chart-bar"></i> <span data-i18n="coverageFinishSession">${t('coverageFinishSession')}</span>`; }
     }
 }
 
@@ -5064,13 +5092,14 @@ function renderSessionSummary({ summary, weakest_phase, follow_ups }) {
         html += `<div class="followups-label">${t('coverageSessionComplete')}</div>`;
     }
     body.innerHTML = html;
-    card.style.display = '';
+    const modal = document.getElementById('sessionSummaryModal');
+    if (modal) modal.style.display = '';
     state.coverage.summaryOpen = true;
 }
 
 function hideSessionSummary() {
-    const card = document.getElementById('sessionSummaryCard');
-    if (card) card.style.display = 'none';
+    const modal = document.getElementById('sessionSummaryModal');
+    if (modal) modal.style.display = 'none';
     state.coverage.summaryOpen = false;
 }
 
@@ -5080,6 +5109,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (finishBtn) finishBtn.addEventListener('click', onFinishSessionClick);
     const closeBtn = document.getElementById('sessionSummaryCloseBtn');
     if (closeBtn) closeBtn.addEventListener('click', hideSessionSummary);
+    const modal = document.getElementById('sessionSummaryModal');
+    if (modal) modal.addEventListener('click', e => {
+        if (e.target === modal) hideSessionSummary();
+    });
 });
 
 // ============================================================================
@@ -5269,9 +5302,6 @@ function renderCoveragePanelActions(annotation, score) {
                 <button class="btn btn-small ${appendClass}" id="append-btn-${annotation.id}" onclick="event.stopPropagation(); toggleAppendRecording(${annotation.id})" title="${escapeHtml(t('coverageAppendTitle'))}">
                     ${appendLabel}
                 </button>
-                <button class="btn btn-small coverage-action-btn coverage-action-btn--secondary" onclick="event.stopPropagation(); retranscribeAnnotation(${annotation.id})" title="${escapeHtml(t('coverageRetranscribeTitle'))}">
-                    <i class="fa-solid fa-arrows-rotate"></i> ${t('coverageRetranscribe')}
-                </button>
             </div>
         </div>`;
 }
@@ -5326,6 +5356,7 @@ async function toggleAppendRecording(annotationId) {
     const recorder = new MediaRecorder(stream);
     mode.annotationId = annotationId;
     mode.mediaRecorder = recorder;
+    mode.mimeType = recorder.mimeType || 'audio/webm';
     mode.chunks = [];
     mode.stream = stream;
 
@@ -5340,6 +5371,7 @@ async function toggleAppendRecording(annotationId) {
         mode.mediaRecorder = null;
         mode.chunks = [];
         mode.stream = null;
+        renderCoverageBanner();
 
         // Show processing state on the button.
         const btn = document.getElementById(`append-btn-${annotationId}`);
@@ -5349,9 +5381,11 @@ async function toggleAppendRecording(annotationId) {
         }
 
         try {
-            const blob = new Blob(chunks, { type: 'audio/wav' });
+            const actualMime = mode.mimeType || 'audio/webm';
+            const appendExt = actualMime.startsWith('audio/ogg') ? 'ogg' : 'webm';
+            const blob = new Blob(chunks, { type: actualMime });
             const form = new FormData();
-            form.append('audio_blob', blob, 'append.wav');
+            form.append('audio_blob', blob, `append.${appendExt}`);
             const headers = {};
             if (MOODLE_JWT) headers['Authorization'] = `Bearer ${MOODLE_JWT}`;
 
@@ -5381,5 +5415,6 @@ async function toggleAppendRecording(annotationId) {
     };
 
     recorder.start();
+    renderCoverageBanner();
     renderAnnotations();
 }

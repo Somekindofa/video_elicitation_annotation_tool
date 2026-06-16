@@ -8,7 +8,7 @@ from typing import Any, Dict, Optional
 
 import aiohttp
 
-from config import FIREWORKS_API_KEY, FIREWORKS_LLM_API_URL, FIREWORKS_LLM_MODEL
+from config import INFOMANIAK_API_KEY, INFOMANIAK_LLM_API_URL, INFOMANIAK_LLM_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -105,9 +105,9 @@ async def judge_elicitation(
     Raises:
         Exception: If LLM API call fails or returns invalid response
     """
-    if not FIREWORKS_API_KEY:
-        logger.error("FIREWORKS_API_KEY not found in environment")
-        raise Exception("Fireworks API key not configured")
+    if not INFOMANIAK_API_KEY:
+        logger.error("INFOMANIAK_API_KEY not found in environment")
+        raise Exception("Infomaniak API key not configured")
 
     # Very short transcriptions definitely need review
     if len(transcription.strip()) < 20:
@@ -119,22 +119,21 @@ async def judge_elicitation(
             "strengths": [],
         }
 
-    # Build prompt
-    prompt = f"""{JUDGE_SYSTEM_PROMPT}
+    user_content = f"Transcription: {transcription}"
+    if craft:
+        user_content += f"\nDomaine: {craft}"
 
-Transcription: {transcription}
-{f'Domaine: {craft}' if craft else ''}
-"""
-
-    # Call Fireworks LLM API
     headers = {
-        "Authorization": f"Bearer {FIREWORKS_API_KEY}",
+        "Authorization": f"Bearer {INFOMANIAK_API_KEY}",
         "Content-Type": "application/json",
     }
 
     payload = {
-        "model": FIREWORKS_LLM_MODEL,
-        "prompt": prompt,
+        "model": INFOMANIAK_LLM_MODEL,
+        "messages": [
+            {"role": "system", "content": JUDGE_SYSTEM_PROMPT},
+            {"role": "user", "content": user_content},
+        ],
         "max_tokens": 200,
         "temperature": 0.0,
         "top_p": 1.0,
@@ -145,7 +144,7 @@ Transcription: {transcription}
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(
-                FIREWORKS_LLM_API_URL,
+                INFOMANIAK_LLM_API_URL,
                 headers=headers,
                 json=payload,
                 timeout=aiohttp.ClientTimeout(total=60),
@@ -153,9 +152,8 @@ Transcription: {transcription}
                 if response.status != 200:
                     error_text = await response.text()
                     logger.error(
-                        f"Fireworks API error: {response.status} - {error_text}"
+                        f"Infomaniak API error: {response.status} - {error_text}"
                     )
-                    # If judge fails, default to requiring review (safer)
                     return {
                         "needs_review": True,
                         "reasoning": "Judge service error - defaulting to review",
@@ -164,10 +162,10 @@ Transcription: {transcription}
                     }
 
                 result = await response.json()
-                logger.debug(f"Fireworks API response: {result}")
+                logger.debug(f"Infomaniak API response: {result}")
 
                 if "choices" not in result or len(result["choices"]) == 0:
-                    logger.error("No choices in Fireworks response")
+                    logger.error("No choices in Infomaniak response")
                     return {
                         "needs_review": True,
                         "reasoning": "Judge service returned empty response",
@@ -175,7 +173,7 @@ Transcription: {transcription}
                         "strengths": [],
                     }
 
-                content = result["choices"][0]["text"].strip()
+                content = result["choices"][0]["message"]["content"].strip()
                 logger.info(f"Judge response: {content[:200]}...")
 
                 # Deterministic parsing (no JSON from LLM)
@@ -207,7 +205,7 @@ Transcription: {transcription}
                 return judge_result
 
     except aiohttp.ClientError as e:
-        logger.error(f"Network error calling Fireworks API: {e}")
+        logger.error(f"Network error calling Infomaniak API: {e}")
         # Default to review on network errors
         return {
             "needs_review": True,

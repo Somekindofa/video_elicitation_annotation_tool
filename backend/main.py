@@ -129,6 +129,10 @@ app.add_middleware(
 from coverage_routes import router as coverage_router
 app.include_router(coverage_router)
 
+# Admin endpoints — integration test runner (SSE).
+from admin_routes import router as admin_router
+app.include_router(admin_router)
+
 
 # WebSocket connection manager
 class ConnectionManager:
@@ -158,6 +162,8 @@ class ConnectionManager:
 
 
 manager = ConnectionManager()
+
+_ALLOWED_AUDIO_EXTS = {".wav", ".webm", ".ogg", ".mp3", ".mp4", ".m4a"}
 
 
 # Startup and shutdown events
@@ -959,8 +965,11 @@ async def create_annotation(
                 status_code=400, detail=f"Failed to read audio data: {str(e)}"
             )
 
-        # Generate unique audio filename
-        audio_filename = f"annotation_{uuid.uuid4().hex}.wav"
+        # Clamp to an allowlist — reject anything that isn't audio so a
+        # malicious filename can't store an executable or HTML file on disk.
+        _raw_ext = Path(audio_blob.filename or "audio.webm").suffix.lower()
+        uploaded_ext = _raw_ext if _raw_ext in _ALLOWED_AUDIO_EXTS else ".webm"
+        audio_filename = f"annotation_{uuid.uuid4().hex}{uploaded_ext}"
         audio_filepath = AUDIO_DIR / audio_filename
 
         # Save audio file
@@ -1291,7 +1300,8 @@ async def transcribe_only(
 
     tmp_path = None
     try:
-        suffix = Path(audio_blob.filename or "audio.wav").suffix or ".wav"
+        _raw_suffix = Path(audio_blob.filename or "audio.webm").suffix.lower()
+        suffix = _raw_suffix if _raw_suffix in _ALLOWED_AUDIO_EXTS else ".webm"
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
             tmp_path = tmp.name
             content = await audio_blob.read()
@@ -1553,15 +1563,15 @@ async def tag_annotation(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/diagnostics/tagging-fireworks")
-async def tagging_fireworks_diagnostics():
-    """Return last Fireworks tagging request diagnostics."""
+@app.get("/api/diagnostics/tagging-llm")
+async def tagging_llm_diagnostics():
+    """Return last LLM tagging request diagnostics."""
     import tagging_service
 
     return {
-        "last_request_at": tagging_service.LAST_FIREWORKS_TAG_REQUEST_AT,
-        "last_status": tagging_service.LAST_FIREWORKS_TAG_STATUS,
-        "last_error": tagging_service.LAST_FIREWORKS_TAG_ERROR,
+        "last_request_at": tagging_service.LAST_LLM_TAG_REQUEST_AT,
+        "last_status": tagging_service.LAST_LLM_TAG_STATUS,
+        "last_error": tagging_service.LAST_LLM_TAG_ERROR,
     }
 
 
@@ -1845,90 +1855,8 @@ async def process_review(
     tags: Optional[List[Dict[str, str]]] = None,
     trigger_tagging: bool = True,
 ):
-    """Background task to process AI review using review_service.
-
-    Disabled 2026-04-21: replaced by the spaCy coverage detector + single
-    Infomaniak summary call. Kept as a no-op so the 4 call sites don't need
-    touching and the pipeline remains trivially reversible.
-    """
-    logger.debug(
-        f"process_review skipped (deprecated dimensions pipeline) for annotation {annotation_id}"
-    )
-    return
-
-    from review_service import review_elicitation, assess_salience  # type: ignore[unreachable]
-    from datetime import datetime, timezone
-
-    try:
-        logger.info(f"Starting AI review for annotation {annotation_id}")
-
-        # Build video context
-        video_context = None
-        if craft:
-            video_context = f"Domaine artisanal: {craft}"
-
-        # Generate review using LLM
-        review_result = await review_elicitation(transcription, video_context, tags)
-
-        # Decide if this moment is salient for apprentice learning
-        salience_result = await assess_salience(
-            transcription, review_result, tags, craft
-        )
-        is_salient = bool(salience_result.get("is_salient", False))
-
-        # Store review results
-        async with db.AsyncSessionLocal() as session:
-            await db.update_annotation(
-                session,
-                annotation_id,
-                models.AnnotationUpdate(
-                    review_status="completed",
-                    review_results=json.dumps(review_result, ensure_ascii=False),
-                    review_timestamp=datetime.now(timezone.utc),
-                    is_salient=is_salient,
-                ),
-            )
-
-        logger.info(
-            f"AI review completed for annotation {annotation_id}: "
-            f"score={review_result['completeness_score']}, ready={review_result['ready_to_proceed']}"
-        )
-
-        # Broadcast completion
-        await manager.broadcast(
-            {
-                "type": "review_complete",
-                "annotation_id": annotation_id,
-                "review_results": review_result,
-                "is_salient": is_salient,
-            }
-        )
-
-        # Auto-trigger tagging after review completes (only if not already tagged)
-        if trigger_tagging and not tags:
-            import asyncio
-
-            asyncio.create_task(process_tagging(annotation_id, transcription, craft))
-
-    except Exception as e:
-        logger.error(f"AI review error for annotation {annotation_id}: {e}")
-
-        # Update status to failed
-        async with db.AsyncSessionLocal() as session:
-            await db.update_annotation(
-                session,
-                annotation_id,
-                models.AnnotationUpdate(review_status="failed"),
-            )
-
-        # Broadcast error
-        await manager.broadcast(
-            {
-                "type": "review_error",
-                "annotation_id": annotation_id,
-                "error": str(e),
-            }
-        )
+    """No-op — replaced by spaCy coverage detector + Infomaniak summary (2026-04-21)."""
+    pass
 
 
 async def process_tagging(
@@ -2184,110 +2112,6 @@ async def process_tagging(
         )
 
 
-async def process_tags(annotation_id: int, transcription: str):
-    """Background task to generate and apply tags using LLM - DEPRECATED, use process_tagging"""
-    from llm_service import tag_transcript
-
-    try:
-        # Update status to processing
-        async with db.AsyncSessionLocal() as session:
-            await db.update_annotation(
-                session,
-                annotation_id,
-                models.AnnotationUpdate(tagging_status="processing"),
-            )
-
-        # Broadcast status
-        await manager.broadcast(
-            {
-                "type": "tagging_status",
-                "annotation_id": annotation_id,
-                "status": "processing",
-            }
-        )
-
-        logger.info(f"Starting tag generation for annotation {annotation_id}")
-
-        # Get craft/domain and existing tags from database
-        craft_value = None
-        existing_tags = []
-        async with db.AsyncSessionLocal() as session:
-            ann = await db.get_annotation(session, annotation_id)
-            if ann and hasattr(ann, "craft"):
-                craft_value = ann.craft
-
-            # Fetch all existing tags from database
-            all_tags = await db.get_all_tags(session)
-            existing_tags = [
-                {"name": tag.name, "category": tag.category} for tag in all_tags
-            ]
-
-        # Generate tags using LLM (using only transcription, no extended transcript needed)
-        generated_tags = await tag_transcript(
-            transcription, transcription, existing_tags, craft=craft_value
-        )
-
-        if generated_tags:
-            # Store tags in database and update usage counts
-            tag_objects = []
-            async with db.AsyncSessionLocal() as session:
-                for tag_info in generated_tags:
-                    tag_name = tag_info["name"]
-                    tag_category = tag_info["category"]
-
-                    # Get or create tag
-                    await db.get_or_create_tag(session, tag_name, tag_category)
-
-                    # Increment usage count
-                    await db.increment_tag_usage(session, tag_name)
-
-                    # Store full tag object with name and category
-                    tag_objects.append({"name": tag_name, "category": tag_category})
-
-                # Store tag objects as JSON array in annotation
-                tags_json = json.dumps(tag_objects)
-                await db.update_annotation(
-                    session,
-                    annotation_id,
-                    models.AnnotationUpdate(tags=tags_json, tagging_status="completed"),
-                )
-
-            logger.info(
-                f"Tagging completed for annotation {annotation_id}: {tag_objects}"
-            )
-
-            # Broadcast completion with tag details
-            await manager.broadcast(
-                {
-                    "type": "tagging_complete",
-                    "annotation_id": annotation_id,
-                    "tags": generated_tags,  # Include category info for frontend
-                }
-            )
-        else:
-            raise Exception("LLM returned no tags")
-
-    except Exception as e:
-        logger.error(f"Tagging error for annotation {annotation_id}: {e}")
-
-        # Update status to failed
-        try:
-            async with db.AsyncSessionLocal() as session:
-                await db.update_annotation(
-                    session,
-                    annotation_id,
-                    models.AnnotationUpdate(tagging_status="failed"),
-                )
-
-            await manager.broadcast(
-                {
-                    "type": "tagging_error",
-                    "annotation_id": annotation_id,
-                    "error": str(e),
-                }
-            )
-        except:
-            pass
 
 
 @app.get("/api/annotations", response_model=List[models.AnnotationResponse])

@@ -11,14 +11,14 @@ from typing import Any, Dict, List, Optional, Set
 
 import aiohttp
 
-from config import FIREWORKS_API_KEY, FIREWORKS_LLM_API_URL, FIREWORKS_LLM_MODEL
+from config import INFOMANIAK_API_KEY, INFOMANIAK_LLM_API_URL, INFOMANIAK_LLM_MODEL
 
 logger = logging.getLogger(__name__)
 
-# Fireworks tagging diagnostics (last request)
-LAST_FIREWORKS_TAG_REQUEST_AT: Optional[str] = None
-LAST_FIREWORKS_TAG_STATUS: Optional[int] = None
-LAST_FIREWORKS_TAG_ERROR: Optional[str] = None
+# LLM tagging diagnostics (last request)
+LAST_LLM_TAG_REQUEST_AT: Optional[str] = None
+LAST_LLM_TAG_STATUS: Optional[int] = None
+LAST_LLM_TAG_ERROR: Optional[str] = None
 
 # Deterministic, key-value output instructions (no JSON from LLM)
 TAG_KEYED_OUTPUT_INSTRUCTIONS = """
@@ -356,9 +356,9 @@ async def extract_tags(
     Raises:
         Exception: If LLM API call fails or returns invalid response
     """
-    if not FIREWORKS_API_KEY:
-        logger.error("[TAGGING] FIREWORKS_API_KEY not found in environment")
-        raise Exception("Fireworks API key not configured")
+    if not INFOMANIAK_API_KEY:
+        logger.error("[TAGGING] INFOMANIAK_API_KEY not found in environment")
+        raise Exception("Infomaniak API key not configured")
 
     logger.error("[TAGGING] extract_tags called")
     print("[TAGGING] extract_tags called")
@@ -371,60 +371,58 @@ async def extract_tags(
         )
         return {"tags": []}
 
-    # Build prompt
-    prompt = f"""{TAGGING_SYSTEM_PROMPT}
+    user_content = f"Transcription: {transcription}"
+    if craft:
+        user_content += f"\nDomaine: {craft}"
 
-{TAG_KEYED_OUTPUT_INSTRUCTIONS}
+    logger.error(f"[TAGGING] Built messages, user content length: {len(user_content)} chars")
+    print(f"[TAGGING] Built messages, user content length: {len(user_content)} chars")
 
-Transcription: {transcription}
-{f'Domaine: {craft}' if craft else ''}
-"""
-    logger.error(f"[TAGGING] Built prompt, length: {len(prompt)} chars")
-    print(f"[TAGGING] Built prompt, length: {len(prompt)} chars")
-
-    # Call Fireworks LLM API
-    logger.error("[TAGGING] Calling Fireworks LLM for tag extraction")
-    print("[TAGGING] Calling Fireworks LLM for tag extraction")
+    logger.error("[TAGGING] Calling Infomaniak LLM for tag extraction")
+    print("[TAGGING] Calling Infomaniak LLM for tag extraction")
     headers = {
-        "Authorization": f"Bearer {FIREWORKS_API_KEY}",
+        "Authorization": f"Bearer {INFOMANIAK_API_KEY}",
         "Content-Type": "application/json",
     }
 
     payload = {
-        "model": FIREWORKS_LLM_MODEL,
-        "prompt": prompt,
-        "max_tokens": 300,  # Reduced from 400 - concise tags need less tokens
-        "temperature": 0.0,  # Absolute zero temperature: maximally deterministic, no hallucinations
+        "model": INFOMANIAK_LLM_MODEL,
+        "messages": [
+            {"role": "system", "content": f"{TAGGING_SYSTEM_PROMPT}\n\n{TAG_KEYED_OUTPUT_INSTRUCTIONS}"},
+            {"role": "user", "content": user_content},
+        ],
+        "max_tokens": 300,
+        "temperature": 0.0,
         "top_p": 0.95,
-        "frequency_penalty": 0.8,  # Increased: even stronger penalty for repeated tokens (avoid verbose repetition)
-        "presence_penalty": 0.6,  # Increased: encourage diverse but concise tags
+        "frequency_penalty": 0.8,
+        "presence_penalty": 0.6,
     }
 
-    global LAST_FIREWORKS_TAG_REQUEST_AT, LAST_FIREWORKS_TAG_STATUS, LAST_FIREWORKS_TAG_ERROR
+    global LAST_LLM_TAG_REQUEST_AT, LAST_LLM_TAG_STATUS, LAST_LLM_TAG_ERROR
 
     try:
         async with aiohttp.ClientSession() as session:
-            logger.error(f"[TAGGING] Sending request to {FIREWORKS_LLM_API_URL}")
-            print(f"[TAGGING] Sending request to {FIREWORKS_LLM_API_URL}")
-            LAST_FIREWORKS_TAG_REQUEST_AT = datetime.now(timezone.utc).isoformat()
-            LAST_FIREWORKS_TAG_STATUS = None
-            LAST_FIREWORKS_TAG_ERROR = None
+            logger.error(f"[TAGGING] Sending request to {INFOMANIAK_LLM_API_URL}")
+            print(f"[TAGGING] Sending request to {INFOMANIAK_LLM_API_URL}")
+            LAST_LLM_TAG_REQUEST_AT = datetime.now(timezone.utc).isoformat()
+            LAST_LLM_TAG_STATUS = None
+            LAST_LLM_TAG_ERROR = None
             async with session.post(
-                FIREWORKS_LLM_API_URL,
+                INFOMANIAK_LLM_API_URL,
                 headers=headers,
                 json=payload,
                 timeout=aiohttp.ClientTimeout(total=60),
             ) as response:
                 logger.error(f"[TAGGING] Received response status: {response.status}")
                 print(f"[TAGGING] Received response status: {response.status}")
-                LAST_FIREWORKS_TAG_STATUS = response.status
+                LAST_LLM_TAG_STATUS = response.status
                 if response.status != 200:
                     error_text = await response.text()
                     logger.error(
-                        f"[TAGGING] Fireworks API error: {response.status} - {error_text}"
+                        f"[TAGGING] Infomaniak API error: {response.status} - {error_text}"
                     )
-                    LAST_FIREWORKS_TAG_ERROR = error_text
-                    raise Exception(f"Fireworks API returned status {response.status}")
+                    LAST_LLM_TAG_ERROR = error_text
+                    raise Exception(f"Infomaniak API returned status {response.status}")
 
                 result = await response.json()
                 logger.error(
@@ -433,10 +431,10 @@ Transcription: {transcription}
                 print(f"[TAGGING] Parsed JSON response, keys: {list(result.keys())}")
 
                 if "choices" not in result or len(result["choices"]) == 0:
-                    logger.error("[TAGGING] No choices in Fireworks response")
-                    raise Exception("Invalid response from Fireworks API")
+                    logger.error("[TAGGING] No choices in Infomaniak response")
+                    raise Exception("Invalid response from Infomaniak API")
 
-                content = result["choices"][0]["text"].strip()
+                content = result["choices"][0]["message"]["content"].strip()
                 logger.error(
                     f"[TAGGING] LLM tag extraction response (first 300 chars): {content[:300]}"
                 )
@@ -460,12 +458,12 @@ Transcription: {transcription}
                 return {"tags": validated_tags}
 
     except aiohttp.ClientError as e:
-        LAST_FIREWORKS_TAG_ERROR = str(e)
+        LAST_LLM_TAG_ERROR = str(e)
         logger.error(
-            f"[TAGGING] Network error calling Fireworks API: {e}", exc_info=True
+            f"[TAGGING] Network error calling Infomaniak API: {e}", exc_info=True
         )
         return {"tags": []}
     except Exception as e:
-        LAST_FIREWORKS_TAG_ERROR = str(e)
+        LAST_LLM_TAG_ERROR = str(e)
         logger.error(f"[TAGGING] Error extracting tags: {e}", exc_info=True)
         return {"tags": []}

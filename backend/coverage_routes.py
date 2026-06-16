@@ -12,11 +12,9 @@ scores around; the backend keeps no state.
 
 from __future__ import annotations
 
-import os
 from typing import Literal
 
-import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from auth import MoodleUser, verify_moodle_jwt
@@ -123,13 +121,67 @@ async def aggregate_endpoint(
     }
 
 
-# --- Summary proxy ---------------------------------------------------------
-# Forwards to the craftpilot backend (Infomaniak LLM) with the shared
-# X-Internal-Token. Keeping the browser off that backend means the internal
-# token never leaves the server.
+# --- Summary (rule-based) --------------------------------------------------
+# Generates a session summary from the phase scores without an external LLM
+# call, since the craftpilot backend does not expose a structured summary
+# endpoint.
 
-_CRAFTPILOT_URL = os.getenv("CRAFTPILOT_URL", "http://127.0.0.1:8000")
-_INTERNAL_TOKEN = os.getenv("CRAFTPILOT_INTERNAL_TOKEN", "")
+_STATUS_ORDER = {"absent": 0, "partial": 1, "covered": 2}
+
+_FOLLOW_UPS_FR: dict[str, list[str]] = {
+    "quoi": [
+        "Pouvez-vous décrire plus précisément les actions concrètes que vous réalisez ?",
+        "Quels gestes effectuez-vous exactement à ce moment-là ?",
+    ],
+    "comment": [
+        "Comment procédez-vous ? Pouvez-vous préciser la vitesse, l'outil ou la séquence ?",
+        "De quelle manière réalisez-vous cette action (lentement, d'abord… puis…) ?",
+    ],
+    "pourquoi": [
+        "Pour quelle raison faites-vous cela ? Quel est l'objectif visé ?",
+        "Qu'est-ce qui se passerait si vous ne le faisiez pas ?",
+    ],
+}
+
+_PHASE_LABELS_FR = {"quoi": "Quoi", "comment": "Comment", "pourquoi": "Pourquoi"}
+_STATUS_LABELS_FR = {"absent": "absent", "partial": "partiel", "covered": "couvert"}
+
+
+def _build_summary(phase_scores: dict[str, PhaseScoreIn]) -> dict:
+    phases = ["quoi", "comment", "pourquoi"]
+
+    covered = [p for p in phases if phase_scores[p].status == "covered"]
+    partial = [p for p in phases if phase_scores[p].status == "partial"]
+    absent  = [p for p in phases if phase_scores[p].status == "absent"]
+
+    # Weakest phase: lowest status; None if all covered.
+    weakest: str | None = min(phases, key=lambda p: _STATUS_ORDER[phase_scores[p].status])
+    if phase_scores[weakest].status == "covered":
+        weakest = None
+
+    # Build a short French summary sentence.
+    parts = []
+    if covered:
+        labels = ", ".join(_PHASE_LABELS_FR[p] for p in covered)
+        parts.append(f"Les phases {labels} sont bien couvertes.")
+    if partial:
+        labels = ", ".join(_PHASE_LABELS_FR[p] for p in partial)
+        parts.append(f"Les phases {labels} sont partiellement abordées.")
+    if absent:
+        labels = ", ".join(_PHASE_LABELS_FR[p] for p in absent)
+        parts.append(f"Les phases {labels} sont absentes de la session.")
+
+    if not parts:
+        summary = "La session est complète — les trois phases sont couvertes."
+    else:
+        summary = " ".join(parts)
+
+    # Follow-up questions for incomplete phases.
+    follow_ups: list[str] = []
+    for p in partial + absent:
+        follow_ups.extend(_FOLLOW_UPS_FR[p])
+
+    return {"summary": summary, "weakest_phase": weakest, "follow_ups": follow_ups}
 
 
 @router.post("/summary", response_model=SummaryResponse)
@@ -137,16 +189,5 @@ async def summary_endpoint(
     req: SummaryRequest,
     _user: MoodleUser = Depends(verify_moodle_jwt),
 ) -> dict:
-    """Proxy to craftpilot's /api/session-summary (Infomaniak mistral3)."""
-    if not _INTERNAL_TOKEN:
-        raise HTTPException(status_code=503, detail="Summary service not configured")
-
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        r = await client.post(
-            f"{_CRAFTPILOT_URL}/api/session-summary",
-            json=req.model_dump(),
-            headers={"X-Internal-Token": _INTERNAL_TOKEN, "Content-Type": "application/json"},
-        )
-    if r.status_code >= 400:
-        raise HTTPException(status_code=502, detail=f"Upstream error: {r.text[:200]}")
-    return r.json()
+    """Generate a session summary from the phase scores."""
+    return _build_summary(req.phase_scores)

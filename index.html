@@ -204,21 +204,18 @@
                             <div class="phase-example" data-i18n="coveragePhaseExamplePourquoi">Ex. « parce que sinon la bulle s'effondre, c'est pour éviter les stries. »</div>
                         </div>
                     </div>
+                    <div id="coverageRecordingIndicator" class="coverage-recording-indicator" style="display:none;">
+                        <span class="recording-pulse"><i class="fa-solid fa-circle"></i></span>
+                        <span data-i18n="coverageRecordingActive">Enregistrement en cours…</span>
+                        <button class="btn btn-small coverage-action-btn--recording" onclick="stopActiveAppendRecording()">
+                            <i class="fa-solid fa-stop"></i> <span data-i18n="coverageAppendStop">Arrêter et ajouter</span>
+                        </button>
+                    </div>
                     <button id="finishSessionBtn" class="btn btn-primary btn-small coverage-finish-btn" style="display:none;">
-                        <i class="fas fa-flag-checkered"></i> <span data-i18n="coverageFinishSession">Finir la session</span>
+                        <i class="fas fa-chart-bar"></i> <span data-i18n="coverageFinishSession">Analyser ma session</span>
                     </button>
                 </div>
 
-                <!-- Session summary card: appears after /api/coverage/summary -->
-                <div class="session-summary-card" id="sessionSummaryCard" style="display:none;">
-                    <div class="session-summary-head">
-                        <h3><i class="fas fa-wand-magic-sparkles"></i> <span data-i18n="sessionSummaryTitle">Synthèse de la session</span></h3>
-                        <button class="session-summary-close" id="sessionSummaryCloseBtn" data-i18n-aria-label="sessionSummaryCloseAria" aria-label="Fermer">&times;</button>
-                    </div>
-                    <div class="session-summary-body" id="sessionSummaryBody">
-                        <!-- Rendered by JS -->
-                    </div>
-                </div>
 
                 <div class="annotations-list" id="annotationsList">
                     <div class="empty-state">
@@ -424,6 +421,19 @@
             </div>
             <div class="modal-body" id="tutorialBody" style="overflow-y:auto;flex:1;line-height:1.7;font-size:0.95rem;">
                 <!-- Rendered Markdown injected by JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Session summary modal -->
+    <div id="sessionSummaryModal" style="display:none;" class="session-summary-modal-overlay" role="dialog" aria-modal="true">
+        <div class="session-summary-card" id="sessionSummaryCard">
+            <div class="session-summary-head">
+                <h3><i class="fas fa-wand-magic-sparkles"></i> <span data-i18n="sessionSummaryTitle">Synthèse de la session</span></h3>
+                <button class="session-summary-close" id="sessionSummaryCloseBtn" data-i18n-aria-label="sessionSummaryCloseAria" aria-label="Fermer">&times;</button>
+            </div>
+            <div class="session-summary-body" id="sessionSummaryBody">
+                <!-- Rendered by JS -->
             </div>
         </div>
     </div>

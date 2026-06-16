@@ -14,7 +14,7 @@ websockets
 pymysql
 
 # Audio Processing & Transcription
-# Using Fireworks.ai API instead of local Whisper
+# Using Infomaniak async batch API for Whisper STT
 aiohttp
 numpy
 soundfile
@@ -41,3 +41,8 @@ ragas
 langchain
 langchain-community
 langchain-openai
+
+# Testing (integration tests only)
+pytest
+pytest-asyncio
+httpx

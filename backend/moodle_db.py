@@ -735,14 +735,15 @@ class MoodleDBAdapter:
 
             query = f"""
                 INSERT INTO {self._table('projects')}
-                (name, description, timecreated, timemodified)
-                VALUES (%s, %s, %s, %s)
+                (name, description, userid, timecreated, timemodified)
+                VALUES (%s, %s, %s, %s, %s)
                 RETURNING id
             """
 
             project_id = self._insert(cursor, query, (
                 project_data['name'],
                 project_data.get('description'),
+                project_data.get('userid', 0),
                 now, now,
             ))
             conn.commit()

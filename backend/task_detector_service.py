@@ -12,12 +12,7 @@ import asyncio
 import json
 from typing import Optional
 import aiohttp
-from config import (
-    FIREWORKS_API_KEY,
-    FIREWORKS_LLM_MODEL,
-    FIREWORKS_LLM_MAX_TOKENS,
-    FIREWORKS_LLM_TEMPERATURE,
-)
+from config import INFOMANIAK_API_KEY, INFOMANIAK_LLM_API_URL, INFOMANIAK_LLM_MODEL
 
 TASK_DETECTION_SYSTEM_PROMPT = """Tu es un extracteur de tâches artisanales ULTRA-CONSERVATEUR.
 
@@ -74,14 +69,14 @@ async def detect_task(transcription: str, craft: str = "jewelry") -> dict:
         }
 
     headers = {
-        "Authorization": f"Bearer {FIREWORKS_API_KEY}",
+        "Authorization": f"Bearer {INFOMANIAK_API_KEY}",
         "Content-Type": "application/json",
     }
 
     user_prompt = f'Transcript ({craft}): "{transcription}"\n\nQuelle est la tâche ? (null dans la plupart des cas)'
 
     payload = {
-        "model": FIREWORKS_LLM_MODEL,
+        "model": INFOMANIAK_LLM_MODEL,
         "messages": [
             {"role": "system", "content": TASK_DETECTION_SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt},
@@ -93,7 +88,7 @@ async def detect_task(transcription: str, craft: str = "jewelry") -> dict:
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(
-                "https://api.fireworks.ai/inference/v1/chat/completions",
+                INFOMANIAK_LLM_API_URL,
                 headers=headers,
                 json=payload,
                 timeout=aiohttp.ClientTimeout(total=30),
@@ -101,7 +96,7 @@ async def detect_task(transcription: str, craft: str = "jewelry") -> dict:
                 if response.status != 200:
                     error_text = await response.text()
                     raise Exception(
-                        f"Fireworks API error {response.status}: {error_text}"
+                        f"Infomaniak API error {response.status}: {error_text}"
                     )
 
                 result = await response.json()
