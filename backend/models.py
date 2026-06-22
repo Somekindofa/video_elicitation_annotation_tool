@@ -56,7 +56,7 @@ class Video(Base):
         Integer, default=0
     )  # 0 for uploaded (copied), 1 for local (streaming)
     source_type = Column(String, default="uploaded")  # "uploaded", "local", "gdrive"
-    external_url = Column(String, nullable=True)  # legacy: external video URL (unused)
+    external_url = Column(String, nullable=True)  # legacy: OwnCloud/WebDAV URL; kept for schema compat, always NULL in new records
     uploaded_at = Column(DateTime, default=datetime.now(timezone.utc))
 
     # Relationships
