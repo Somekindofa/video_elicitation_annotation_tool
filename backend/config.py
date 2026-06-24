@@ -7,7 +7,11 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
-load_dotenv()
+try:
+    load_dotenv()
+except PermissionError:
+    # .env file may have restricted permissions; proceed with defaults
+    pass
 
 # Base directories
 BASE_DIR = Path(__file__).resolve().parent.parent

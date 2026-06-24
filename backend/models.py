@@ -23,6 +23,7 @@ class Project(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
     description = Column(Text, nullable=True)
+    allowed_cohort_id = Column(Integer, nullable=True, default=None)
     created_at = Column(DateTime, default=datetime.now(timezone.utc))
     updated_at = Column(
         DateTime,
@@ -212,6 +213,7 @@ class ProjectCreate(BaseModel):
 
     name: str
     description: Optional[str] = None
+    allowed_cohort_id: Optional[int] = None
 
 
 class ProjectUpdate(BaseModel):
@@ -219,6 +221,7 @@ class ProjectUpdate(BaseModel):
 
     name: Optional[str] = None
     description: Optional[str] = None
+    allowed_cohort_id: Optional[int] = None
 
 
 class ProjectResponse(BaseModel):
@@ -227,6 +230,7 @@ class ProjectResponse(BaseModel):
     id: int
     name: str
     description: Optional[str] = None
+    allowed_cohort_id: Optional[int] = None
     created_at: datetime
     updated_at: datetime
     video_count: int = 0

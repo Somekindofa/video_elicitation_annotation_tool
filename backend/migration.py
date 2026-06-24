@@ -317,7 +317,7 @@ def migration_007_video_segments_table(cursor) -> str:
         if cursor.fetchone():
             logger.info("video_segments table already exists")
             return "video_segments table already exists"
-        
+
         # Create video_segments table
         cursor.execute("""
             CREATE TABLE video_segments (
@@ -332,13 +332,25 @@ def migration_007_video_segments_table(cursor) -> str:
                 FOREIGN KEY (parent_video_id) REFERENCES videos(id) ON DELETE CASCADE
             )
         """)
-        
+
         logger.info("Created video_segments table")
         return "Created video_segments table"
-    
+
     except sqlite3.Error as e:
         logger.error(f"Error creating video_segments table: {e}")
         return f"Error: {e}"
+
+
+def migration_add_project_cohort_id(cursor):
+    """Add allowed_cohort_id to projects table. NULL = open access."""
+    columns = get_table_columns(cursor, "projects")
+    if "allowed_cohort_id" not in columns:
+        cursor.execute(
+            "ALTER TABLE projects ADD COLUMN allowed_cohort_id INTEGER DEFAULT NULL"
+        )
+        logger.info("Added allowed_cohort_id to projects table (NULL = open access)")
+    else:
+        logger.info("allowed_cohort_id already exists in projects table")
 
 
 # ============================================================================
@@ -354,6 +366,7 @@ MIGRATIONS: List[Tuple[str, Callable]] = [
     ("005_tagging_trigger_number", migration_005_tagging_trigger_number),
     ("006_convert_tags_format", migration_006_convert_tags_format),
     ("007_video_segments_table", migration_007_video_segments_table),
+    ("add_project_cohort_id", migration_add_project_cohort_id),
 ]
 
 
