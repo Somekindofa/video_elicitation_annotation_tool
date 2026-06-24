@@ -67,3 +67,9 @@ $string['error_webdav_config'] = 'WebDAV/OwnCloud not configured by administrato
 $string['error_webdav_connect'] = 'Failed to connect to OwnCloud server';
 $string['error_webdav_browse'] = 'Error browsing OwnCloud directory';
 $string['error_webdav_link'] = 'Error linking OwnCloud video';
+
+// Knowledge Silo settings
+$string['settings_silo_header'] = 'Knowledge Silo';
+$string['settings_silo_header_desc'] = 'Controls who can see elicitation content in the CraftPilot RAG.';
+$string['settings_silo_contact_email'] = 'Silo contact email';
+$string['settings_silo_contact_email_desc'] = 'Displayed to experts who have no cohort assigned. Leave blank to show "your Moodle administrator".';

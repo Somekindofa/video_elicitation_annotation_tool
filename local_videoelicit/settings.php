@@ -100,5 +100,20 @@ if ($hassiteconfig) {
         PARAM_TEXT
     ));
 
+    // Knowledge Silo section
+    $settings->add(new admin_setting_heading(
+        'local_videoelicit/silo_header',
+        get_string('settings_silo_header', 'local_videoelicit'),
+        get_string('settings_silo_header_desc', 'local_videoelicit')
+    ));
+
+    $settings->add(new admin_setting_configtext(
+        'local_videoelicit/silo_contact_email',
+        get_string('settings_silo_contact_email', 'local_videoelicit'),
+        get_string('settings_silo_contact_email_desc', 'local_videoelicit'),
+        '',
+        PARAM_EMAIL
+    ));
+
     $ADMIN->add('localplugins', $settings);
 }

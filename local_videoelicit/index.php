@@ -39,7 +39,8 @@ $PAGE->set_heading(get_string('videoelicit', 'local_videoelicit'));
 
 // Generate JWT token for API calls
 $roles = jwt_helper::get_user_roles($USER->id, $context);
-$jwt_token = jwt_helper::create_token($USER->id, $USER->username, $context->id, $roles);
+$silo_contact_email = get_config('local_videoelicit', 'silo_contact_email') ?: '';
+$jwt_token = jwt_helper::create_token($USER->id, $USER->username, $context->id, $roles, 60, $silo_contact_email);
 
 // Build iframe URL with JWT token
 // Pass WebDAV configuration to iframe
