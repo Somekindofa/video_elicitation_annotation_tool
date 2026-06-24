@@ -4691,3 +4691,90 @@ h1, h2, h3, h4 { letter-spacing: -0.015em; }
     color: var(--slate-900);
 }
 
+/* ── Projects panel (Elicit-tab entry point) ─────────────────────────────── */
+
+.projects-panel-menu {
+    min-width: 280px;
+    right: 0;
+    left: auto;
+    padding: 0;
+    overflow: hidden;
+}
+
+.projects-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px 8px;
+    border-bottom: 1px solid var(--line);
+}
+
+.projects-panel-title {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--slate);
+}
+
+.projects-panel-list {
+    max-height: 260px;
+    overflow-y: auto;
+    padding: 4px 0;
+}
+
+.projects-panel-empty {
+    padding: 12px 14px;
+    font-size: 13px;
+    color: var(--slate-700);
+    margin: 0;
+}
+
+.projects-panel-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 7px 10px 7px 14px;
+    border-bottom: 1px solid var(--line);
+}
+.projects-panel-row:last-child { border-bottom: none; }
+.projects-panel-row:hover { background: var(--sky-50); }
+
+.projects-panel-row-info {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
+.projects-panel-row-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--slate-900);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.silo-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 1px 7px;
+    border-radius: 999px;
+    width: fit-content;
+}
+
+.silo-chip--open {
+    background: var(--sky-100);
+    color: var(--slate-700);
+}
+
+.silo-chip--restricted {
+    background: #FFF0F3;
+    color: var(--danger-color);
+}
+

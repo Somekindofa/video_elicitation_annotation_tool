@@ -1194,6 +1194,21 @@ function setupEventListeners() {
     document.getElementById('closeAssignVideosModalBtn').addEventListener('click', closeAssignVideosModal);
     document.getElementById('closeAssignVideosBtn').addEventListener('click', closeAssignVideosModal);
 
+    // Projects panel (Elicit tab entry point)
+    document.getElementById('projectsPanelBtn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleProjectsPanel();
+    });
+    document.getElementById('projectsPanelNewBtn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeProjectsPanel();
+        openProjectModal();
+    });
+    document.addEventListener('click', (e) => {
+        const dropdown = document.getElementById('projectsPanelDropdown');
+        if (dropdown && !dropdown.contains(e.target)) closeProjectsPanel();
+    });
+
     // Upload Video button → trigger native file picker
     const uploadVideoBtn = document.getElementById('uploadVideoBtn');
     const videoUploadInput = document.getElementById('videoUploadInput');
@@ -4226,6 +4241,51 @@ function renderProjects() {
         </div>
     `).join('');
 }
+
+// ── Projects panel (Elicit-tab entry point) ──────────────────────────────────
+
+function closeProjectsPanel() {
+    const menu = document.getElementById('projectsPanelMenu');
+    if (menu) menu.style.display = 'none';
+}
+
+async function toggleProjectsPanel() {
+    const menu = document.getElementById('projectsPanelMenu');
+    if (!menu) return;
+    const isOpen = menu.style.display !== 'none';
+    if (isOpen) { menu.style.display = 'none'; return; }
+    // Ensure projects are loaded before rendering
+    if (!state.projects || state.projects.length === 0) await loadProjects();
+    renderProjectsPanel();
+    menu.style.display = 'block';
+}
+
+function renderProjectsPanel() {
+    const list = document.getElementById('projectsPanelList');
+    if (!list) return;
+    if (!state.projects || state.projects.length === 0) {
+        list.innerHTML = '<p class="projects-panel-empty">No projects yet. Click <strong>New</strong> to create one.</p>';
+        return;
+    }
+    list.innerHTML = state.projects.map(p => {
+        const cohortLabel = p.allowed_cohort_id == null
+            ? '<span class="silo-chip silo-chip--open">Open</span>'
+            : `<span class="silo-chip silo-chip--restricted"><i class="fas fa-lock"></i> Cohort ${escapeHtml(String(p.allowed_cohort_id))}</span>`;
+        return `
+        <div class="projects-panel-row">
+            <div class="projects-panel-row-info">
+                <span class="projects-panel-row-name">${escapeHtml(p.name)}</span>
+                ${cohortLabel}
+            </div>
+            <button class="btn btn-icon" title="Edit silo settings"
+                onclick="closeProjectsPanel(); openProjectModal(${p.id})">
+                <i class="fas fa-pen"></i>
+            </button>
+        </div>`;
+    }).join('');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 async function loadManagedCohorts() {
     try {
