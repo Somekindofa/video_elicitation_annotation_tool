@@ -4234,6 +4234,10 @@ async function loadManagedCohorts() {
         });
         if (resp.ok) {
             state.managedCohorts = await resp.json();
+            // Retry the silo banner in case loadProjects() ran before cohorts arrived
+            if (state.projects && state.projects.length > 0) {
+                showSiloBannerIfNeeded(state.projects);
+            }
         }
     } catch (e) {
         console.warn('Could not load managed cohorts:', e);
@@ -4241,20 +4245,24 @@ async function loadManagedCohorts() {
 }
 
 function renderCohortSelector(selectedCohortId) {
-    const contactEmail = state.siloContactEmail || 'your Moodle administrator';
+    const rawEmail = state.siloContactEmail || '';
+    const safeEmail = rawEmail ? escapeHtml(rawEmail) : null;
     if (state.managedCohorts.length === 0) {
+        const contactHtml = safeEmail
+            ? `<a href="mailto:${encodeURIComponent(rawEmail)}">${safeEmail}</a>`
+            : 'your Moodle administrator';
         return `<div class="silo-notice">
             <p>You are not currently assigned as a teacher in any cohort-enrolled course.
             If your work should be protected from other organisations' search results in
             CraftPilot, please contact
-            <a href="mailto:${contactEmail}">${contactEmail}</a>
+            ${contactHtml}
             to have the correct role assigned. Until then, your annotations will be
             visible to all authenticated users.</p>
         </div>`;
     }
     const options = state.managedCohorts.map(c =>
-        `<option value="${c.cohort_id}" ${selectedCohortId === c.cohort_id ? 'selected' : ''}>
-            ${c.cohort_name} only
+        `<option value="${parseInt(c.cohort_id, 10)}" ${selectedCohortId === c.cohort_id ? 'selected' : ''}>
+            ${escapeHtml(c.cohort_name)} only
         </option>`
     ).join('');
     return `<label for="project-cohort">Visibility</label>
