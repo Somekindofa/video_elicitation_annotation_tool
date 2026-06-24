@@ -170,12 +170,21 @@ _ALLOWED_AUDIO_EXTS = {".wav", ".webm", ".ogg", ".mp3", ".mp4", ".m4a"}
 @app.on_event("startup")
 async def startup_event():
     """Initialize database and preload Whisper model"""
+    import tempfile
     logger.info("Starting Video Elicitation Annotation Tool...")
 
     # Ensure required directories exist
     VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
     AUDIO_DIR.mkdir(parents=True, exist_ok=True)
     EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Redirect Python's tempfile to the /var partition (198 GB) so large
+    # uploads don't overflow the dedicated 2 GB /tmp filesystem.
+    tmp_override = Path(os.getenv("TMPDIR_OVERRIDE", "/var/video_uploads/.tmp"))
+    tmp_override.mkdir(parents=True, exist_ok=True)
+    tempfile.tempdir = str(tmp_override)
+    os.environ["TMPDIR"] = str(tmp_override)
+    logger.info(f"Temp directory set to {tmp_override}")
     logger.info("Directories verified")
 
     await db.init_db()
@@ -264,16 +273,27 @@ async def upload_video(
         unique_filename = f"{uuid.uuid4().hex}_{file.filename}"
         file_path = VIDEOS_DIR / unique_filename
 
-        # Save file
+        # Save file — stream in 4 MB chunks to avoid loading the whole video
+        # into memory and to keep /tmp free from large spooled files.
         logger.info(f"Uploading video: {file.filename}")
-        async with aiofiles.open(file_path, "wb") as f:
-            content = await file.read()
-            if len(content) > MAX_UPLOAD_SIZE:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"File too large. Maximum size: {MAX_UPLOAD_SIZE / (1024*1024)}MB",
-                )
-            await f.write(content)
+        total_written = 0
+        try:
+            async with aiofiles.open(file_path, "wb") as f:
+                while True:
+                    chunk = await file.read(4 * 1024 * 1024)  # 4 MB at a time
+                    if not chunk:
+                        break
+                    total_written += len(chunk)
+                    if total_written > MAX_UPLOAD_SIZE:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"File too large. Maximum size: {MAX_UPLOAD_SIZE / (1024*1024)}MB",
+                        )
+                    await f.write(chunk)
+        except HTTPException:
+            if file_path.exists():
+                file_path.unlink(missing_ok=True)
+            raise
 
         # Get file size
         file_size = os.path.getsize(file_path)
@@ -1365,6 +1385,31 @@ async def retranscribe_annotation(
     import asyncio
     asyncio.create_task(process_transcription(annotation_id, audio_path))
     return {"status": "queued", "annotation_id": annotation_id}
+
+
+@app.post("/api/annotations/{annotation_id}/regenerate-extended")
+async def regenerate_extended_transcript(
+    annotation_id: int,
+    session: AsyncSession = Depends(db.get_session),
+    current_user: MoodleUser = Depends(verify_moodle_jwt),
+):
+    """Acknowledge a request to regenerate the extended transcript.
+
+    Extended transcripts are not yet supported in the Moodle-backed version of
+    this tool, so this endpoint returns immediately with a no-op response and
+    broadcasts an extended_transcript_complete event so the frontend clears its
+    "Regenerating…" state without showing an error.
+    """
+    annotation = await db.get_annotation(session, annotation_id)
+    if not annotation:
+        raise HTTPException(status_code=404, detail="Annotation not found")
+
+    await manager.broadcast({
+        "type": "extended_transcript_complete",
+        "annotation_id": annotation_id,
+        "extended_transcript": None,
+    })
+    return {"status": "ok", "annotation_id": annotation_id}
 
 
 @app.post("/api/annotations/{annotation_id}/review")
