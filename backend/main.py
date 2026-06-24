@@ -824,24 +824,14 @@ _MANAGED_COHORTS_QUERY = """
 
 
 @app.get("/api/cohorts/managed")
-async def get_managed_cohorts(request: Request):
+async def get_managed_cohorts(
+    current_user: MoodleUser = Depends(verify_moodle_jwt),
+):
     """Return cohorts the JWT user is responsible for (has teacher role in an enrolled course).
 
     Returns empty list if user has no teacher roles — frontend shows the contact-admin message.
     """
-    # Decode JWT from Authorization header
-    auth = request.headers.get("Authorization", "")
-    if not auth.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing JWT")
-
-    token = auth[7:]
-    try:
-        payload_b64 = token.split(".")[1]
-        payload_b64 += "=" * (4 - len(payload_b64) % 4)
-        payload = json.loads(base64.urlsafe_b64decode(payload_b64))
-        user_id = payload["userid"]
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid JWT")
+    user_id = current_user.userid
 
     try:
         import pymysql.cursors
@@ -1252,29 +1242,36 @@ async def push_annotation_to_rag(annotation_id: int, transcription: str) -> None
             video_id = annotation.get("video_id") or annotation.get("videoid")
             video = await db.get_video(session, video_id) if video_id else None
             project_name = "unknown"
+            project = None
             if video and video.get("project_id"):
                 project = await db.get_project(session, video["project_id"])
                 if project:
                     project_name = project.get("name", "unknown")
 
         payload = json.dumps({
-            "annotation_id": annotation_id,
-            "video_id":       video_id or 0,
-            "transcription":  transcription,
-            "start_time":     float(annotation.get("start_time") or annotation.get("starttime") or 0),
-            "end_time":       float(annotation.get("end_time")   or annotation.get("endtime")   or 0),
-            "video_filename": (video or {}).get("filename", "unknown.mp4"),
-            "video_filepath": (video or {}).get("filepath", ""),
-            "source_type":    (video or {}).get("source_type", "local"),
-            "project_name":   project_name,
-            "audio_filepath": annotation.get("audio_filepath") or annotation.get("audiofilepath") or "",
+            "annotation_id":    annotation_id,
+            "video_id":         video_id or 0,
+            "transcription":    transcription,
+            "start_time":       float(annotation.get("start_time") or annotation.get("starttime") or 0),
+            "end_time":         float(annotation.get("end_time")   or annotation.get("endtime")   or 0),
+            "video_filename":   (video or {}).get("filename", "unknown.mp4"),
+            "video_filepath":   (video or {}).get("filepath", ""),
+            "source_type":      (video or {}).get("source_type", "local"),
+            "project_name":     project_name,
+            "audio_filepath":   annotation.get("audio_filepath") or annotation.get("audiofilepath") or "",
+            "allowed_cohort_id": project.get("allowed_cohort_id") if project else None,
         }).encode()
+
+        internal_token = os.getenv("INTERNAL_API_TOKEN", "")
 
         def _post():
             req = urllib.request.Request(
                 RAG_INGEST_URL,
                 data=payload,
-                headers={"Content-Type": "application/json"},
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Internal-Token": internal_token,
+                },
                 method="POST",
             )
             with urllib.request.urlopen(req, timeout=30) as resp:

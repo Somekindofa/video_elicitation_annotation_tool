@@ -4249,7 +4249,7 @@ function renderCohortSelector(selectedCohortId) {
     const safeEmail = rawEmail ? escapeHtml(rawEmail) : null;
     if (state.managedCohorts.length === 0) {
         const contactHtml = safeEmail
-            ? `<a href="mailto:${encodeURIComponent(rawEmail)}">${safeEmail}</a>`
+            ? `<a href="mailto:${safeEmail}">${safeEmail}</a>`
             : 'your Moodle administrator';
         return `<div class="silo-notice">
             <p>You are not currently assigned as a teacher in any cohort-enrolled course.
@@ -4261,7 +4261,7 @@ function renderCohortSelector(selectedCohortId) {
         </div>`;
     }
     const options = state.managedCohorts.map(c =>
-        `<option value="${parseInt(c.cohort_id, 10)}" ${selectedCohortId === c.cohort_id ? 'selected' : ''}>
+        `<option value="${parseInt(c.cohort_id, 10)}" ${parseInt(selectedCohortId, 10) === parseInt(c.cohort_id, 10) ? 'selected' : ''}>
             ${escapeHtml(c.cohort_name)} only
         </option>`
     ).join('');
