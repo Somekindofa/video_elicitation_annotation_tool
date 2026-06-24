@@ -588,7 +588,10 @@ const state = {
         mediaRecorder: null,
         chunks: [],
         stream: null,
-    }
+    },
+    // RAG knowledge silo awareness
+    managedCohorts: [],       // {cohort_id, cohort_name}[] from /api/cohorts/managed
+    siloContactEmail: null,   // from JWT payload.silo_contact_email
 };
 
 // API Base URL and JWT token from iframe query
@@ -609,6 +612,7 @@ function parseJwtPayload(token) {
 }
 const _JWT_PAYLOAD = parseJwtPayload(MOODLE_JWT) || {};
 window.USER_ID = _JWT_PAYLOAD.userid || _JWT_PAYLOAD.user_id || null;
+state.siloContactEmail = _JWT_PAYLOAD.silo_contact_email || null;
 
 const APP_BASE_PATH = (() => {
     let path = window.location.pathname || '';
@@ -755,6 +759,9 @@ async function initializeApp() {
     state.craft = localStorage.getItem('craft') || 'glassblowing';
     // Create craft selector UI only (task selector removed)
     createElicitControlsUI();
+
+    // Load managed cohorts for silo awareness (non-blocking)
+    loadManagedCohorts().catch(() => {});
 
     // Load existing videos
     await loadVideos();
@@ -4166,6 +4173,7 @@ async function loadProjects() {
 
         state.projects = await response.json();
         renderProjects();
+        showSiloBannerIfNeeded(state.projects);
     } catch (error) {
         console.error('Error loading projects:', error);
         showToast('Error', 'Failed to load projects', 'error');
@@ -4219,12 +4227,81 @@ function renderProjects() {
     `).join('');
 }
 
+async function loadManagedCohorts() {
+    try {
+        const resp = await fetch(`${API_BASE}/api/cohorts/managed`, {
+            headers: { 'Authorization': `Bearer ${MOODLE_JWT}` }
+        });
+        if (resp.ok) {
+            state.managedCohorts = await resp.json();
+        }
+    } catch (e) {
+        console.warn('Could not load managed cohorts:', e);
+    }
+}
+
+function renderCohortSelector(selectedCohortId) {
+    const contactEmail = state.siloContactEmail || 'your Moodle administrator';
+    if (state.managedCohorts.length === 0) {
+        return `<div class="silo-notice">
+            <p>You are not currently assigned as a teacher in any cohort-enrolled course.
+            If your work should be protected from other organisations' search results in
+            CraftPilot, please contact
+            <a href="mailto:${contactEmail}">${contactEmail}</a>
+            to have the correct role assigned. Until then, your annotations will be
+            visible to all authenticated users.</p>
+        </div>`;
+    }
+    const options = state.managedCohorts.map(c =>
+        `<option value="${c.cohort_id}" ${selectedCohortId === c.cohort_id ? 'selected' : ''}>
+            ${c.cohort_name} only
+        </option>`
+    ).join('');
+    return `<label for="project-cohort">Visibility</label>
+        <select id="project-cohort" name="allowed_cohort_id">
+            <option value="" ${!selectedCohortId ? 'selected' : ''}>
+                Open access — visible to all authenticated CraftPilot users
+            </option>
+            ${options}
+        </select>`;
+}
+
+function showSiloBannerIfNeeded(projects) {
+    const dismissed = localStorage.getItem('craftpilot_silo_banner_dismissed');
+    if (dismissed) return;
+    if (state.managedCohorts.length === 0) return;
+
+    const unsecured = projects.filter(p => p.allowed_cohort_id == null);
+    if (unsecured.length === 0) return;
+
+    // Remove any existing banner before adding a new one
+    const existing = document.querySelector('.silo-banner');
+    if (existing) existing.remove();
+
+    const banner = document.createElement('div');
+    banner.className = 'silo-banner';
+    banner.innerHTML = `
+        <p>You have <strong>${unsecured.length} project(s)</strong> whose annotations are
+        currently visible to all authenticated CraftPilot users. If this content contains
+        proprietary knowledge, open each project's settings to assign it to a cohort.</p>
+        <button id="silo-banner-dismiss">Don't show me again</button>
+    `;
+    const grid = document.getElementById('projectsGrid');
+    if (grid) grid.prepend(banner);
+    document.getElementById('silo-banner-dismiss').addEventListener('click', () => {
+        localStorage.setItem('craftpilot_silo_banner_dismissed', '1');
+        banner.remove();
+    });
+}
+
 function openProjectModal(projectId = null) {
     const modal = document.getElementById('projectModal');
     const title = document.getElementById('projectModalTitle');
     const form = document.getElementById('projectForm');
     const nameInput = document.getElementById('projectName');
     const descInput = document.getElementById('projectDescription');
+
+    let selectedCohortId = null;
 
     if (projectId) {
         // Edit mode
@@ -4235,12 +4312,24 @@ function openProjectModal(projectId = null) {
         title.textContent = 'Edit Project';
         nameInput.value = project.name;
         descInput.value = project.description || '';
+        selectedCohortId = project.allowed_cohort_id || null;
     } else {
         // Create mode
         state.editingProjectId = null;
         title.textContent = 'Create Project';
         form.reset();
     }
+
+    // Inject cohort selector after description field
+    let cohortGroup = document.getElementById('projectCohortGroup');
+    if (!cohortGroup) {
+        cohortGroup = document.createElement('div');
+        cohortGroup.id = 'projectCohortGroup';
+        cohortGroup.className = 'form-group';
+        const modalActions = form.querySelector('.modal-actions');
+        form.insertBefore(cohortGroup, modalActions);
+    }
+    cohortGroup.innerHTML = renderCohortSelector(selectedCohortId);
 
     modal.style.display = 'flex';
 }
@@ -4263,7 +4352,11 @@ async function handleProjectFormSubmit(event) {
     }
 
     try {
-        const payload = { name, description };
+        const cohortSelect = document.getElementById('project-cohort');
+        const allowed_cohort_id = cohortSelect && cohortSelect.value
+            ? parseInt(cohortSelect.value, 10)
+            : null;
+        const payload = { name, description, allowed_cohort_id };
         let response;
 
         if (state.editingProjectId) {
