@@ -56,7 +56,26 @@ const TRANSLATIONS = {
         createSegment: 'Create segment',
         openInMainPlayer: 'Open in main player',
 
-        // Projects panel
+        // Projects panel dropdown
+        projectsPanelBtn: 'Projects & Knowledge Silo',
+        projectsPanelTitle: 'Projects',
+        projectsPanelNew: 'New',
+        projectsPanelEmpty: 'No projects yet. Click New to create one.',
+        siloChipOpen: 'Open',
+        siloChipCohort: 'Cohort',
+        editSiloSettings: 'Edit silo settings',
+
+        // Cohort selector (inside project modal)
+        cohortNoManagerNotice: "You are not currently assigned as a teacher in any cohort-enrolled course. If your work should be protected from other organisations' search results in CraftPilot, please contact {contact} to have the correct role assigned. Until then, your annotations will be visible to all authenticated users.",
+        cohortContactFallback: 'your Moodle administrator',
+        cohortVisibilityLabel: 'Visibility',
+        cohortOpenAccess: 'Open access — visible to all authenticated CraftPilot users',
+        cohortOnly: 'only',
+
+        // Silo banner
+        siloBannerText: 'You have <strong>{n} project(s)</strong> whose annotations are currently visible to all authenticated CraftPilot users. If this content contains proprietary knowledge, open each project\'s settings to assign it to a cohort.',
+        siloBannerDismiss: "Don't show me again",
+
         newProject: 'New Project',
 
         // Video list modal
@@ -245,7 +264,26 @@ const TRANSLATIONS = {
         createSegment: 'Créer un segment',
         openInMainPlayer: 'Ouvrir dans le lecteur principal',
 
-        // Projects panel
+        // Projects panel dropdown
+        projectsPanelBtn: 'Projets & Silo de connaissances',
+        projectsPanelTitle: 'Projets',
+        projectsPanelNew: 'Nouveau',
+        projectsPanelEmpty: 'Aucun projet. Cliquez sur Nouveau pour en créer un.',
+        siloChipOpen: 'Ouvert',
+        siloChipCohort: 'Cohorte',
+        editSiloSettings: 'Modifier les paramètres du silo',
+
+        // Cohort selector (inside project modal)
+        cohortNoManagerNotice: "Vous n'êtes pas actuellement assigné(e) comme enseignant(e) dans un cours lié à une cohorte. Si votre travail doit être protégé des résultats de recherche d'autres organisations dans CraftPilot, veuillez contacter {contact} pour obtenir le rôle adéquat. En attendant, vos annotations seront visibles par tous les utilisateurs authentifiés.",
+        cohortContactFallback: 'votre administrateur Moodle',
+        cohortVisibilityLabel: 'Visibilité',
+        cohortOpenAccess: 'Accès ouvert — visible par tous les utilisateurs CraftPilot authentifiés',
+        cohortOnly: 'uniquement',
+
+        // Silo banner
+        siloBannerText: 'Vous avez <strong>{n} projet(s)</strong> dont les annotations sont actuellement visibles par tous les utilisateurs CraftPilot authentifiés. Si ce contenu contient des connaissances propriétaires, ouvrez les paramètres de chaque projet pour l\'assigner à une cohorte.',
+        siloBannerDismiss: 'Ne plus afficher',
+
         newProject: 'Nouveau projet',
 
         // Video list modal
@@ -504,6 +542,11 @@ function refreshDynamicUIStrings() {
     // Re-render the elicitation panel — annotation cards and coverage panels
     // bake t() into their HTML at build time, so a language switch needs a
     // re-render. Only UI strings are replaced; transcriptions are not.
+    // Re-render projects panel dropdown if it's populated
+    if (typeof renderProjectsPanel === 'function') {
+        try { renderProjectsPanel(); } catch (_) { /* early init */ }
+    }
+
     if (typeof renderAnnotations === 'function' && Array.isArray(state.annotations)) {
         try { renderAnnotations(); } catch (_) { /* early init */ }
         try { renderAnnotationPips(); } catch (_) { /* early init */ }
@@ -4264,20 +4307,20 @@ function renderProjectsPanel() {
     const list = document.getElementById('projectsPanelList');
     if (!list) return;
     if (!state.projects || state.projects.length === 0) {
-        list.innerHTML = '<p class="projects-panel-empty">No projects yet. Click <strong>New</strong> to create one.</p>';
+        list.innerHTML = `<p class="projects-panel-empty">${t('projectsPanelEmpty')}</p>`;
         return;
     }
     list.innerHTML = state.projects.map(p => {
         const cohortLabel = p.allowed_cohort_id == null
-            ? '<span class="silo-chip silo-chip--open">Open</span>'
-            : `<span class="silo-chip silo-chip--restricted"><i class="fas fa-lock"></i> Cohort ${escapeHtml(String(p.allowed_cohort_id))}</span>`;
+            ? `<span class="silo-chip silo-chip--open">${t('siloChipOpen')}</span>`
+            : `<span class="silo-chip silo-chip--restricted"><i class="fas fa-lock"></i> ${t('siloChipCohort')} ${escapeHtml(String(p.allowed_cohort_id))}</span>`;
         return `
         <div class="projects-panel-row">
             <div class="projects-panel-row-info">
                 <span class="projects-panel-row-name">${escapeHtml(p.name)}</span>
                 ${cohortLabel}
             </div>
-            <button class="btn btn-icon" title="Edit silo settings"
+            <button class="btn btn-icon" title="${escapeHtml(t('editSiloSettings'))}"
                 onclick="closeProjectsPanel(); openProjectModal(${p.id})">
                 <i class="fas fa-pen"></i>
             </button>
@@ -4310,25 +4353,20 @@ function renderCohortSelector(selectedCohortId) {
     if (state.managedCohorts.length === 0) {
         const contactHtml = safeEmail
             ? `<a href="mailto:${safeEmail}">${safeEmail}</a>`
-            : 'your Moodle administrator';
+            : escapeHtml(t('cohortContactFallback'));
         return `<div class="silo-notice">
-            <p>You are not currently assigned as a teacher in any cohort-enrolled course.
-            If your work should be protected from other organisations' search results in
-            CraftPilot, please contact
-            ${contactHtml}
-            to have the correct role assigned. Until then, your annotations will be
-            visible to all authenticated users.</p>
+            <p>${escapeHtml(t('cohortNoManagerNotice')).replace('{contact}', contactHtml)}</p>
         </div>`;
     }
     const options = state.managedCohorts.map(c =>
         `<option value="${parseInt(c.cohort_id, 10)}" ${parseInt(selectedCohortId, 10) === parseInt(c.cohort_id, 10) ? 'selected' : ''}>
-            ${escapeHtml(c.cohort_name)} only
+            ${escapeHtml(c.cohort_name)} ${escapeHtml(t('cohortOnly'))}
         </option>`
     ).join('');
-    return `<label for="project-cohort">Visibility</label>
+    return `<label for="project-cohort">${escapeHtml(t('cohortVisibilityLabel'))}</label>
         <select id="project-cohort" name="allowed_cohort_id">
             <option value="" ${!selectedCohortId ? 'selected' : ''}>
-                Open access — visible to all authenticated CraftPilot users
+                ${escapeHtml(t('cohortOpenAccess'))}
             </option>
             ${options}
         </select>`;
@@ -4349,10 +4387,8 @@ function showSiloBannerIfNeeded(projects) {
     const banner = document.createElement('div');
     banner.className = 'silo-banner';
     banner.innerHTML = `
-        <p>You have <strong>${unsecured.length} project(s)</strong> whose annotations are
-        currently visible to all authenticated CraftPilot users. If this content contains
-        proprietary knowledge, open each project's settings to assign it to a cohort.</p>
-        <button id="silo-banner-dismiss">Don't show me again</button>
+        <p>${t('siloBannerText').replace('{n}', unsecured.length)}</p>
+        <button id="silo-banner-dismiss">${escapeHtml(t('siloBannerDismiss'))}</button>
     `;
     const grid = document.getElementById('projectsGrid');
     if (grid) grid.prepend(banner);
@@ -4377,14 +4413,14 @@ function openProjectModal(projectId = null) {
         if (!project) return;
 
         state.editingProjectId = projectId;
-        title.textContent = 'Edit Project';
+        title.textContent = t('editProject');
         nameInput.value = project.name;
         descInput.value = project.description || '';
         selectedCohortId = project.allowed_cohort_id || null;
     } else {
         // Create mode
         state.editingProjectId = null;
-        title.textContent = 'Create Project';
+        title.textContent = t('createProject');
         form.reset();
     }
 
