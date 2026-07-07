@@ -6,6 +6,8 @@ RAG-focused extraction ensures tags are relevant for downstream retrieval and ap
 
 import json
 import logging
+import re
+import unicodedata
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set
 
@@ -105,6 +107,17 @@ def _extract_first_json_object(text: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+def slugify_tag_name(name: str) -> str:
+    """
+    Convert a tag name (possibly typed by a human, in French) to snake_case.
+    Strips accents (e.g. "à" -> "a") via NFKD decomposition before collapsing
+    any run of non-alphanumeric characters into a single underscore.
+    """
+    decomposed = unicodedata.normalize("NFKD", name)
+    ascii_only = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+    return re.sub(r"[^a-z0-9]+", "_", ascii_only.lower()).strip("_")
+
+
 def _normalize_tags(tags: Any) -> List[Dict[str, str]]:
     """
     Normalize and validate tags.
@@ -125,7 +138,7 @@ def _normalize_tags(tags: Any) -> List[Dict[str, str]]:
         category = tag.get("category")
         if not name or not category:
             continue
-        name = str(name).strip().lower().replace(" ", "_")
+        name = slugify_tag_name(str(name))
         category = str(category).strip().lower()
 
         # REJECT tags that are too long (> 4 words)

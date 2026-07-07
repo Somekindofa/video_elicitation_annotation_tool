@@ -809,6 +809,50 @@ async def register_local_video(
 
 
 # ============================================================================
+# COHORT ENDPOINTS
+# ============================================================================
+
+_MANAGED_COHORTS_QUERY = """
+    SELECT DISTINCT c.id, c.name
+    FROM mdl_cohort c
+    JOIN mdl_enrol e ON e.customint1 = c.id AND e.enrol = 'cohort'
+    JOIN mdl_context ctx ON ctx.instanceid = e.courseid AND ctx.contextlevel = 50
+    JOIN mdl_role_assignments ra ON ra.contextid = ctx.id AND ra.userid = %s
+    JOIN mdl_role r ON r.id = ra.roleid
+        AND r.shortname IN ('teacher', 'editingteacher', 'manager')
+"""
+
+
+@app.get("/api/cohorts/managed")
+async def get_managed_cohorts(
+    current_user: MoodleUser = Depends(verify_moodle_jwt),
+):
+    """Return cohorts the JWT user is responsible for (has teacher role in an enrolled course).
+
+    Returns empty list if user has no teacher roles — frontend shows the contact-admin message.
+    """
+    user_id = current_user.userid
+
+    try:
+        import pymysql.cursors
+        conn = pymysql.connect(
+            host="localhost",
+            user="moodleuser",
+            password=os.getenv("MOODLE_DB_PASSWORD", ""),
+            database="moodle",
+            cursorclass=pymysql.cursors.DictCursor,
+        )
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(_MANAGED_COHORTS_QUERY, (user_id,))
+                rows = cur.fetchall()
+        return [{"cohort_id": r["id"], "cohort_name": r["name"]} for r in rows]
+    except Exception as e:
+        logger.error(f"get_managed_cohorts failed: {e}")
+        raise HTTPException(status_code=503, detail="Could not query Moodle DB")
+
+
+# ============================================================================
 # PROJECT ENDPOINTS
 # ============================================================================
 
@@ -886,14 +930,42 @@ async def update_project(
     project_update: models.ProjectUpdate,
     session: AsyncSession = Depends(db.get_session),
 ):
-    """Update a project"""
+    """Update a project. Triggers ChromaDB resync if allowed_cohort_id changes."""
     try:
-        project = await db.get_project(session, project_id)
-        if not project:
+        # Fetch current state before update
+        current = await db.get_project(session, project_id)
+        if not current:
             raise HTTPException(status_code=404, detail="Project not found")
 
+        old_cohort_id = current.allowed_cohort_id
         updated_project = await db.update_project(session, project_id, project_update)
         logger.info(f"Project updated: ID={project_id}")
+
+        # If cohort changed, trigger CraftPilot resync asynchronously
+        new_cohort_id = updated_project.allowed_cohort_id
+        if old_cohort_id != new_cohort_id:
+            craftpilot_url = "http://127.0.0.1:8000/api/resync-project-annotations"
+            internal_token = os.getenv("INTERNAL_API_TOKEN", "")
+            payload = {
+                "project_name": updated_project.name,
+                "allowed_cohort_id": new_cohort_id,
+            }
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    resp = await client.post(
+                        craftpilot_url,
+                        json=payload,
+                        headers={"X-Internal-Token": internal_token},
+                    )
+                    resp.raise_for_status()
+                    logger.info(
+                        f"ChromaDB resync triggered for project '{updated_project.name}': "
+                        f"cohort {old_cohort_id} → {new_cohort_id}"
+                    )
+            except Exception as e:
+                logger.error(f"ChromaDB resync failed for project {project_id}: {e}")
+                # Do not fail the project update — resync can be retried
+
         return updated_project
     except HTTPException:
         raise
@@ -1170,29 +1242,36 @@ async def push_annotation_to_rag(annotation_id: int, transcription: str) -> None
             video_id = annotation.get("video_id") or annotation.get("videoid")
             video = await db.get_video(session, video_id) if video_id else None
             project_name = "unknown"
+            project = None
             if video and video.get("project_id"):
                 project = await db.get_project(session, video["project_id"])
                 if project:
                     project_name = project.get("name", "unknown")
 
         payload = json.dumps({
-            "annotation_id": annotation_id,
-            "video_id":       video_id or 0,
-            "transcription":  transcription,
-            "start_time":     float(annotation.get("start_time") or annotation.get("starttime") or 0),
-            "end_time":       float(annotation.get("end_time")   or annotation.get("endtime")   or 0),
-            "video_filename": (video or {}).get("filename", "unknown.mp4"),
-            "video_filepath": (video or {}).get("filepath", ""),
-            "source_type":    (video or {}).get("source_type", "local"),
-            "project_name":   project_name,
-            "audio_filepath": annotation.get("audio_filepath") or annotation.get("audiofilepath") or "",
+            "annotation_id":    annotation_id,
+            "video_id":         video_id or 0,
+            "transcription":    transcription,
+            "start_time":       float(annotation.get("start_time") or annotation.get("starttime") or 0),
+            "end_time":         float(annotation.get("end_time")   or annotation.get("endtime")   or 0),
+            "video_filename":   (video or {}).get("filename", "unknown.mp4"),
+            "video_filepath":   (video or {}).get("filepath", ""),
+            "source_type":      (video or {}).get("source_type", "local"),
+            "project_name":     project_name,
+            "audio_filepath":   annotation.get("audio_filepath") or annotation.get("audiofilepath") or "",
+            "allowed_cohort_id": project.get("allowed_cohort_id") if project else None,
         }).encode()
+
+        internal_token = os.getenv("INTERNAL_API_TOKEN", "")
 
         def _post():
             req = urllib.request.Request(
                 RAG_INGEST_URL,
                 data=payload,
-                headers={"Content-Type": "application/json"},
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Internal-Token": internal_token,
+                },
                 method="POST",
             )
             with urllib.request.urlopen(req, timeout=30) as resp:

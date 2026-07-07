@@ -23,9 +23,10 @@ class jwt_helper {
      * @param int $contextid Moodle context ID
      * @param array $roles Array of role shortnames
      * @param int $expires_minutes Token expiration in minutes (default: 60)
+     * @param string $silo_contact_email Silo contact email (default: '')
      * @return string JWT token
      */
-    public static function create_token($userid, $username, $contextid, $roles, $expires_minutes = 60) {
+    public static function create_token($userid, $username, $contextid, $roles, $expires_minutes = 60, $silo_contact_email = '') {
         $config = get_config('local_videoelicit');
         $secret = $config->jwt_secret ?? 'change-this-secret-key';
         
@@ -39,6 +40,7 @@ class jwt_helper {
             'roles' => $roles,
             'exp' => time() + ($expires_minutes * 60),
             'iat' => time(),
+            'silo_contact_email' => $silo_contact_email,
         ]);
         $payload = self::base64url_encode($payload);
         

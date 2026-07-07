@@ -56,7 +56,26 @@ const TRANSLATIONS = {
         createSegment: 'Create segment',
         openInMainPlayer: 'Open in main player',
 
-        // Projects panel
+        // Projects panel dropdown
+        projectsPanelBtn: 'Projects & Knowledge Silo',
+        projectsPanelTitle: 'Projects',
+        projectsPanelNew: 'New',
+        projectsPanelEmpty: 'No projects yet. Click New to create one.',
+        siloChipOpen: 'Open',
+        siloChipCohort: 'Cohort',
+        editSiloSettings: 'Edit silo settings',
+
+        // Cohort selector (inside project modal)
+        cohortNoManagerNotice: "You are not currently assigned as a teacher in any cohort-enrolled course. If your work should be protected from other organisations' search results in CraftPilot, please contact {contact} to have the correct role assigned. Until then, your annotations will be visible to all authenticated users.",
+        cohortContactFallback: 'your Moodle administrator',
+        cohortVisibilityLabel: 'Visibility',
+        cohortOpenAccess: 'Open access — visible to all authenticated CraftPilot users',
+        cohortOnly: 'only',
+
+        // Silo banner
+        siloBannerText: 'You have <strong>{n} project(s)</strong> whose annotations are currently visible to all authenticated CraftPilot users. If this content contains proprietary knowledge, open each project\'s settings to assign it to a cohort.',
+        siloBannerDismiss: "Don't show me again",
+
         newProject: 'New Project',
 
         // Video list modal
@@ -245,7 +264,26 @@ const TRANSLATIONS = {
         createSegment: 'Créer un segment',
         openInMainPlayer: 'Ouvrir dans le lecteur principal',
 
-        // Projects panel
+        // Projects panel dropdown
+        projectsPanelBtn: 'Projets & Silo de connaissances',
+        projectsPanelTitle: 'Projets',
+        projectsPanelNew: 'Nouveau',
+        projectsPanelEmpty: 'Aucun projet. Cliquez sur Nouveau pour en créer un.',
+        siloChipOpen: 'Ouvert',
+        siloChipCohort: 'Cohorte',
+        editSiloSettings: 'Modifier les paramètres du silo',
+
+        // Cohort selector (inside project modal)
+        cohortNoManagerNotice: "Vous n'êtes pas actuellement assigné(e) comme enseignant(e) dans un cours lié à une cohorte. Si votre travail doit être protégé des résultats de recherche d'autres organisations dans CraftPilot, veuillez contacter {contact} pour obtenir le rôle adéquat. En attendant, vos annotations seront visibles par tous les utilisateurs authentifiés.",
+        cohortContactFallback: 'votre administrateur Moodle',
+        cohortVisibilityLabel: 'Visibilité',
+        cohortOpenAccess: 'Accès ouvert — visible par tous les utilisateurs CraftPilot authentifiés',
+        cohortOnly: 'uniquement',
+
+        // Silo banner
+        siloBannerText: 'Vous avez <strong>{n} projet(s)</strong> dont les annotations sont actuellement visibles par tous les utilisateurs CraftPilot authentifiés. Si ce contenu contient des connaissances propriétaires, ouvrez les paramètres de chaque projet pour l\'assigner à une cohorte.',
+        siloBannerDismiss: 'Ne plus afficher',
+
         newProject: 'Nouveau projet',
 
         // Video list modal
@@ -504,6 +542,11 @@ function refreshDynamicUIStrings() {
     // Re-render the elicitation panel — annotation cards and coverage panels
     // bake t() into their HTML at build time, so a language switch needs a
     // re-render. Only UI strings are replaced; transcriptions are not.
+    // Re-render projects panel dropdown if it's populated
+    if (typeof renderProjectsPanel === 'function') {
+        try { renderProjectsPanel(); } catch (_) { /* early init */ }
+    }
+
     if (typeof renderAnnotations === 'function' && Array.isArray(state.annotations)) {
         try { renderAnnotations(); } catch (_) { /* early init */ }
         try { renderAnnotationPips(); } catch (_) { /* early init */ }
@@ -588,7 +631,10 @@ const state = {
         mediaRecorder: null,
         chunks: [],
         stream: null,
-    }
+    },
+    // RAG knowledge silo awareness
+    managedCohorts: [],       // {cohort_id, cohort_name}[] from /api/cohorts/managed
+    siloContactEmail: null,   // from JWT payload.silo_contact_email
 };
 
 // API Base URL and JWT token from iframe query
@@ -609,6 +655,7 @@ function parseJwtPayload(token) {
 }
 const _JWT_PAYLOAD = parseJwtPayload(MOODLE_JWT) || {};
 window.USER_ID = _JWT_PAYLOAD.userid || _JWT_PAYLOAD.user_id || null;
+state.siloContactEmail = _JWT_PAYLOAD.silo_contact_email || null;
 
 const APP_BASE_PATH = (() => {
     let path = window.location.pathname || '';
@@ -756,6 +803,9 @@ async function initializeApp() {
     // Create craft selector UI only (task selector removed)
     createElicitControlsUI();
 
+    // Load managed cohorts for silo awareness (non-blocking)
+    loadManagedCohorts().catch(() => {});
+
     // Load existing videos
     await loadVideos();
 
@@ -785,6 +835,16 @@ async function initializeApp() {
 
 function slugifyCraft(label) {
     return label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+// Client-side preview only - the server (models.py AnnotationUpdate.normalize_tags)
+// is the source of truth and re-normalizes every tag name it receives.
+function slugifyTagPreview(name) {
+    return name
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // strip accents
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '');
 }
 
 async function loadCustomCrafts(selectEl, addBtn) {
@@ -1186,6 +1246,21 @@ function setupEventListeners() {
     document.getElementById('projectForm').addEventListener('submit', handleProjectFormSubmit);
     document.getElementById('closeAssignVideosModalBtn').addEventListener('click', closeAssignVideosModal);
     document.getElementById('closeAssignVideosBtn').addEventListener('click', closeAssignVideosModal);
+
+    // Projects panel (Elicit tab entry point)
+    document.getElementById('projectsPanelBtn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleProjectsPanel();
+    });
+    document.getElementById('projectsPanelNewBtn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeProjectsPanel();
+        openProjectModal();
+    });
+    document.addEventListener('click', (e) => {
+        const dropdown = document.getElementById('projectsPanelDropdown');
+        if (dropdown && !dropdown.contains(e.target)) closeProjectsPanel();
+    });
 
     // Upload Video button → trigger native file picker
     const uploadVideoBtn = document.getElementById('uploadVideoBtn');
@@ -2187,6 +2262,12 @@ function openAddTagInline(event, annotationId) {
     cancelBtn.title = 'Cancel';
     cancelBtn.onclick = e => { e.stopPropagation(); renderAnnotations(); };
 
+    const preview = document.createElement('span');
+    preview.className = 'add-tag-preview';
+
+    input.addEventListener('input', () => {
+        preview.textContent = input.value.trim() ? slugifyTagPreview(input.value) : '';
+    });
     input.addEventListener('keydown', e => {
         if (e.key === 'Enter') { e.preventDefault(); submitNewTag(annotationId, input.value, select.value); }
         if (e.key === 'Escape') { e.preventDefault(); renderAnnotations(); }
@@ -2196,6 +2277,7 @@ function openAddTagInline(event, annotationId) {
     form.appendChild(select);
     form.appendChild(confirmBtn);
     form.appendChild(cancelBtn);
+    form.appendChild(preview);
 
     // Replace the tags container contents with the form
     tagsContainer.innerHTML = '';
@@ -2224,7 +2306,8 @@ async function submitNewTag(annotationId, tagName, category) {
             body: JSON.stringify({ tags: JSON.stringify(newTags) })
         });
         if (!response.ok) throw new Error('Failed to add tag');
-        annotation.tags = newTags;
+        const updated = await response.json();
+        annotation.tags = updated.tags;
     } catch (err) {
         showToast('Error', err.message, 'error');
     }
@@ -4166,6 +4249,7 @@ async function loadProjects() {
 
         state.projects = await response.json();
         renderProjects();
+        showSiloBannerIfNeeded(state.projects);
     } catch (error) {
         console.error('Error loading projects:', error);
         showToast('Error', 'Failed to load projects', 'error');
@@ -4219,6 +4303,119 @@ function renderProjects() {
     `).join('');
 }
 
+// ── Projects panel (Elicit-tab entry point) ──────────────────────────────────
+
+function closeProjectsPanel() {
+    const menu = document.getElementById('projectsPanelMenu');
+    if (menu) menu.style.display = 'none';
+}
+
+async function toggleProjectsPanel() {
+    const menu = document.getElementById('projectsPanelMenu');
+    if (!menu) return;
+    const isOpen = menu.style.display !== 'none';
+    if (isOpen) { menu.style.display = 'none'; return; }
+    // Ensure projects are loaded before rendering
+    if (!state.projects || state.projects.length === 0) await loadProjects();
+    renderProjectsPanel();
+    menu.style.display = 'block';
+}
+
+function renderProjectsPanel() {
+    const list = document.getElementById('projectsPanelList');
+    if (!list) return;
+    if (!state.projects || state.projects.length === 0) {
+        list.innerHTML = `<p class="projects-panel-empty">${t('projectsPanelEmpty')}</p>`;
+        return;
+    }
+    list.innerHTML = state.projects.map(p => {
+        const cohortLabel = p.allowed_cohort_id == null
+            ? `<span class="silo-chip silo-chip--open">${t('siloChipOpen')}</span>`
+            : `<span class="silo-chip silo-chip--restricted"><i class="fas fa-lock"></i> ${t('siloChipCohort')} ${escapeHtml(String(p.allowed_cohort_id))}</span>`;
+        return `
+        <div class="projects-panel-row">
+            <div class="projects-panel-row-info">
+                <span class="projects-panel-row-name">${escapeHtml(p.name)}</span>
+                ${cohortLabel}
+            </div>
+            <button class="btn btn-icon" title="${escapeHtml(t('editSiloSettings'))}"
+                onclick="closeProjectsPanel(); openProjectModal(${p.id})">
+                <i class="fas fa-pen"></i>
+            </button>
+        </div>`;
+    }).join('');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function loadManagedCohorts() {
+    try {
+        const resp = await fetch(`${API_BASE}/api/cohorts/managed`, {
+            headers: { 'Authorization': `Bearer ${MOODLE_JWT}` }
+        });
+        if (resp.ok) {
+            state.managedCohorts = await resp.json();
+            // Retry the silo banner in case loadProjects() ran before cohorts arrived
+            if (state.projects && state.projects.length > 0) {
+                showSiloBannerIfNeeded(state.projects);
+            }
+        }
+    } catch (e) {
+        console.warn('Could not load managed cohorts:', e);
+    }
+}
+
+function renderCohortSelector(selectedCohortId) {
+    const rawEmail = state.siloContactEmail || '';
+    const safeEmail = rawEmail ? escapeHtml(rawEmail) : null;
+    if (state.managedCohorts.length === 0) {
+        const contactHtml = safeEmail
+            ? `<a href="mailto:${safeEmail}">${safeEmail}</a>`
+            : escapeHtml(t('cohortContactFallback'));
+        return `<div class="silo-notice">
+            <p>${escapeHtml(t('cohortNoManagerNotice')).replace('{contact}', contactHtml)}</p>
+        </div>`;
+    }
+    const options = state.managedCohorts.map(c =>
+        `<option value="${parseInt(c.cohort_id, 10)}" ${parseInt(selectedCohortId, 10) === parseInt(c.cohort_id, 10) ? 'selected' : ''}>
+            ${escapeHtml(c.cohort_name)} ${escapeHtml(t('cohortOnly'))}
+        </option>`
+    ).join('');
+    return `<label for="project-cohort">${escapeHtml(t('cohortVisibilityLabel'))}</label>
+        <select id="project-cohort" name="allowed_cohort_id">
+            <option value="" ${!selectedCohortId ? 'selected' : ''}>
+                ${escapeHtml(t('cohortOpenAccess'))}
+            </option>
+            ${options}
+        </select>`;
+}
+
+function showSiloBannerIfNeeded(projects) {
+    const dismissed = localStorage.getItem('craftpilot_silo_banner_dismissed');
+    if (dismissed) return;
+    if (state.managedCohorts.length === 0) return;
+
+    const unsecured = projects.filter(p => p.allowed_cohort_id == null);
+    if (unsecured.length === 0) return;
+
+    // Remove any existing banner before adding a new one
+    const existing = document.querySelector('.silo-banner');
+    if (existing) existing.remove();
+
+    const banner = document.createElement('div');
+    banner.className = 'silo-banner';
+    banner.innerHTML = `
+        <p>${t('siloBannerText').replace('{n}', unsecured.length)}</p>
+        <button id="silo-banner-dismiss">${escapeHtml(t('siloBannerDismiss'))}</button>
+    `;
+    const grid = document.getElementById('projectsGrid');
+    if (grid) grid.prepend(banner);
+    document.getElementById('silo-banner-dismiss').addEventListener('click', () => {
+        localStorage.setItem('craftpilot_silo_banner_dismissed', '1');
+        banner.remove();
+    });
+}
+
 function openProjectModal(projectId = null) {
     const modal = document.getElementById('projectModal');
     const title = document.getElementById('projectModalTitle');
@@ -4226,21 +4423,35 @@ function openProjectModal(projectId = null) {
     const nameInput = document.getElementById('projectName');
     const descInput = document.getElementById('projectDescription');
 
+    let selectedCohortId = null;
+
     if (projectId) {
         // Edit mode
         const project = state.projects.find(p => p.id === projectId);
         if (!project) return;
 
         state.editingProjectId = projectId;
-        title.textContent = 'Edit Project';
+        title.textContent = t('editProject');
         nameInput.value = project.name;
         descInput.value = project.description || '';
+        selectedCohortId = project.allowed_cohort_id || null;
     } else {
         // Create mode
         state.editingProjectId = null;
-        title.textContent = 'Create Project';
+        title.textContent = t('createProject');
         form.reset();
     }
+
+    // Inject cohort selector after description field
+    let cohortGroup = document.getElementById('projectCohortGroup');
+    if (!cohortGroup) {
+        cohortGroup = document.createElement('div');
+        cohortGroup.id = 'projectCohortGroup';
+        cohortGroup.className = 'form-group';
+        const modalActions = form.querySelector('.modal-actions');
+        form.insertBefore(cohortGroup, modalActions);
+    }
+    cohortGroup.innerHTML = renderCohortSelector(selectedCohortId);
 
     modal.style.display = 'flex';
 }
@@ -4263,7 +4474,11 @@ async function handleProjectFormSubmit(event) {
     }
 
     try {
-        const payload = { name, description };
+        const cohortSelect = document.getElementById('project-cohort');
+        const allowed_cohort_id = cohortSelect && cohortSelect.value
+            ? parseInt(cohortSelect.value, 10)
+            : null;
+        const payload = { name, description, allowed_cohort_id };
         let response;
 
         if (state.editingProjectId) {
@@ -4918,7 +5133,7 @@ async function _coverageSummary(transcript, phase_scores) {
     const resp = await fetch(`${API_BASE}/api/coverage/summary`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(MOODLE_JWT ? { 'Authorization': `Bearer ${MOODLE_JWT}` } : {}) },
-        body: JSON.stringify({ transcript, phase_scores }),
+        body: JSON.stringify({ transcript, phase_scores, lang: currentLang }),
     });
     if (!resp.ok) throw new Error(`summary ${resp.status}`);
     return resp.json();
@@ -5045,7 +5260,11 @@ async function onFinishSessionClick() {
         .filter(Boolean)
         .join('\n\n');
     if (!transcript) {
-        showToast('Synthèse', 'Aucune transcription à résumer.', 'warning');
+        showToast(
+            currentLang === 'fr' ? 'Synthèse' : 'Summary',
+            currentLang === 'fr' ? 'Aucune transcription à résumer.' : 'No transcript to summarize.',
+            'warning'
+        );
         return;
     }
 
@@ -5066,7 +5285,11 @@ async function onFinishSessionClick() {
         const res = await _coverageSummary(transcript, phase_scores);
         renderSessionSummary(res);
     } catch (e) {
-        showToast('Synthèse', `Erreur: ${e.message}`, 'error');
+        showToast(
+            currentLang === 'fr' ? 'Synthèse' : 'Summary',
+            currentLang === 'fr' ? `Erreur : ${e.message}` : `Error: ${e.message}`,
+            'error'
+        );
     } finally {
         if (btn) { btn.disabled = false; btn.innerHTML = `<i class="fas fa-chart-bar"></i> <span data-i18n="coverageFinishSession">${t('coverageFinishSession')}</span>`; }
     }

@@ -154,6 +154,23 @@
                 <div class="panel-header">
                     <h2 data-i18n="panelElicitations">Elicitations</h2>
                     <div class="panel-header-actions">
+                        <!-- Projects panel — entry point to project management + cohort silo settings -->
+                        <div class="sort-dropdown" id="projectsPanelDropdown">
+                            <button id="projectsPanelBtn" class="btn btn-icon" data-i18n-title="projectsPanelBtn" title="Projects &amp; Knowledge Silo">
+                                <i class="fas fa-folder-tree"></i>
+                            </button>
+                            <div id="projectsPanelMenu" class="sort-dropdown-menu projects-panel-menu" style="display: none;">
+                                <div class="projects-panel-header">
+                                    <span class="projects-panel-title" data-i18n="projectsPanelTitle">Projects</span>
+                                    <button class="btn btn-small btn-primary" id="projectsPanelNewBtn">
+                                        <i class="fas fa-plus"></i> <span data-i18n="projectsPanelNew">New</span>
+                                    </button>
+                                </div>
+                                <div id="projectsPanelList" class="projects-panel-list">
+                                    <!-- populated by renderProjectsPanel() -->
+                                </div>
+                            </div>
+                        </div>
                         <div class="sort-dropdown">
                             <button id="sortAnnotationsBtn" class="btn btn-icon" data-i18n-title="sort" title="Sort">
                                 <i class="fas fa-sort"></i>
