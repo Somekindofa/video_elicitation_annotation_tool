@@ -41,6 +41,7 @@ data/videos/*.mov
 data/videos/*.webm
 data/audio/*.wav
 data/audio/*.mp3
+data/audio/*.webm
 data/exports/*.json
 
 # Keep directory structure
