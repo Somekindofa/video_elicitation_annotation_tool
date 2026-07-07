@@ -347,6 +347,44 @@ class AnnotationUpdate(BaseModel):
     craft: Optional[str] = None
     task: Optional[str] = None
 
+    @field_validator("tags", mode="before")
+    @classmethod
+    def normalize_tags(cls, v):
+        """Snake_case-ify user-entered tag names before they hit the DB.
+
+        The client never supplies the final tag name (mirrors create_custom_craft's
+        server-derived slug in database_compat.py) - this runs for every caller of
+        PUT /api/annotations/{id}, including the manual "+" add-tag flow.
+        """
+        if v is None:
+            return v
+
+        from tagging_service import slugify_tag_name
+
+        if isinstance(v, str):
+            try:
+                tags = json.loads(v)
+            except (json.JSONDecodeError, ValueError):
+                return v
+        else:
+            tags = v
+
+        if not isinstance(tags, list):
+            return v
+
+        normalized = []
+        for tag in tags:
+            if isinstance(tag, dict) and tag.get("name"):
+                slug = slugify_tag_name(str(tag["name"]))
+                if slug:
+                    normalized.append({**tag, "name": slug})
+            elif isinstance(tag, str):
+                slug = slugify_tag_name(tag)
+                if slug:
+                    normalized.append(slug)
+
+        return json.dumps(normalized)
+
 
 class AnnotationResponse(BaseModel):
     """Schema for annotation response"""

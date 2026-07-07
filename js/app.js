@@ -837,6 +837,16 @@ function slugifyCraft(label) {
     return label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 }
 
+// Client-side preview only - the server (models.py AnnotationUpdate.normalize_tags)
+// is the source of truth and re-normalizes every tag name it receives.
+function slugifyTagPreview(name) {
+    return name
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // strip accents
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '');
+}
+
 async function loadCustomCrafts(selectEl, addBtn) {
     if (!window.USER_ID) {
         if (addBtn) addBtn.style.display = 'none';
@@ -2252,6 +2262,12 @@ function openAddTagInline(event, annotationId) {
     cancelBtn.title = 'Cancel';
     cancelBtn.onclick = e => { e.stopPropagation(); renderAnnotations(); };
 
+    const preview = document.createElement('span');
+    preview.className = 'add-tag-preview';
+
+    input.addEventListener('input', () => {
+        preview.textContent = input.value.trim() ? slugifyTagPreview(input.value) : '';
+    });
     input.addEventListener('keydown', e => {
         if (e.key === 'Enter') { e.preventDefault(); submitNewTag(annotationId, input.value, select.value); }
         if (e.key === 'Escape') { e.preventDefault(); renderAnnotations(); }
@@ -2261,6 +2277,7 @@ function openAddTagInline(event, annotationId) {
     form.appendChild(select);
     form.appendChild(confirmBtn);
     form.appendChild(cancelBtn);
+    form.appendChild(preview);
 
     // Replace the tags container contents with the form
     tagsContainer.innerHTML = '';
@@ -2289,7 +2306,8 @@ async function submitNewTag(annotationId, tagName, category) {
             body: JSON.stringify({ tags: JSON.stringify(newTags) })
         });
         if (!response.ok) throw new Error('Failed to add tag');
-        annotation.tags = newTags;
+        const updated = await response.json();
+        annotation.tags = updated.tags;
     } catch (err) {
         showToast('Error', err.message, 'error');
     }
@@ -5115,7 +5133,7 @@ async function _coverageSummary(transcript, phase_scores) {
     const resp = await fetch(`${API_BASE}/api/coverage/summary`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(MOODLE_JWT ? { 'Authorization': `Bearer ${MOODLE_JWT}` } : {}) },
-        body: JSON.stringify({ transcript, phase_scores }),
+        body: JSON.stringify({ transcript, phase_scores, lang: currentLang }),
     });
     if (!resp.ok) throw new Error(`summary ${resp.status}`);
     return resp.json();
@@ -5242,7 +5260,11 @@ async function onFinishSessionClick() {
         .filter(Boolean)
         .join('\n\n');
     if (!transcript) {
-        showToast('Synthèse', 'Aucune transcription à résumer.', 'warning');
+        showToast(
+            currentLang === 'fr' ? 'Synthèse' : 'Summary',
+            currentLang === 'fr' ? 'Aucune transcription à résumer.' : 'No transcript to summarize.',
+            'warning'
+        );
         return;
     }
 
@@ -5263,7 +5285,11 @@ async function onFinishSessionClick() {
         const res = await _coverageSummary(transcript, phase_scores);
         renderSessionSummary(res);
     } catch (e) {
-        showToast('Synthèse', `Erreur: ${e.message}`, 'error');
+        showToast(
+            currentLang === 'fr' ? 'Synthèse' : 'Summary',
+            currentLang === 'fr' ? `Erreur : ${e.message}` : `Error: ${e.message}`,
+            'error'
+        );
     } finally {
         if (btn) { btn.disabled = false; btn.innerHTML = `<i class="fas fa-chart-bar"></i> <span data-i18n="coverageFinishSession">${t('coverageFinishSession')}</span>`; }
     }

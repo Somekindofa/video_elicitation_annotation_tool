@@ -76,6 +76,7 @@ class PhaseScoreIn(BaseModel):
 class SummaryRequest(BaseModel):
     transcript: str = Field(..., min_length=1, max_length=60_000)
     phase_scores: dict[Literal["quoi", "comment", "pourquoi"], PhaseScoreIn]
+    lang: Literal["fr", "en"] = "fr"
 
 
 class SummaryResponse(BaseModel):
@@ -128,27 +129,61 @@ async def aggregate_endpoint(
 
 _STATUS_ORDER = {"absent": 0, "partial": 1, "covered": 2}
 
-_FOLLOW_UPS_FR: dict[str, list[str]] = {
-    "quoi": [
-        "Pouvez-vous décrire plus précisément les actions concrètes que vous réalisez ?",
-        "Quels gestes effectuez-vous exactement à ce moment-là ?",
-    ],
-    "comment": [
-        "Comment procédez-vous ? Pouvez-vous préciser la vitesse, l'outil ou la séquence ?",
-        "De quelle manière réalisez-vous cette action (lentement, d'abord… puis…) ?",
-    ],
-    "pourquoi": [
-        "Pour quelle raison faites-vous cela ? Quel est l'objectif visé ?",
-        "Qu'est-ce qui se passerait si vous ne le faisiez pas ?",
-    ],
+_FOLLOW_UPS: dict[str, dict[str, list[str]]] = {
+    "fr": {
+        "quoi": [
+            "Pouvez-vous décrire plus précisément les actions concrètes que vous réalisez ?",
+            "Quels gestes effectuez-vous exactement à ce moment-là ?",
+        ],
+        "comment": [
+            "Comment procédez-vous ? Pouvez-vous préciser la vitesse, l'outil ou la séquence ?",
+            "De quelle manière réalisez-vous cette action (lentement, d'abord… puis…) ?",
+        ],
+        "pourquoi": [
+            "Pour quelle raison faites-vous cela ? Quel est l'objectif visé ?",
+            "Qu'est-ce qui se passerait si vous ne le faisiez pas ?",
+        ],
+    },
+    "en": {
+        "quoi": [
+            "Could you describe more precisely the concrete actions you're performing?",
+            "What gestures do you make exactly at that moment?",
+        ],
+        "comment": [
+            "How do you proceed? Can you specify the speed, tool, or sequence?",
+            "In what way do you carry out this action (slowly, first… then…)?",
+        ],
+        "pourquoi": [
+            "Why do you do this? What is the intended goal?",
+            "What would happen if you didn't do it?",
+        ],
+    },
 }
 
-_PHASE_LABELS_FR = {"quoi": "Quoi", "comment": "Comment", "pourquoi": "Pourquoi"}
-_STATUS_LABELS_FR = {"absent": "absent", "partial": "partiel", "covered": "couvert"}
+# Phase labels are domain terms (Quoi/Comment/Pourquoi) — kept in French in
+# both locales on purpose, matching the frontend's COVERAGE_PHASE_META.
+_PHASE_LABELS = {"quoi": "Quoi", "comment": "Comment", "pourquoi": "Pourquoi"}
+
+_SUMMARY_STRINGS = {
+    "fr": {
+        "covered": "Les phases {labels} sont bien couvertes.",
+        "partial": "Les phases {labels} sont partiellement abordées.",
+        "absent": "Les phases {labels} sont absentes de la session.",
+        "complete": "La session est complète — les trois phases sont couvertes.",
+    },
+    "en": {
+        "covered": "The {labels} phases are well covered.",
+        "partial": "The {labels} phases are only partially covered.",
+        "absent": "The {labels} phases are absent from the session.",
+        "complete": "The session is complete — all three phases are covered.",
+    },
+}
 
 
-def _build_summary(phase_scores: dict[str, PhaseScoreIn]) -> dict:
+def _build_summary(phase_scores: dict[str, PhaseScoreIn], lang: str = "fr") -> dict:
     phases = ["quoi", "comment", "pourquoi"]
+    strings = _SUMMARY_STRINGS.get(lang, _SUMMARY_STRINGS["fr"])
+    follow_ups_by_phase = _FOLLOW_UPS.get(lang, _FOLLOW_UPS["fr"])
 
     covered = [p for p in phases if phase_scores[p].status == "covered"]
     partial = [p for p in phases if phase_scores[p].status == "partial"]
@@ -159,27 +194,23 @@ def _build_summary(phase_scores: dict[str, PhaseScoreIn]) -> dict:
     if phase_scores[weakest].status == "covered":
         weakest = None
 
-    # Build a short French summary sentence.
     parts = []
     if covered:
-        labels = ", ".join(_PHASE_LABELS_FR[p] for p in covered)
-        parts.append(f"Les phases {labels} sont bien couvertes.")
+        labels = ", ".join(_PHASE_LABELS[p] for p in covered)
+        parts.append(strings["covered"].format(labels=labels))
     if partial:
-        labels = ", ".join(_PHASE_LABELS_FR[p] for p in partial)
-        parts.append(f"Les phases {labels} sont partiellement abordées.")
+        labels = ", ".join(_PHASE_LABELS[p] for p in partial)
+        parts.append(strings["partial"].format(labels=labels))
     if absent:
-        labels = ", ".join(_PHASE_LABELS_FR[p] for p in absent)
-        parts.append(f"Les phases {labels} sont absentes de la session.")
+        labels = ", ".join(_PHASE_LABELS[p] for p in absent)
+        parts.append(strings["absent"].format(labels=labels))
 
-    if not parts:
-        summary = "La session est complète — les trois phases sont couvertes."
-    else:
-        summary = " ".join(parts)
+    summary = " ".join(parts) if parts else strings["complete"]
 
     # Follow-up questions for incomplete phases.
     follow_ups: list[str] = []
     for p in partial + absent:
-        follow_ups.extend(_FOLLOW_UPS_FR[p])
+        follow_ups.extend(follow_ups_by_phase[p])
 
     return {"summary": summary, "weakest_phase": weakest, "follow_ups": follow_ups}
 
@@ -189,5 +220,5 @@ async def summary_endpoint(
     req: SummaryRequest,
     _user: MoodleUser = Depends(verify_moodle_jwt),
 ) -> dict:
-    """Generate a session summary from the phase scores."""
-    return _build_summary(req.phase_scores)
+    """Generate a session summary from the phase scores, localized to req.lang."""
+    return _build_summary(req.phase_scores, req.lang)

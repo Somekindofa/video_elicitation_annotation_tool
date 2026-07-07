@@ -2472,6 +2472,12 @@ body {
     transition: var(--transition);
 }
 .add-tag-cancel-btn:hover { background: var(--surface-hover); }
+.add-tag-preview {
+    width: 100%;
+    font-size: 0.72rem;
+    font-family: monospace;
+    color: var(--text-secondary);
+}
 
 /* Tagging progress indicator */
 /* AI pipeline status badges */
