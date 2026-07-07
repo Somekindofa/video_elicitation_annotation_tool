@@ -886,6 +886,12 @@ body {
 }
 
 .annotation-edit-group .btn-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
     border: none;
     background: transparent;
     box-shadow: none;
@@ -893,6 +899,10 @@ body {
 
 .annotation-edit-group .btn-icon:hover {
     background: var(--surface);
+}
+
+.annotation-edit-group .btn-icon i {
+    line-height: 1;
 }
 
 .annotation-transcription {
