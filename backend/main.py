@@ -6,6 +6,7 @@ import os
 import base64
 import json
 import logging
+import secrets
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, cast
@@ -33,7 +34,7 @@ from starlette.types import Scope
 # Use absolute imports to allow running main.py directly
 # MIGRATED: Using Moodle database instead of SQLite
 import database_compat as db
-from auth import verify_moodle_jwt, MoodleUser
+from auth import verify_moodle_jwt, require_capability, MoodleUser
 from database_compat import AsyncSession  # Type alias for compatibility
 import models
 from moodle_db import moodle_db
@@ -209,6 +210,17 @@ async def shutdown_event():
 # WebSocket endpoint for real-time updates
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    # Broadcasts on this socket include other users' live transcription text,
+    # so require the same Moodle login as everything else. WebSockets can't
+    # send an Authorization header, so the token travels as ?token=... (same
+    # fallback verify_moodle_jwt already supports for <video> src requests).
+    token = websocket.query_params.get("token")
+    try:
+        verify_moodle_jwt(authorization=f"Bearer {token}" if token else None)
+    except HTTPException:
+        await websocket.close(code=1008)
+        return
+
     await manager.connect(websocket)
     try:
         while True:
@@ -351,13 +363,29 @@ async def list_videos(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _authorize_video_access(video, current_user: MoodleUser, *, manage: bool = False) -> None:
+    """Reject cross-user access to a video, mirroring _authorize_annotation_access."""
+    owner_id = getattr(video, "user_id", None)
+    if not owner_id or owner_id == current_user.userid:
+        return
+
+    required_capability = "manage" if manage else "viewall"
+    if not current_user.has_capability(required_capability):
+        raise HTTPException(status_code=403, detail="Not authorized to access this video")
+
+
 @app.get("/api/videos/{video_id}", response_model=models.VideoResponse)
-async def get_video(video_id: int, session: AsyncSession = Depends(db.get_session)):
+async def get_video(
+    video_id: int,
+    session: AsyncSession = Depends(db.get_session),
+    current_user: MoodleUser = Depends(verify_moodle_jwt),
+):
     """Get video by ID"""
     try:
         video = await db.get_video(session, video_id)
         if not video:
             raise HTTPException(status_code=404, detail="Video not found")
+        _authorize_video_access(video, current_user)
 
         video_response = models.VideoResponse.model_validate(video)
         video_response.annotation_count = len(video.annotations)
@@ -373,13 +401,21 @@ async def get_video(video_id: int, session: AsyncSession = Depends(db.get_sessio
 
 @app.get("/api/videos/{video_id}/file")
 async def get_video_file(
-    video_id: int, request: Request, token: str = None, session: AsyncSession = Depends(db.get_session)
+    video_id: int,
+    request: Request,
+    session: AsyncSession = Depends(db.get_session),
+    current_user: MoodleUser = Depends(verify_moodle_jwt),
 ):
-    """Serve video file with HTTP Range request support for streaming"""
+    """Serve video file with HTTP Range request support for streaming.
+
+    Auth accepts either an Authorization header or a `?token=` query param
+    (see auth.verify_moodle_jwt) since <video src="..."> can't set headers.
+    """
     try:
         video = await db.get_video(session, video_id)
         if not video:
             raise HTTPException(status_code=404, detail="Video not found")
+        _authorize_video_access(video, current_user)
 
         if not os.path.exists(str(video.filepath)):
             raise HTTPException(status_code=404, detail="Video file not found on disk")
@@ -457,13 +493,17 @@ async def get_video_file(
 
 @app.put("/api/videos/{video_id}", response_model=models.VideoResponse)
 async def update_video(
-    video_id: int, video_update: dict, session: AsyncSession = Depends(db.get_session)
+    video_id: int,
+    video_update: dict,
+    session: AsyncSession = Depends(db.get_session),
+    current_user: MoodleUser = Depends(verify_moodle_jwt),
 ):
     """Update video metadata (e.g., project_id, batch_position)"""
     try:
         video = await db.get_video(session, video_id)
         if not video:
             raise HTTPException(status_code=404, detail="Video not found")
+        _authorize_video_access(video, current_user, manage=True)
 
         # Update allowed fields
         update_payload = {}
@@ -500,12 +540,18 @@ async def update_video(
 
 
 @app.delete("/api/videos/{video_id}")
-async def delete_video(video_id: int, force: bool = False, session: AsyncSession = Depends(db.get_session)):
+async def delete_video(
+    video_id: int,
+    force: bool = False,
+    session: AsyncSession = Depends(db.get_session),
+    current_user: MoodleUser = Depends(verify_moodle_jwt),
+):
     """Delete a video and all its annotations"""
     try:
         video = await db.get_video(session, video_id)
         if not video:
             raise HTTPException(status_code=404, detail="Video not found")
+        _authorize_video_access(video, current_user, manage=True)
 
         # Delete the local file if it exists
         try:
@@ -549,7 +595,8 @@ async def delete_video(video_id: int, force: bool = False, session: AsyncSession
 @app.post("/api/segments", response_model=models.VideoSegmentResponse)
 async def create_segment(
     segment_data: models.VideoSegmentCreate,
-    session: AsyncSession = Depends(db.get_session)
+    session: AsyncSession = Depends(db.get_session),
+    current_user: MoodleUser = Depends(verify_moodle_jwt),
 ):
     """Create a new video segment"""
     try:
@@ -557,7 +604,8 @@ async def create_segment(
         video = await db.get_video(session, segment_data.parent_video_id)
         if not video:
             raise HTTPException(status_code=404, detail="Parent video not found")
-        
+        _authorize_video_access(video, current_user, manage=True)
+
         # Validate time range
         if segment_data.start_time >= segment_data.end_time:
             raise HTTPException(status_code=400, detail="Start time must be before end time")
@@ -580,12 +628,20 @@ async def create_segment(
 @app.get("/api/segments/video/{video_id}", response_model=List[models.VideoSegmentResponse])
 async def list_video_segments(
     video_id: int,
-    session: AsyncSession = Depends(db.get_session)
+    session: AsyncSession = Depends(db.get_session),
+    current_user: MoodleUser = Depends(verify_moodle_jwt),
 ):
     """List all segments for a specific video"""
     try:
+        video = await db.get_video(session, video_id)
+        if not video:
+            raise HTTPException(status_code=404, detail="Video not found")
+        _authorize_video_access(video, current_user)
+
         segments = await db.get_video_segments(session, video_id)
         return [models.VideoSegmentResponse.model_validate(s) for s in segments]
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error listing video segments: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -594,13 +650,17 @@ async def list_video_segments(
 @app.get("/api/segments/{segment_id}", response_model=models.VideoSegmentResponse)
 async def get_segment(
     segment_id: int,
-    session: AsyncSession = Depends(db.get_session)
+    session: AsyncSession = Depends(db.get_session),
+    current_user: MoodleUser = Depends(verify_moodle_jwt),
 ):
     """Get a specific video segment"""
     try:
         segment = await db.get_video_segment(session, segment_id)
         if not segment:
             raise HTTPException(status_code=404, detail="Segment not found")
+        video = await db.get_video(session, segment.parent_video_id)
+        if video:
+            _authorize_video_access(video, current_user)
         return models.VideoSegmentResponse.model_validate(segment)
     except HTTPException:
         raise
@@ -613,17 +673,25 @@ async def get_segment(
 async def update_segment(
     segment_id: int,
     segment_update: models.VideoSegmentUpdate,
-    session: AsyncSession = Depends(db.get_session)
+    session: AsyncSession = Depends(db.get_session),
+    current_user: MoodleUser = Depends(verify_moodle_jwt),
 ):
     """Update a video segment"""
     try:
+        existing = await db.get_video_segment(session, segment_id)
+        if not existing:
+            raise HTTPException(status_code=404, detail="Segment not found")
+        video = await db.get_video(session, existing.parent_video_id)
+        if video:
+            _authorize_video_access(video, current_user, manage=True)
+
         segment = await db.update_video_segment(session, segment_id, segment_update)
         if not segment:
             raise HTTPException(status_code=404, detail="Segment not found")
-        
+
         logger.info(f"Video segment updated: ID={segment_id}")
         return models.VideoSegmentResponse.model_validate(segment)
-    
+
     except HTTPException:
         raise
     except Exception as e:
@@ -634,14 +702,18 @@ async def update_segment(
 @app.delete("/api/segments/{segment_id}")
 async def delete_segment(
     segment_id: int,
-    session: AsyncSession = Depends(db.get_session)
+    session: AsyncSession = Depends(db.get_session),
+    current_user: MoodleUser = Depends(verify_moodle_jwt),
 ):
     """Delete a video segment"""
     try:
         segment = await db.get_video_segment(session, segment_id)
         if not segment:
             raise HTTPException(status_code=404, detail="Segment not found")
-        
+        video = await db.get_video(session, segment.parent_video_id)
+        if video:
+            _authorize_video_access(video, current_user, manage=True)
+
         # Delete thumbnail file if exists
         if segment.thumbnail_path and os.path.exists(segment.thumbnail_path):
             os.remove(segment.thumbnail_path)
@@ -664,9 +736,15 @@ async def delete_segment(
 
 
 @app.get("/api/videos/local/browse")
-async def browse_local_directory(directory: str):
+async def browse_local_directory(
+    directory: str,
+    current_user: MoodleUser = Depends(require_capability("manage")),
+):
     """
-    Browse a local directory for video files
+    Browse a local directory for video files. Restricted to staff (teacher/
+    admin 'manage' capability) since this walks the server's filesystem at
+    a caller-supplied path by design, to let staff import course videos
+    already placed on disk.
 
     Args:
         directory: Absolute path to directory to browse
@@ -727,10 +805,13 @@ async def browse_local_directory(directory: str):
 async def register_local_video(
     request: models.LocalVideoRegisterRequest,
     session: AsyncSession = Depends(db.get_session),
-    current_user: MoodleUser = Depends(verify_moodle_jwt),
+    current_user: MoodleUser = Depends(require_capability("manage")),
 ):
     """
-    Register a local video file without copying it
+    Register a local video file without copying it.
+
+    Restricted to staff ('manage' capability) — same filesystem-path-import
+    concern as browse_local_directory above.
 
     Args:
         request: Request body containing filepath
@@ -859,9 +940,13 @@ async def get_managed_cohorts(
 
 @app.post("/api/projects", response_model=models.ProjectResponse)
 async def create_project(
-    project: models.ProjectCreate, session: AsyncSession = Depends(db.get_session)
+    project: models.ProjectCreate,
+    session: AsyncSession = Depends(db.get_session),
+    current_user: MoodleUser = Depends(require_capability("manage")),
 ):
-    """Create a new project"""
+    """Create a new project. Restricted to staff — a project is a shared,
+    course-wide structure (not owned by an individual user), so creating
+    one is a 'manage' action, not something any logged-in student should do."""
     try:
         new_project = await db.create_project(session, project)
         logger.info(f"Project created: {new_project.name} (ID={new_project.id})")
@@ -872,7 +957,10 @@ async def create_project(
 
 
 @app.get("/api/projects", response_model=List[models.ProjectResponse])
-async def get_all_projects(session: AsyncSession = Depends(db.get_session)):
+async def get_all_projects(
+    session: AsyncSession = Depends(db.get_session),
+    current_user: MoodleUser = Depends(verify_moodle_jwt),
+):
     """Get all projects"""
     try:
         projects = await db.get_all_projects(session)
@@ -883,7 +971,11 @@ async def get_all_projects(session: AsyncSession = Depends(db.get_session)):
 
 
 @app.get("/api/projects/{project_id}", response_model=models.ProjectResponse)
-async def get_project(project_id: int, session: AsyncSession = Depends(db.get_session)):
+async def get_project(
+    project_id: int,
+    session: AsyncSession = Depends(db.get_session),
+    current_user: MoodleUser = Depends(verify_moodle_jwt),
+):
     """Get a specific project by ID"""
     try:
         project = await db.get_project(session, project_id)
@@ -899,7 +991,9 @@ async def get_project(project_id: int, session: AsyncSession = Depends(db.get_se
 
 @app.get("/api/projects/{project_id}/videos", response_model=List[models.VideoResponse])
 async def get_project_videos(
-    project_id: int, session: AsyncSession = Depends(db.get_session)
+    project_id: int,
+    session: AsyncSession = Depends(db.get_session),
+    current_user: MoodleUser = Depends(verify_moodle_jwt),
 ):
     """Get all videos in a project, ordered by batch position"""
     try:
@@ -929,8 +1023,12 @@ async def update_project(
     project_id: int,
     project_update: models.ProjectUpdate,
     session: AsyncSession = Depends(db.get_session),
+    current_user: MoodleUser = Depends(require_capability("manage")),
 ):
-    """Update a project. Triggers ChromaDB resync if allowed_cohort_id changes."""
+    """Update a project. Triggers ChromaDB resync if allowed_cohort_id changes.
+
+    Restricted to staff — reassigning a project's cohort resyncs the shared
+    corpus, so this is a 'manage' action."""
     try:
         # Fetch current state before update
         current = await db.get_project(session, project_id)
@@ -976,9 +1074,11 @@ async def update_project(
 
 @app.delete("/api/projects/{project_id}")
 async def delete_project(
-    project_id: int, session: AsyncSession = Depends(db.get_session)
+    project_id: int,
+    session: AsyncSession = Depends(db.get_session),
+    current_user: MoodleUser = Depends(require_capability("manage")),
 ):
-    """Delete a project (sets project_id to null for associated videos)"""
+    """Delete a project (sets project_id to null for associated videos). Staff-only."""
     try:
         project = await db.get_project(session, project_id)
         if not project:
@@ -998,7 +1098,10 @@ async def delete_project(
 
 
 @app.get("/api/tags", response_model=List[models.TagResponse])
-async def get_all_tags(session: AsyncSession = Depends(db.get_session)):
+async def get_all_tags(
+    session: AsyncSession = Depends(db.get_session),
+    current_user: MoodleUser = Depends(verify_moodle_jwt),
+):
     """Get all available tags ordered by usage count"""
     try:
         tags = await db.get_all_tags(session)
@@ -1009,7 +1112,11 @@ async def get_all_tags(session: AsyncSession = Depends(db.get_session)):
 
 
 @app.get("/api/tags/{tag_name}", response_model=models.TagResponse)
-async def get_tag(tag_name: str, session: AsyncSession = Depends(db.get_session)):
+async def get_tag(
+    tag_name: str,
+    session: AsyncSession = Depends(db.get_session),
+    current_user: MoodleUser = Depends(verify_moodle_jwt),
+):
     """Get a specific tag by name"""
     try:
         tag = await db.get_tag_by_name(session, tag_name)
@@ -1021,6 +1128,28 @@ async def get_tag(tag_name: str, session: AsyncSession = Depends(db.get_session)
     except Exception as e:
         logger.error(f"Error getting tag: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def _authorize_annotation_access(annotation, current_user: MoodleUser, *, manage: bool = False) -> None:
+    """Reject cross-user access to an annotation.
+
+    An annotation's owner (the student who recorded it) may always access it.
+    Otherwise the caller needs 'viewall' (teachers/admins, read-only actions)
+    or 'manage' (editing teachers/admins, mutating actions) per the
+    capability map in auth.MoodleUser.has_capability.
+
+    owner_id of 0 means the row predates user_id tracking (moodle_db.py
+    defaults missing user_id to 0 on insert) — there's no real owner to
+    compare against, so those legacy rows are left accessible rather than
+    locked out.
+    """
+    owner_id = getattr(annotation, "user_id", None)
+    if not owner_id or owner_id == current_user.userid:
+        return
+
+    required_capability = "manage" if manage else "viewall"
+    if not current_user.has_capability(required_capability):
+        raise HTTPException(status_code=403, detail="Not authorized to access this annotation")
 
 
 @app.post("/api/annotations", response_model=models.AnnotationResponse)
@@ -1122,6 +1251,7 @@ async def list_tasks(
     craft: Optional[str] = None,
     published: Optional[int] = None,
     session: AsyncSession = Depends(db.get_session),
+    current_user: MoodleUser = Depends(verify_moodle_jwt),
 ):
     """List tasks with optional craft and published filter."""
     try:
@@ -1137,7 +1267,9 @@ async def list_tasks(
 
 @app.post("/api/tasks", response_model=models.TaskResponse)
 async def create_task(
-    task_data: models.TaskCreate, session: AsyncSession = Depends(db.get_session)
+    task_data: models.TaskCreate,
+    session: AsyncSession = Depends(db.get_session),
+    current_user: MoodleUser = Depends(verify_moodle_jwt),
 ):
     """Create a new task (scoped per craft domain)."""
     try:
@@ -1164,9 +1296,13 @@ async def create_task(
 
 @app.delete("/api/tasks/{task_name}")
 async def delete_task(
-    task_name: str, craft: str, session: AsyncSession = Depends(db.get_session)
+    task_name: str,
+    craft: str,
+    session: AsyncSession = Depends(db.get_session),
+    current_user: MoodleUser = Depends(require_capability("manage")),
 ):
-    """Delete a task by name and craft."""
+    """Delete a task by name and craft. Staff-only — not exposed in the UI,
+    and deleting a task definition affects everyone using that craft domain."""
     try:
         deleted = await db.delete_task(session, task_name, craft)
         if not deleted:
@@ -1426,43 +1562,73 @@ async def transcribe_only(
                 pass
 
 
-@app.post("/api/annotations/{annotation_id}/retranscribe")
-async def retranscribe_annotation(
+@app.post("/api/annotations/{annotation_id}/rerecord")
+async def rerecord_annotation(
     annotation_id: int,
+    audio_blob: UploadFile = File(...),
     session: AsyncSession = Depends(db.get_session),
     current_user: MoodleUser = Depends(verify_moodle_jwt),
 ):
-    """Re-run Whisper on the annotation's existing audio file.
+    """Replace an annotation's audio with a freshly recorded take.
 
-    Useful when the original transcription was garbled but the recording is
-    fine. The audio blob on disk is kept; only the transcription and its
-    downstream derived fields are recomputed.
+    Re-running Whisper on unchanged audio always yields the same
+    transcription, so this endpoint instead lets the user re-voice the
+    segment: the new recording replaces the stored audio file, and the
+    transcription is recomputed from it (overwriting, not appending to,
+    the previous transcription).
     """
-    _enforce_rate_limit(f"retranscribe:{current_user.userid}", max_requests=30, window_seconds=3600)
+    _enforce_rate_limit(f"rerecord:{current_user.userid}", max_requests=30, window_seconds=3600)
 
     annotation = await db.get_annotation(session, annotation_id)
     if not annotation:
         raise HTTPException(status_code=404, detail="Annotation not found")
+    _authorize_annotation_access(annotation, current_user, manage=True)
 
-    audio_path = str(annotation.audio_filepath or "")
-    if not audio_path or not os.path.exists(audio_path):
-        raise HTTPException(
-            status_code=404,
-            detail="Original audio file is no longer available on disk",
-        )
+    try:
+        audio_bytes = await audio_blob.read()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to read audio data: {str(e)}")
 
-    # Clear downstream fields so the UI drops stale coverage/tag/review data.
+    _raw_ext = Path(audio_blob.filename or "audio.webm").suffix.lower()
+    uploaded_ext = _raw_ext if _raw_ext in _ALLOWED_AUDIO_EXTS else ".webm"
+    new_filename = f"annotation_{uuid.uuid4().hex}{uploaded_ext}"
+    new_audio_path = AUDIO_DIR / new_filename
+
+    async with aiofiles.open(new_audio_path, "wb") as f:
+        await f.write(audio_bytes)
+
+    old_audio_path = str(annotation.audio_filepath or "")
+
+    # Point the annotation at the new audio and clear downstream fields so
+    # the UI drops stale transcription/coverage/tag/review data.
+    # NOTE: audio_filepath is deliberately NOT a field on models.AnnotationUpdate
+    # (that schema is accepted as a raw request body by PUT /api/annotations/{id},
+    # so exposing a filesystem path there would let a client point an
+    # annotation at an arbitrary path — which the deletion below would then
+    # remove from disk). Passed as a plain dict instead, since db.update_annotation
+    # forwards non-pydantic values through to moodle_db unchanged.
     await db.update_annotation(
         session,
         annotation_id,
-        models.AnnotationUpdate(
-            transcription_status="processing",
-            transcription=None,
-        ),
+        {
+            "audio_filepath": str(new_audio_path),
+            "transcription_status": "processing",
+            "transcription": None,
+        },
     )
 
+    # Defense in depth: only ever delete a file that resolves inside AUDIO_DIR,
+    # even though audio_filepath is no longer client-settable.
+    if old_audio_path and old_audio_path != str(new_audio_path):
+        try:
+            resolved_old = Path(old_audio_path).resolve()
+            if resolved_old.is_relative_to(AUDIO_DIR.resolve()) and resolved_old.exists():
+                os.remove(resolved_old)
+        except Exception as e:
+            logger.warning(f"Failed to remove old audio file {old_audio_path}: {e}")
+
     import asyncio
-    asyncio.create_task(process_transcription(annotation_id, audio_path))
+    asyncio.create_task(process_transcription(annotation_id, str(new_audio_path)))
     return {"status": "queued", "annotation_id": annotation_id}
 
 
@@ -1482,6 +1648,7 @@ async def regenerate_extended_transcript(
     annotation = await db.get_annotation(session, annotation_id)
     if not annotation:
         raise HTTPException(status_code=404, detail="Annotation not found")
+    _authorize_annotation_access(annotation, current_user, manage=True)
 
     await manager.broadcast({
         "type": "extended_transcript_complete",
@@ -1508,6 +1675,7 @@ async def review_annotation(
         annotation = await db.get_annotation(session, annotation_id)
         if not annotation:
             raise HTTPException(status_code=404, detail="Annotation not found")
+        _authorize_annotation_access(annotation, current_user, manage=True)
 
         transcription_text = (
             str(annotation.transcription)
@@ -1575,7 +1743,9 @@ async def review_annotation(
 
 @app.post("/api/annotations/{annotation_id}/tags")
 async def tag_annotation(
-    annotation_id: int, session: AsyncSession = Depends(db.get_session)
+    annotation_id: int,
+    session: AsyncSession = Depends(db.get_session),
+    current_user: MoodleUser = Depends(verify_moodle_jwt),
 ):
     """
     Trigger AI tagging to extract metadata from an elicitation transcription.
@@ -1589,6 +1759,7 @@ async def tag_annotation(
         annotation = await db.get_annotation(session, annotation_id)
         if not annotation:
             raise HTTPException(status_code=404, detail="Annotation not found")
+        _authorize_annotation_access(annotation, current_user, manage=True)
 
         transcription_text = (
             str(annotation.transcription)
@@ -1688,8 +1859,11 @@ async def tag_annotation(
 
 
 @app.get("/api/diagnostics/tagging-llm")
-async def tagging_llm_diagnostics():
-    """Return last LLM tagging request diagnostics."""
+async def tagging_llm_diagnostics(
+    current_user: MoodleUser = Depends(require_capability("manage")),
+):
+    """Return last LLM tagging request diagnostics. Staff-only — this can
+    surface internal error text from the LLM pipeline."""
     import tagging_service
 
     return {
@@ -2240,11 +2414,23 @@ async def process_tagging(
 
 @app.get("/api/annotations", response_model=List[models.AnnotationResponse])
 async def list_annotations(
-    video_id: Optional[int] = None, session: AsyncSession = Depends(db.get_session)
+    video_id: Optional[int] = None,
+    session: AsyncSession = Depends(db.get_session),
+    current_user: MoodleUser = Depends(verify_moodle_jwt),
 ):
     """Get annotations, optionally filtered by video_id"""
     try:
         if video_id:
+            video = await db.get_video(session, video_id)
+            if not video:
+                raise HTTPException(status_code=404, detail="Video not found")
+            video_owner_id = getattr(video, "user_id", None)
+            if (
+                video_owner_id
+                and video_owner_id != current_user.userid
+                and not current_user.has_capability("viewall")
+            ):
+                raise HTTPException(status_code=403, detail="Not authorized to access this video's annotations")
             annotations = await db.get_annotations_by_video(session, video_id)
         else:
             # Get all annotations (not typically used)
@@ -2256,6 +2442,8 @@ async def list_annotations(
 
         return response_annotations
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error listing annotations: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -2263,13 +2451,16 @@ async def list_annotations(
 
 @app.get("/api/annotations/{annotation_id}", response_model=models.AnnotationResponse)
 async def get_annotation(
-    annotation_id: int, session: AsyncSession = Depends(db.get_session)
+    annotation_id: int,
+    session: AsyncSession = Depends(db.get_session),
+    current_user: MoodleUser = Depends(verify_moodle_jwt),
 ):
     """Get annotation by ID"""
     try:
         annotation = await db.get_annotation(session, annotation_id)
         if not annotation:
             raise HTTPException(status_code=404, detail="Annotation not found")
+        _authorize_annotation_access(annotation, current_user)
 
         return models.AnnotationResponse.model_validate(annotation)
 
@@ -2285,9 +2476,15 @@ async def update_annotation(
     annotation_id: int,
     update_data: models.AnnotationUpdate,
     session: AsyncSession = Depends(db.get_session),
+    current_user: MoodleUser = Depends(verify_moodle_jwt),
 ):
     """Update annotation (typically transcription)"""
     try:
+        existing = await db.get_annotation(session, annotation_id)
+        if not existing:
+            raise HTTPException(status_code=404, detail="Annotation not found")
+        _authorize_annotation_access(existing, current_user, manage=True)
+
         annotation = await db.update_annotation(session, annotation_id, update_data)
         if not annotation:
             raise HTTPException(status_code=404, detail="Annotation not found")
@@ -2303,13 +2500,16 @@ async def update_annotation(
 
 @app.delete("/api/annotations/{annotation_id}")
 async def delete_annotation(
-    annotation_id: int, session: AsyncSession = Depends(db.get_session)
+    annotation_id: int,
+    session: AsyncSession = Depends(db.get_session),
+    current_user: MoodleUser = Depends(verify_moodle_jwt),
 ):
     """Delete an annotation"""
     try:
         annotation = await db.get_annotation(session, annotation_id)
         if not annotation:
             raise HTTPException(status_code=404, detail="Annotation not found")
+        _authorize_annotation_access(annotation, current_user, manage=True)
 
         # Delete audio file
         if os.path.exists(str(annotation.audio_filepath)):
@@ -2339,6 +2539,7 @@ async def submit_feedback(
     annotation_id: int,
     feedback_data: models.FeedbackRequest,
     session: AsyncSession = Depends(db.get_session),
+    current_user: MoodleUser = Depends(verify_moodle_jwt),
 ):
     """Submit user feedback for annotation quality"""
     try:
@@ -2346,6 +2547,7 @@ async def submit_feedback(
         annotation = await db.get_annotation(session, annotation_id)
         if not annotation:
             raise HTTPException(status_code=404, detail="Annotation not found")
+        _authorize_annotation_access(annotation, current_user, manage=True)
 
         # Convert feedback_choices array to JSON string
         feedback_choices_json = json.dumps(feedback_data.feedback_choices)
@@ -2379,12 +2581,20 @@ async def submit_feedback(
 @app.post("/api/maintenance/auto-trigger-tagging")
 async def auto_trigger_tagging_maintenance(
     session: AsyncSession = Depends(db.get_session),
+    current_user: MoodleUser = Depends(require_capability("manage")),
 ):
     """
     Maintenance endpoint that auto-triggers tagging for all annotations
     where tagging_trigger_number is 0 (i.e., never been tagged yet).
     Returns count of annotations triggered.
+
+    Staff-only and rate-limited: this fires one paid LLM call per untagged
+    annotation in the whole database, so it must not be callable by anyone
+    without a login, and not repeatedly in a tight loop.
     """
+    _enforce_rate_limit(
+        f"auto_tag_maintenance:{current_user.userid}", max_requests=5, window_seconds=3600
+    )
     try:
         logger.info(
             "Starting maintenance: auto-triggering tagging for annotations with trigger_count=0"
@@ -2462,11 +2672,12 @@ async def auto_trigger_tagging_maintenance(
 @app.post("/api/maintenance/deduplicate-tags")
 async def deduplicate_tags_maintenance(
     session: AsyncSession = Depends(db.get_session),
+    current_user: MoodleUser = Depends(require_capability("manage")),
 ):
     """
     Maintenance endpoint that deduplicates tags across all annotations.
     Removes duplicate (name, category) pairs while preserving one instance.
-    Returns count of annotations that had duplicates removed.
+    Returns count of annotations that had duplicates removed. Staff-only.
     """
     try:
         logger.info("Starting maintenance: deduplicating tags across all annotations")
@@ -2531,15 +2742,34 @@ async def deduplicate_tags_maintenance(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _verify_internal_token(request: Request) -> None:
+    """Gate service-to-service endpoints (e.g. the CraftPilot RAG backend
+    calling back into this API) behind a shared secret sent as
+    'X-Internal-Token'. Unlike admin_routes._verify_secret, this fails
+    CLOSED if INTERNAL_API_TOKEN is unset — this guards a full-corpus data
+    dump, so a missing secret must not silently mean "open to anyone".
+    """
+    expected = os.getenv("INTERNAL_API_TOKEN", "")
+    provided = request.headers.get("X-Internal-Token", "")
+    if not expected or not provided or not secrets.compare_digest(provided, expected):
+        raise HTTPException(status_code=403, detail="Invalid internal token")
+
+
 @app.get("/api/export/corpus")
 async def export_corpus(
+    request: Request,
     craft: Optional[str] = None,
     only_transcribed: bool = True,
     only_salient: bool = False,
     session: AsyncSession = Depends(db.get_session),
+    _: None = Depends(_verify_internal_token),
 ):
     """
     Bulk export of all annotations across all videos for RAG evaluation.
+
+    Not a browser-facing endpoint — the frontend never calls this. It's
+    consumed server-to-server by the RAG backend, so it's gated by a shared
+    internal token rather than a per-user Moodle login.
 
     Query params:
       craft           – filter by craft domain (e.g. 'glassblowing')
@@ -2655,13 +2885,16 @@ async def export_corpus(
 
 @app.get("/api/export/{video_id}")
 async def export_annotations(
-    video_id: int, session: AsyncSession = Depends(db.get_session)
+    video_id: int,
+    session: AsyncSession = Depends(db.get_session),
+    current_user: MoodleUser = Depends(verify_moodle_jwt),
 ):
     """Export annotations for a video as JSON"""
     try:
         video = await db.get_video(session, video_id)
         if not video:
             raise HTTPException(status_code=404, detail="Video not found")
+        _authorize_video_access(video, current_user)
 
         annotations = await db.get_annotations_by_video(session, video_id)
 

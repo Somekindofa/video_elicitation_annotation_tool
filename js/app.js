@@ -201,9 +201,9 @@ const TRANSLATIONS = {
         coverageAppendRecord: 'Add to transcription',
         coverageAppendStop: 'Stop and append',
         coverageAppendTitle: 'Record a top-up clip and append it to the existing transcription.',
-        coverageRetranscribe: 'Re-transcribe',
-        coverageRetranscribeTitle: 'Re-run Whisper on the existing audio. The current transcription will be replaced.',
-        coverageRetranscribeConfirm: 'Re-run the transcription for this recording?\n\nThe current transcription will be replaced.',
+        coverageRerecordStop: 'Stop recording',
+        coverageRerecordTitle: 'Re-record your voice for this segment. The current audio and transcription will be replaced.',
+        coverageRerecordConfirm: 'Re-record this segment?\n\nThe current audio and transcription will be permanently replaced.',
 
         // Custom craft domain UI
         addCraftPlaceholder: 'New domain name',
@@ -409,9 +409,9 @@ const TRANSLATIONS = {
         coverageAppendRecord: 'Ajouter à la transcription',
         coverageAppendStop: 'Arrêter et ajouter',
         coverageAppendTitle: 'Enregistre un complément audio et l\'ajoute à la transcription existante.',
-        coverageRetranscribe: 'Re-transcrire',
-        coverageRetranscribeTitle: 'Relance Whisper sur l\'audio existant. La transcription sera remplacée.',
-        coverageRetranscribeConfirm: 'Relancer la transcription de cet enregistrement ?\n\nLa transcription actuelle sera remplacée.',
+        coverageRerecordStop: 'Arrêter l\'enregistrement',
+        coverageRerecordTitle: 'Réenregistrez votre voix pour ce segment. L\'audio et la transcription actuels seront remplacés.',
+        coverageRerecordConfirm: 'Réenregistrer ce segment ?\n\nL\'audio et la transcription actuels seront définitivement remplacés.',
 
         // Custom craft domain UI
         addCraftPlaceholder: 'Nouveau domaine',
@@ -627,6 +627,13 @@ const state = {
     },
     // Append-to-transcript recording (per-annotation top-up).
     appendMode: {
+        annotationId: null,
+        mediaRecorder: null,
+        chunks: [],
+        stream: null,
+    },
+    // Re-record recording (replaces the annotation's audio + transcription).
+    reRecordMode: {
         annotationId: null,
         mediaRecorder: null,
         chunks: [],
@@ -1280,7 +1287,8 @@ function setupEventListeners() {
 // WebSocket Connection
 function connectWebSocket() {
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${wsProtocol}//${window.location.host}${APP_BASE_PATH}/ws`;
+    const tokenParam = MOODLE_JWT ? `?token=${encodeURIComponent(MOODLE_JWT)}` : '';
+    const wsUrl = `${wsProtocol}//${window.location.host}${APP_BASE_PATH}/ws${tokenParam}`;
 
     state.websocket = new WebSocket(wsUrl);
 
@@ -2132,17 +2140,19 @@ function renderAnnotations() {
                     <button class="btn btn-icon btn-small play-btn" onclick="seekToAnnotation(${annotation.start_time})" title="${t('jumpToTime')}">
                         <i class="fas fa-play"></i>
                     </button>
-                    <button class="btn btn-icon btn-small" onclick="startEditTranscription(${annotation.id})" title="${t('editTranscription')}">
-                        <i class="fas fa-pencil-alt"></i>
-                    </button>
+                    <div class="annotation-edit-group">
+                        <button class="btn btn-icon btn-small" onclick="startEditTranscription(${annotation.id})" title="${t('editTranscription')}">
+                            <i class="fas fa-pencil-alt"></i>
+                        </button>
+                        ${(() => {
+                            const score = state.coverage && state.coverage.scores && state.coverage.scores[annotation.id];
+                            const anyAbsent = score && COVERAGE_PHASES.some(p => ((score[p] || {}).status || 'absent') === 'absent');
+                            return anyAbsent ? renderRerecordButton(annotation) : '';
+                        })()}
+                    </div>
                     <button class="btn btn-icon btn-small" onclick="deleteAnnotation(${annotation.id})" title="${t('deleteAnnotation')}">
                         <i class="fas fa-trash"></i>
                     </button>
-                    ${(() => {
-                        const score = state.coverage && state.coverage.scores && state.coverage.scores[annotation.id];
-                        const anyAbsent = score && COVERAGE_PHASES.some(p => ((score[p] || {}).status || 'absent') === 'absent');
-                        return anyAbsent ? `<button class="btn btn-icon btn-small coverage-action-btn coverage-action-btn--secondary" onclick="event.stopPropagation(); retranscribeAnnotation(${annotation.id})" title="${escapeHtml(t('coverageRetranscribeTitle'))}"><i class="fa-solid fa-microphone"></i></button>` : '';
-                    })()}
                 </div>
             </div>
             <div class="annotation-transcription">
@@ -4966,7 +4976,7 @@ window.removeVideoFromProject = removeVideoFromProject;
 window.deleteVideo = deleteVideo;
 window.openTutorialModal = openTutorialModal;
 window.toggleAppendRecording = toggleAppendRecording;
-window.retranscribeAnnotation = retranscribeAnnotation;
+window.reRecordAnnotation = reRecordAnnotation;
 
 // =============================================================================
 // TUTORIAL / HELP SYSTEM
@@ -5529,23 +5539,104 @@ function renderCoveragePanelActions(annotation, score) {
         </div>`;
 }
 
-async function retranscribeAnnotation(annotationId) {
-    if (!confirm(t('coverageRetranscribeConfirm'))) return;
-    try {
-        const resp = await fetch(`${API_BASE}/api/annotations/${annotationId}/retranscribe`, {
-            method: 'POST',
-            headers: MOODLE_JWT ? { 'Authorization': `Bearer ${MOODLE_JWT}` } : {},
-        });
-        if (!resp.ok) throw new Error(await resp.text());
-        // Drop cached score so the next coverage refresh rescores against the
-        // new transcript once WS signals completion.
-        if (state.coverage && state.coverage.scores) {
-            delete state.coverage.scores[annotationId];
-        }
-        showToast('Transcription', 'Re-transcription en cours…', 'info');
-    } catch (e) {
-        showToast('Erreur', `Re-transcription: ${e.message}`, 'error');
+// Header mic button: idle vs. mid-recording state for the re-record flow.
+function renderRerecordButton(annotation) {
+    const isReRecording = state.reRecordMode && state.reRecordMode.annotationId === annotation.id;
+    const icon = isReRecording ? 'fa-stop' : 'fa-microphone';
+    const title = isReRecording ? t('coverageRerecordStop') : t('coverageRerecordTitle');
+    const cls = isReRecording
+        ? 'btn btn-icon btn-small coverage-action-btn coverage-action-btn--secondary coverage-action-btn--recording'
+        : 'btn btn-icon btn-small coverage-action-btn coverage-action-btn--secondary';
+    return `<button class="${cls}" id="rerecord-btn-${annotation.id}" onclick="event.stopPropagation(); reRecordAnnotation(${annotation.id})" title="${escapeHtml(title)}"><i class="fa-solid ${icon}"></i></button>`;
+}
+
+async function reRecordAnnotation(annotationId) {
+    const mode = state.reRecordMode;
+
+    // Already recording for this annotation → stop + upload + retranscribe.
+    if (mode.annotationId === annotationId && mode.mediaRecorder) {
+        try {
+            mode.mediaRecorder.stop();
+        } catch (_) { /* ignore */ }
+        return;
     }
+
+    // Already recording for a *different* annotation — block to avoid confusion.
+    if (mode.annotationId && mode.annotationId !== annotationId) {
+        showToast('Enregistrement', 'Un autre réenregistrement est déjà en cours.', 'warning');
+        return;
+    }
+
+    // Destructive action: the existing audio and transcription are replaced,
+    // not appended to — make sure the user means it.
+    if (!confirm(t('coverageRerecordConfirm'))) return;
+
+    const ann = state.annotations.find(a => a.id === annotationId);
+    if (!ann) return;
+
+    let stream;
+    try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (e) {
+        showToast('Erreur micro', 'Impossible d\'accéder au microphone', 'error');
+        return;
+    }
+
+    const recorder = new MediaRecorder(stream);
+    mode.annotationId = annotationId;
+    mode.mediaRecorder = recorder;
+    mode.mimeType = recorder.mimeType || 'audio/webm';
+    mode.chunks = [];
+    mode.stream = stream;
+
+    recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) mode.chunks.push(e.data);
+    };
+
+    recorder.onstop = async () => {
+        const chunks = mode.chunks.slice();
+        try { stream.getTracks().forEach(t => t.stop()); } catch (_) {}
+        mode.annotationId = null;
+        mode.mediaRecorder = null;
+        mode.chunks = [];
+        mode.stream = null;
+
+        // Show processing state on the button.
+        const btn = document.getElementById(`rerecord-btn-${annotationId}`);
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+        }
+
+        try {
+            const actualMime = mode.mimeType || 'audio/webm';
+            const ext = actualMime.startsWith('audio/ogg') ? 'ogg' : 'webm';
+            const blob = new Blob(chunks, { type: actualMime });
+            const form = new FormData();
+            form.append('audio_blob', blob, `rerecord.${ext}`);
+            const headers = {};
+            if (MOODLE_JWT) headers['Authorization'] = `Bearer ${MOODLE_JWT}`;
+
+            const resp = await fetch(`${API_BASE}/api/annotations/${annotationId}/rerecord`, {
+                method: 'POST', headers, body: form,
+            });
+            if (!resp.ok) throw new Error(await resp.text());
+
+            // Drop cached score so the next coverage refresh rescores against
+            // the new transcript once WS signals completion.
+            if (state.coverage && state.coverage.scores) {
+                delete state.coverage.scores[annotationId];
+            }
+            showToast('Transcription', 'Nouvel enregistrement en cours de transcription…', 'info');
+        } catch (e) {
+            showToast('Erreur', `Réenregistrement: ${e.message}`, 'error');
+        } finally {
+            renderAnnotations();
+        }
+    };
+
+    recorder.start();
+    renderAnnotations();
 }
 
 async function toggleAppendRecording(annotationId) {

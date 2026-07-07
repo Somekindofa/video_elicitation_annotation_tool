@@ -873,6 +873,28 @@ body {
     gap: var(--spacing-xs);
 }
 
+/* Groups the manual (pencil) and voice (mic) transcription-edit buttons
+   inside one oval so they read as two variants of the same action. */
+.annotation-edit-group {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    background: var(--surface-hover);
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    padding: 2px;
+}
+
+.annotation-edit-group .btn-icon {
+    border: none;
+    background: transparent;
+    box-shadow: none;
+}
+
+.annotation-edit-group .btn-icon:hover {
+    background: var(--surface);
+}
+
 .annotation-transcription {
     font-size: 0.875rem;
     color: var(--text-primary);
