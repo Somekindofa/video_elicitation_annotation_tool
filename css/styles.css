@@ -1033,12 +1033,12 @@ body {
 }
 
 /* .btn i's margin-right (below) is meant for icon+label buttons; on an
-   icon-only button it just shoves the glyph left of center. .btn-small
-   also re-applies asymmetric left/right padding after .btn-icon's even
-   padding. Both are two-class selectors so they reliably win regardless
-   of source order, fixing every icon-only button (play/edit/delete/etc.),
-   not just the ones inside .annotation-edit-group. */
-.btn-icon i {
+   icon-only button it just shoves the glyph left of center. ".btn-icon i"
+   alone is a class + a tag, the SAME specificity as ".btn i" below, so
+   whichever rule is physically later in the file wins the tie — this
+   previously lost that tie. ".btn.btn-icon i" (two classes + a tag) has
+   strictly higher specificity, so it wins regardless of source order. */
+.btn.btn-icon i {
     margin-right: 0;
 }
 
