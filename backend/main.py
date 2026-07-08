@@ -194,6 +194,9 @@ async def startup_event():
     await moodle_db.ensure_crafts_table()
     logger.info("Custom crafts table verified")
 
+    await moodle_db.ensure_session_advisories_table()
+    logger.info("Session advisories table verified")
+
     # Preload Whisper model in background
     import asyncio
 

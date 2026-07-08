@@ -12,15 +12,21 @@ scores around; the backend keeps no state.
 
 from __future__ import annotations
 
-from typing import Literal
+import json
+import logging
+from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from auth import MoodleUser, verify_moodle_jwt
 import coverage_detector
+import database_compat as db
+import session_advisory_service
 
 router = APIRouter(prefix="/api/coverage", tags=["coverage"])
+
+logger = logging.getLogger(__name__)
 
 
 # --- Schemas ---------------------------------------------------------------
@@ -73,16 +79,33 @@ class PhaseScoreIn(BaseModel):
     status: PhaseStatus = "absent"
 
 
+class AnnotationForAdvisory(BaseModel):
+    id: int
+    transcription: str = Field("", max_length=10_000)
+
+
 class SummaryRequest(BaseModel):
+    video_id: int
     transcript: str = Field(..., min_length=1, max_length=60_000)
     phase_scores: dict[Literal["quoi", "comment", "pourquoi"], PhaseScoreIn]
     lang: Literal["fr", "en"] = "fr"
+    annotations: list[AnnotationForAdvisory] = Field(default_factory=list, max_length=500)
 
 
 class SummaryResponse(BaseModel):
     summary: str
     weakest_phase: Literal["quoi", "comment", "pourquoi"] | None = None
     follow_ups: list[str] = Field(default_factory=list)
+    suggestions: list[str] = Field(default_factory=list)
+    concerns: list[str] = Field(default_factory=list)
+    advisory_flag: Optional[str] = None
+    source: Literal["ai", "fallback"] = "fallback"
+    advisory_id: Optional[int] = None
+
+
+class AdvisoryDecisionRequest(BaseModel):
+    advisory_id: int
+    decision: Literal["continued", "ended"]
 
 
 # --- Routes ----------------------------------------------------------------
@@ -218,7 +241,50 @@ def _build_summary(phase_scores: dict[str, PhaseScoreIn], lang: str = "fr") -> d
 @router.post("/summary", response_model=SummaryResponse)
 async def summary_endpoint(
     req: SummaryRequest,
+    user: MoodleUser = Depends(verify_moodle_jwt),
+) -> dict:
+    """
+    Generate a session summary from the phase scores, localized to req.lang,
+    augmented with an AI advisory when available (falls back to the
+    deterministic summary on any guardrail/API failure — see
+    session_advisory_service.generate_session_advisory).
+    """
+    base = _build_summary(req.phase_scores, req.lang)
+
+    advisory = await session_advisory_service.generate_session_advisory(
+        annotations=[a.model_dump() for a in req.annotations],
+        lang=req.lang,
+    )
+
+    if advisory["source"] != "ai":
+        return base
+
+    row = await db.create_session_advisory(
+        video_id=req.video_id,
+        user_id=user.userid,
+        suggestions=json.dumps(advisory["suggestions"]),
+        concerns=json.dumps(advisory["concerns"]),
+        advisory_flag=advisory["advisory_flag"],
+        guard_verdict=advisory["guard_verdict"],
+    )
+
+    return {
+        **base,
+        "suggestions": advisory["suggestions"],
+        "concerns": advisory["concerns"],
+        "advisory_flag": advisory["advisory_flag"],
+        "source": "ai",
+        "advisory_id": row["id"],
+    }
+
+
+@router.post("/advisory-decision")
+async def advisory_decision_endpoint(
+    req: AdvisoryDecisionRequest,
     _user: MoodleUser = Depends(verify_moodle_jwt),
 ) -> dict:
-    """Generate a session summary from the phase scores, localized to req.lang."""
-    return _build_summary(req.phase_scores, req.lang)
+    """Record whether the user continued or ended the session after seeing the AI advisory."""
+    row = await db.record_advisory_decision(req.advisory_id, req.decision)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Session advisory not found")
+    return {"status": "success"}
