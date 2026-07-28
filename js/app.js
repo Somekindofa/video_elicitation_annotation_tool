@@ -2178,6 +2178,8 @@ function renderAnnotations() {
 
         container.appendChild(item);
     });
+
+    renderAnnotationPips();
 }
 
 function escapeHtml(str) {
