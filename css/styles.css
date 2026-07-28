@@ -4538,6 +4538,13 @@ input:focus, textarea:focus, select:focus {
     line-height: 1.5;
 }
 
+.session-summary-body .advisory-decision-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+}
+.session-summary-body .advisory-decision-actions .btn { flex: 1; }
+
 /* Coverage actions buttons (action prompts) -------------- */
 .coverage-actions {
     background: var(--surface);

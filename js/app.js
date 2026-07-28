@@ -187,6 +187,10 @@ const TRANSLATIONS = {
         coverageFollowUpsLabel: 'To go further',
         coverageSessionComplete: 'Session complete',
         coverageSummarizing: 'Summarizing…',
+        advisorySuggestionsLabel: 'AI suggestions',
+        advisoryConcernsLabel: 'Points of attention',
+        advisoryContinueBtn: 'Continue annotating',
+        advisoryEndBtn: 'End session anyway',
 
         // Per-annotation coverage panel
         coverageAnalyzing: 'Analyzing…',
@@ -395,6 +399,10 @@ const TRANSLATIONS = {
         coverageFollowUpsLabel: 'Pour aller plus loin',
         coverageSessionComplete: 'Session complète',
         coverageSummarizing: 'Synthèse…',
+        advisorySuggestionsLabel: 'Suggestions de l\'IA',
+        advisoryConcernsLabel: 'Points d\'attention',
+        advisoryContinueBtn: 'Continuer l\'annotation',
+        advisoryEndBtn: 'Terminer la session quand même',
 
         // Per-annotation coverage panel
         coverageAnalyzing: 'Analyse en cours…',
@@ -2170,6 +2178,8 @@ function renderAnnotations() {
 
         container.appendChild(item);
     });
+
+    renderAnnotationPips();
 }
 
 function escapeHtml(str) {
@@ -5139,13 +5149,23 @@ async function _coverageAggregate(scoresList) {
     return resp.json();
 }
 
-async function _coverageSummary(transcript, phase_scores) {
+async function _coverageSummary(transcript, phase_scores, video_id, annotations) {
     const resp = await fetch(`${API_BASE}/api/coverage/summary`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(MOODLE_JWT ? { 'Authorization': `Bearer ${MOODLE_JWT}` } : {}) },
-        body: JSON.stringify({ transcript, phase_scores, lang: currentLang }),
+        body: JSON.stringify({ transcript, phase_scores, lang: currentLang, video_id, annotations }),
     });
     if (!resp.ok) throw new Error(`summary ${resp.status}`);
+    return resp.json();
+}
+
+async function _coverageAdvisoryDecision(advisoryId, decision) {
+    const resp = await fetch(`${API_BASE}/api/coverage/advisory-decision`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(MOODLE_JWT ? { 'Authorization': `Bearer ${MOODLE_JWT}` } : {}) },
+        body: JSON.stringify({ advisory_id: advisoryId, decision }),
+    });
+    if (!resp.ok) throw new Error(`advisory-decision ${resp.status}`);
     return resp.json();
 }
 
@@ -5292,7 +5312,10 @@ async function onFinishSessionClick() {
     if (btn) { btn.disabled = true; btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${t('coverageSummarizing')}`; }
 
     try {
-        const res = await _coverageSummary(transcript, phase_scores);
+        const annotationsPayload = sorted
+            .filter(a => (a.transcription || '').trim())
+            .map(a => ({ id: a.id, transcription: a.transcription }));
+        const res = await _coverageSummary(transcript, phase_scores, state.currentVideoId, annotationsPayload);
         renderSessionSummary(res);
     } catch (e) {
         showToast(
@@ -5305,12 +5328,13 @@ async function onFinishSessionClick() {
     }
 }
 
-function renderSessionSummary({ summary, weakest_phase, follow_ups }) {
+function renderSessionSummary(data) {
+    const { summary, weakest_phase, follow_ups, suggestions, concerns, source, advisory_id } = data;
     const card = document.getElementById('sessionSummaryCard');
     const body = document.getElementById('sessionSummaryBody');
     if (!card || !body) return;
     // Cache so refreshDynamicUIStrings() can re-render on language switch.
-    state.coverage.lastSummary = { summary, weakest_phase, follow_ups };
+    state.coverage.lastSummary = data;
 
     let html = `<div class="summary-text">${escapeHtml(summary || '')}</div>`;
     if (follow_ups && follow_ups.length) {
@@ -5324,10 +5348,52 @@ function renderSessionSummary({ summary, weakest_phase, follow_ups }) {
     } else {
         html += `<div class="followups-label">${t('coverageSessionComplete')}</div>`;
     }
+
+    const isAiAdvisory = source === 'ai';
+    if (isAiAdvisory) {
+        if (suggestions && suggestions.length) {
+            html += `<div class="followups-label">${t('advisorySuggestionsLabel')}</div>`;
+            html += `<ul class="followups advisory-suggestions">${
+                suggestions.map(s => `<li>${escapeHtml(s)}</li>`).join('')
+            }</ul>`;
+        }
+        if (concerns && concerns.length) {
+            html += `<div class="followups-label">${t('advisoryConcernsLabel')}</div>`;
+            html += `<ul class="followups advisory-concerns">${
+                concerns.map(c => `<li>${escapeHtml(c)}</li>`).join('')
+            }</ul>`;
+        }
+        html += `<div class="advisory-decision-actions">
+            <button class="btn btn-primary" id="advisoryContinueBtn">${escapeHtml(t('advisoryContinueBtn'))}</button>
+            <button class="btn btn-secondary" id="advisoryEndBtn">${escapeHtml(t('advisoryEndBtn'))}</button>
+        </div>`;
+    }
+
     body.innerHTML = html;
+
+    if (isAiAdvisory) {
+        const continueBtn = document.getElementById('advisoryContinueBtn');
+        const endBtn = document.getElementById('advisoryEndBtn');
+        if (continueBtn) continueBtn.addEventListener('click', () => onAdvisoryDecision(advisory_id, 'continued'));
+        if (endBtn) endBtn.addEventListener('click', () => onAdvisoryDecision(advisory_id, 'ended'));
+    }
+
     const modal = document.getElementById('sessionSummaryModal');
     if (modal) modal.style.display = '';
     state.coverage.summaryOpen = true;
+}
+
+async function onAdvisoryDecision(advisoryId, decision) {
+    try {
+        if (advisoryId != null) await _coverageAdvisoryDecision(advisoryId, decision);
+    } catch (e) {
+        console.warn('advisory decision failed', e);
+    } finally {
+        // "End session anyway" has no dedicated destination elsewhere in the
+        // app yet (no existing end-of-session navigation to hook into) — for
+        // now both paths just close the modal, matching today's behavior.
+        hideSessionSummary();
+    }
 }
 
 function hideSessionSummary() {

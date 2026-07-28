@@ -338,6 +338,48 @@ async def test_09_task_detection(client: httpx.AsyncClient):
     )
 
 
+async def test_09b_session_advisory(client: httpx.AsyncClient):
+    """
+    Session advisory — "Analyze my session" LLM analysis + guard call, real API.
+    Asserts the response is always well-formed (source is "ai" or "fallback");
+    when the AI path succeeds, also exercises the decision-logging endpoint.
+    """
+    video_id = _state["video_id"]
+    annotation_id = _state["annotation_id"]
+    transcription = _state["annotation_transcription"]
+
+    phase_scores = {
+        p: {"hits": 0, "per_100_tok": 0.0, "status": "absent"}
+        for p in ("quoi", "comment", "pourquoi")
+    }
+
+    resp = await client.post("/api/coverage/summary", json={
+        "video_id": video_id,
+        "transcript": transcription,
+        "phase_scores": phase_scores,
+        "lang": "fr",
+        "annotations": [{"id": annotation_id, "transcription": transcription}],
+    })
+    assert resp.status_code == 200, f"Summary endpoint failed: {resp.text}"
+    data = resp.json()
+    assert data["source"] in ("ai", "fallback")
+    print(f"\n  [ADVISORY] source={data['source']} flag={data.get('advisory_flag')}")
+
+    if data["source"] != "ai":
+        return
+
+    assert data["advisory_id"] is not None
+    assert isinstance(data["suggestions"], list)
+    assert isinstance(data["concerns"], list)
+
+    decision_resp = await client.post("/api/coverage/advisory-decision", json={
+        "advisory_id": data["advisory_id"],
+        "decision": "continued",
+    })
+    assert decision_resp.status_code == 200, decision_resp.text
+    assert decision_resp.json().get("status") == "success"
+
+
 async def test_10_review_endpoint(client: httpx.AsyncClient):
     """
     Review endpoint — process_review is currently a no-op stub (replaced by

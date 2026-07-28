@@ -80,6 +80,13 @@ INFOMANIAK_LLM_API_URL = (
 )
 INFOMANIAK_LLM_MODEL = "swiss-ai/Apertus-70B-Instruct-2509"
 
+# Session advisory ("Analyze my session") — analysis model + a separate, smaller
+# guard model that reviews the analysis output before it reaches the user.
+INFOMANIAK_ADVISORY_MODEL = os.getenv("INFOMANIAK_ADVISORY_MODEL", INFOMANIAK_LLM_MODEL)
+INFOMANIAK_GUARD_MODEL = os.getenv(
+    "INFOMANIAK_GUARD_MODEL", "mistralai/Ministral-3-14B-Instruct-2512"
+)
+
 # Infomaniak STT (Whisper) — async batch API, note /1/ prefix (different from LLM /2/)
 INFOMANIAK_STT_API_URL = (
     f"https://api.infomaniak.com/1/ai/{INFOMANIAK_PRODUCT_ID}/openai/audio/transcriptions"
@@ -105,7 +112,7 @@ AUDIO_FORMAT = "wav"
 
 # Video settings
 SUPPORTED_VIDEO_FORMATS = [".mp4", ".webm", ".ogg", ".avi", ".mov"]
-MAX_VIDEO_SIZE_MB = 5000  # 5GB max video size
+MAX_VIDEO_SIZE_MB = 10000  # 10GB max video size
 
 # File upload settings
 MAX_UPLOAD_SIZE = MAX_VIDEO_SIZE_MB * 1024 * 1024  # Convert to bytes

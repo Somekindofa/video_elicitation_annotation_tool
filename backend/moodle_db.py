@@ -187,6 +187,46 @@ class MoodleDBAdapter:
     async def ensure_crafts_table(self):
         return await self._run_in_executor(self.ensure_crafts_table_sync)
 
+    def ensure_session_advisories_table_sync(self):
+        """Create the session advisories table if it doesn't exist yet."""
+        table = self._table('session_advisories')
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            if DB_TYPE == 'postgresql':
+                cursor.execute(f"""
+                    CREATE TABLE IF NOT EXISTS {table} (
+                        id            SERIAL PRIMARY KEY,
+                        videoid       INT NOT NULL,
+                        userid        VARCHAR(255),
+                        suggestions   TEXT,
+                        concerns      TEXT,
+                        advisory_flag VARCHAR(20),
+                        guard_verdict VARCHAR(20),
+                        user_decision VARCHAR(20),
+                        decided_at    INT,
+                        timecreated   INT NOT NULL DEFAULT 0
+                    )
+                """)
+            else:
+                cursor.execute(f"""
+                    CREATE TABLE IF NOT EXISTS {table} (
+                        id            INT AUTO_INCREMENT PRIMARY KEY,
+                        videoid       INT NOT NULL,
+                        userid        VARCHAR(255),
+                        suggestions   TEXT,
+                        concerns      TEXT,
+                        advisory_flag VARCHAR(20),
+                        guard_verdict VARCHAR(20),
+                        user_decision VARCHAR(20),
+                        decided_at    INT,
+                        timecreated   INT NOT NULL DEFAULT 0
+                    )
+                """)
+            conn.commit()
+
+    async def ensure_session_advisories_table(self):
+        return await self._run_in_executor(self.ensure_session_advisories_table_sync)
+
     # ==================== CUSTOM CRAFTS ====================
 
     def get_custom_crafts_by_user_sync(self, userid: str) -> List[Dict[str, Any]]:
@@ -231,6 +271,67 @@ class MoodleDBAdapter:
 
     async def create_custom_craft(self, data: Dict[str, Any]) -> Dict[str, Any]:
         return await self._run_in_executor(self.create_custom_craft_sync, data)
+
+    # ==================== SESSION ADVISORIES ====================
+
+    def create_session_advisory_sync(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Insert a new AI session advisory row and return it."""
+        table = self._table('session_advisories')
+        with self.get_connection() as conn:
+            cursor = conn.cursor(cursor_factory=RealDictCursor if DB_TYPE == 'postgresql' else None)
+            now = int(datetime.now(timezone.utc).timestamp())
+            query = f"""
+                INSERT INTO {table}
+                (videoid, userid, suggestions, concerns, advisory_flag, guard_verdict, timecreated)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+            """
+            row_id = self._insert(cursor, query, (
+                data['video_id'],
+                data.get('user_id'),
+                data['suggestions'],
+                data['concerns'],
+                data['advisory_flag'],
+                data['guard_verdict'],
+                now,
+            ))
+            conn.commit()
+            cursor.execute(f"SELECT * FROM {table} WHERE id = %s", (row_id,))
+            row = cursor.fetchone()
+            return dict(row)
+
+    async def create_session_advisory(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        return await self._run_in_executor(self.create_session_advisory_sync, data)
+
+    def get_session_advisory_sync(self, advisory_id: int) -> Optional[Dict[str, Any]]:
+        """Get a session advisory by ID."""
+        table = self._table('session_advisories')
+        with self.get_connection() as conn:
+            cursor = conn.cursor(cursor_factory=RealDictCursor if DB_TYPE == 'postgresql' else None)
+            cursor.execute(f"SELECT * FROM {table} WHERE id = %s", (advisory_id,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    async def get_session_advisory(self, advisory_id: int) -> Optional[Dict[str, Any]]:
+        return await self._run_in_executor(self.get_session_advisory_sync, advisory_id)
+
+    def record_advisory_decision_sync(self, advisory_id: int, decision: str) -> Optional[Dict[str, Any]]:
+        """Set user_decision/decided_at on an existing session advisory row."""
+        table = self._table('session_advisories')
+        with self.get_connection() as conn:
+            cursor = conn.cursor(cursor_factory=RealDictCursor if DB_TYPE == 'postgresql' else None)
+            now = int(datetime.now(timezone.utc).timestamp())
+            cursor.execute(
+                f"UPDATE {table} SET user_decision = %s, decided_at = %s WHERE id = %s",
+                (decision, now, advisory_id),
+            )
+            conn.commit()
+            cursor.execute(f"SELECT * FROM {table} WHERE id = %s", (advisory_id,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    async def record_advisory_decision(self, advisory_id: int, decision: str) -> Optional[Dict[str, Any]]:
+        return await self._run_in_executor(self.record_advisory_decision_sync, advisory_id, decision)
 
     # ==================== VIDEOS ====================
     

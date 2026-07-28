@@ -384,3 +384,32 @@ async def create_custom_craft(userid: str, craft_label: str) -> dict:
         'craft_label': craft_label,
     })
     return {'craft_key': row['craft_key'], 'craft_label': row['craft_label']}
+
+
+async def create_session_advisory(
+    video_id: int,
+    user_id: Optional[int],
+    suggestions: str,
+    concerns: str,
+    advisory_flag: str,
+    guard_verdict: str,
+) -> dict:
+    """Persist an AI-generated session advisory (suggestions/concerns are JSON strings)."""
+    return await moodle_db.create_session_advisory({
+        'video_id': video_id,
+        'user_id': user_id,
+        'suggestions': suggestions,
+        'concerns': concerns,
+        'advisory_flag': advisory_flag,
+        'guard_verdict': guard_verdict,
+    })
+
+
+async def get_session_advisory(advisory_id: int) -> Optional[dict]:
+    """Get a session advisory by ID."""
+    return await moodle_db.get_session_advisory(advisory_id)
+
+
+async def record_advisory_decision(advisory_id: int, decision: str) -> Optional[dict]:
+    """Record the user's continue/end decision against a session advisory."""
+    return await moodle_db.record_advisory_decision(advisory_id, decision)
