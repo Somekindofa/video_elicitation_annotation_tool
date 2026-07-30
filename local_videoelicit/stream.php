@@ -14,15 +14,56 @@
 
 require_once(__DIR__ . '/../../config.php');
 require_once($CFG->libdir . '/filelib.php');
+require_once(__DIR__ . '/classes/jwt_helper.php');
 
 // Get parameters
 $videoid = required_param('videoid', PARAM_INT);
+// Opaque stream ticket (preferred over raw JWT — does not expose user claims in logs).
+// Only hex characters are valid; anything else is stripped defensively.
+$ticket = optional_param('ticket', '', PARAM_ALPHANUMEXT);
+// Legacy JWT fallback: stripped to base64url + '.' characters to block header injection.
 $token = optional_param('token', '', PARAM_RAW);
-
-// Require login
-require_login();
+if ($token !== '') {
+    $token = preg_replace('/[^A-Za-z0-9\-_\.]/', '', $token);
+}
+$known_filesize = optional_param('filesize', 0, PARAM_INT);
 
 global $DB, $USER;
+
+// Authenticate: prefer existing Moodle session, then opaque ticket, then legacy JWT.
+// The SPA runs on a different origin (/videoelicit-ui/) and has no Moodle session
+// cookie, so range requests arrive with a ?ticket= parameter issued by stream_ticket.php.
+if (!isloggedin()) {
+    if (!empty($ticket)) {
+        // Validate the opaque stream ticket from cache.
+        $cache = cache::make('local_videoelicit', 'streamtickets');
+        $ticket_data = $cache->get($ticket);
+        if (!$ticket_data
+                || (int) $ticket_data['videoid'] !== (int) $videoid
+                || $ticket_data['expires'] < time()) {
+            header('HTTP/1.1 401 Unauthorized');
+            die('Invalid or expired stream ticket');
+        }
+        $userid = (int) $ticket_data['userid'];
+        $user = $DB->get_record('user', ['id' => $userid, 'deleted' => 0], '*', MUST_EXIST);
+        \core\session\manager::set_user($user);
+    } elseif (!empty($token)) {
+        // Legacy fallback: raw JWT in URL (less secure; kept for backward compatibility).
+        $payload = \local_videoelicit\jwt_helper::verify_token($token);
+        if ($payload === false) {
+            header('HTTP/1.1 401 Unauthorized');
+            die('Invalid or expired token');
+        }
+        $userid = (int) $payload['userid'];
+        $user = $DB->get_record('user', ['id' => $userid, 'deleted' => 0], '*', MUST_EXIST);
+        \core\session\manager::set_user($user);
+    } else {
+        header('HTTP/1.1 401 Unauthorized');
+        die('Authentication required');
+    }
+} else {
+    require_login();
+}
 
 // Get video record
 $video = $DB->get_record('local_videoelicit_videos', array('id' => $videoid), '*', MUST_EXIST);
@@ -31,21 +72,24 @@ $video = $DB->get_record('local_videoelicit_videos', array('id' => $videoid), '*
 $context = context::instance_by_id($video->contextid);
 require_capability('local/videoelicit:view', $context);
 
-// Optionally verify JWT token for extra security
-if (!empty($token)) {
-    // Token verification logic here if needed
+// Flush all Moodle/PHP output buffers before streaming binary data.
+// Moodle's bootstrap (config.php) activates output buffering. If we don't
+// clear it here, PHP will try to buffer the entire video in memory, which
+// exhausts PHP-FPM worker RAM on large files and causes AH01075 errors and
+// NS_ERROR_DOM_MEDIA_METADATA_ERR in the browser.
+while (ob_get_level() > 0) {
+    ob_end_clean();
 }
 
-// Route to appropriate streaming handler based on source type
-$source_type = $video->source_type ?? 'local';
+// Release the Moodle session lock before streaming.
+// stream.php is called multiple times in parallel (one per Range request) by the
+// browser. PHP/Moodle holds the session write-lock for the entire request. Without
+// this, all range requests are serialized — each blocks waiting for the previous
+// streaming request to finish, causing the player to buffer instead of seeking.
+\core\session\manager::write_close();
 
-if ($source_type === 'webdav') {
-    // Stream from WebDAV/OwnCloud
-    stream_webdav_video($video);
-} else {
-    // Stream from Moodle File API (default)
-    stream_local_video($video);
-}
+// Stream from Moodle File API
+stream_local_video($video);
 
 /**
  * Stream video from Moodle File API
@@ -74,150 +118,6 @@ function stream_local_video($video) {
                                    $file->get_filesize(), 
                                    $file->get_mimetype(), 
                                    $file->get_filename());
-}
-
-/**
- * Stream video from WebDAV/OwnCloud server
- * 
- * This function proxies streaming requests to an external WebDAV server (typically OwnCloud/Nextcloud)
- * while preserving HTTP Range request support for video seeking.
- * 
- * @param object $video Video record with external_url field populated
- */
-function stream_webdav_video($video) {
-    global $CFG;
-    
-    // Get WebDAV credentials from plugin settings
-    $webdav_username = get_config('local_videoelicit', 'webdav_username');
-    $webdav_password = get_config('local_videoelicit', 'webdav_password');
-    
-    if (empty($webdav_username) || empty($webdav_password)) {
-        header('HTTP/1.1 500 Internal Server Error');
-        die('WebDAV credentials not configured');
-    }
-    
-    $external_url = $video->external_url;
-    
-    if (empty($external_url)) {
-        header('HTTP/1.1 500 Internal Server Error');
-        die('WebDAV video URL not configured');
-    }
-
-    // If `external_url` is a relative path (no scheme), prefix the configured WebDAV base URL
-    // so entries that store "/remote.php/dav/..." or other relative paths still stream correctly.
-    $parsed_scheme = parse_url($external_url, PHP_URL_SCHEME);
-    if ($parsed_scheme === null) {
-        $webdav_base = get_config('local_videoelicit', 'webdav_base_url') ?: '';
-        if (!empty($webdav_base)) {
-            if (strpos($external_url, '/') === 0) {
-                $external_url = rtrim($webdav_base, '/') . $external_url;
-            } else {
-                $external_url = rtrim($webdav_base, '/') . '/' . ltrim($external_url, '/');
-            }
-        }
-    }
-
-    // Parse range header if present
-    $range = isset($_SERVER['HTTP_RANGE']) ? $_SERVER['HTTP_RANGE'] : '';
-    
-    // Log resolved WebDAV URL for debugging and Initialize cURL for HEAD request to get file metadata
-    error_log('local_videoelicit: resolved WebDAV external_url=' . $external_url);
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $external_url);
-    curl_setopt($ch, CURLOPT_USERPWD, "$webdav_username:$webdav_password");
-    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'HEAD');
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_HEADER, true);
-    curl_setopt($ch, CURLOPT_NOBODY, true);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true); // Enable SSL verification
-    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-    
-    $response = curl_exec($ch);
-    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $content_length = curl_getinfo($ch, CURLINFO_CONTENT_LENGTH_DOWNLOAD);
-    $content_type = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
-    
-    if ($http_code !== 200) {
-        curl_close($ch);
-        header('HTTP/1.1 404 Not Found');
-        die('Remote video file not found');
-    }
-    
-    curl_close($ch);
-    
-    $filesize = (int) $content_length;
-    $mimetype = !empty($content_type) ? $content_type : 'video/mp4';
-    $filename = basename(parse_url($external_url, PHP_URL_PATH));
-    
-    // Handle range requests
-    if (!empty($range) && preg_match('/bytes=(\d+)-(\d*)/', $range, $matches)) {
-        $start = intval($matches[1]);
-        $end = !empty($matches[2]) ? intval($matches[2]) : $filesize - 1;
-        
-        // Validate range
-        if ($start >= $filesize || $end >= $filesize || $start > $end) {
-            header('HTTP/1.1 416 Range Not Satisfiable');
-            header("Content-Range: bytes */$filesize");
-            die();
-        }
-        
-        $length = $end - $start + 1;
-        
-        // Send 206 Partial Content headers
-        header('HTTP/1.1 206 Partial Content');
-        header("Content-Range: bytes $start-$end/$filesize");
-        header('Accept-Ranges: bytes');
-        header("Content-Length: $length");
-        header("Content-Type: $mimetype");
-        header('Content-Disposition: inline; filename="' . $filename . '"');
-        
-        // cURL request with Range header
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, $external_url);
-        curl_setopt($ch, CURLOPT_USERPWD, "$webdav_username:$webdav_password");
-        curl_setopt($ch, CURLOPT_HTTPHEADER, array("Range: bytes=$start-$end"));
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, false); // Output directly
-        curl_setopt($ch, CURLOPT_BINARYTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 300); // 5 minutes for video streaming
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
-        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-        curl_setopt($ch, CURLOPT_WRITEFUNCTION, function($curl, $data) {
-            echo $data;
-            return strlen($data);
-        });
-        
-        curl_exec($ch);
-        curl_close($ch);
-        exit;
-        
-    } else {
-        // No range request - stream entire file
-        header('HTTP/1.1 200 OK');
-        header('Accept-Ranges: bytes');
-        header("Content-Length: $filesize");
-        header("Content-Type: $mimetype");
-        header('Content-Disposition: inline; filename="' . $filename . '"');
-        header('Cache-Control: public, max-age=3600');
-        
-        // cURL request for full file
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, $external_url);
-        curl_setopt($ch, CURLOPT_USERPWD, "$webdav_username:$webdav_password");
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, false); // Output directly
-        curl_setopt($ch, CURLOPT_BINARYTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 300); // 5 minutes for video streaming
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
-        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-        curl_setopt($ch, CURLOPT_WRITEFUNCTION, function($curl, $data) {
-            echo $data;
-            return strlen($data);
-        });
-        
-        curl_exec($ch);
-        curl_close($ch);
-        exit;
-    }
 }
 
 /**
@@ -265,7 +165,7 @@ function stream_file_with_range_support($handle, $filesize, $mimetype, $filename
             $remaining = $length;
             
             while ($remaining > 0 && !feof($handle)) {
-                $chunk_size = min(8192, $remaining);
+                $chunk_size = min(1048576, $remaining);
                 $data = fread($handle, $chunk_size);
                 if ($data === false) {
                     break;
@@ -290,7 +190,7 @@ function stream_file_with_range_support($handle, $filesize, $mimetype, $filename
 
     // Stream full file
     while (!feof($handle)) {
-        $data = fread($handle, 8192);
+        $data = fread($handle, 1048576);
         if ($data === false) {
             break;
         }
@@ -300,6 +200,3 @@ function stream_file_with_range_support($handle, $filesize, $mimetype, $filename
     
     fclose($handle);
 }
-
-fclose($handle);
-exit;
