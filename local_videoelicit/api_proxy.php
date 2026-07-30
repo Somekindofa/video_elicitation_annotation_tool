@@ -106,7 +106,9 @@ switch ($method) {
 
 // Set common options
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+// FOLLOWLOCATION disabled: the backend is localhost and should never redirect to an external host.
+// Enabling it would allow redirect-based SSRF if the backend is ever compromised or misconfigured.
+curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false);
 curl_setopt($ch, CURLOPT_TIMEOUT, 300); // 5 minutes for transcription tasks
 curl_setopt($ch, CURLOPT_HTTPHEADER, array(
     'Authorization: Bearer ' . $token,
@@ -134,8 +136,25 @@ if (curl_errno($ch)) {
 
 curl_close($ch);
 
-// Forward response
+// Forward response — whitelist Content-Type to prevent injecting arbitrary headers via a
+// compromised or misconfigured backend.
+$safe_content_types = [
+    'application/json',
+    'text/plain',
+    'text/csv',
+    'application/octet-stream',
+    'video/mp4',
+    'video/webm',
+];
+$forwarded_content_type = 'application/json'; // Safe default.
+if (!empty($content_type)) {
+    // Extract the MIME type (strip charset or boundary parameters for comparison).
+    $mime = strtolower(trim(explode(';', $content_type)[0]));
+    if (in_array($mime, $safe_content_types, true)) {
+        $forwarded_content_type = $content_type;
+    }
+}
 header('HTTP/1.1 ' . $http_code);
-header('Content-Type: ' . $content_type);
+header('Content-Type: ' . $forwarded_content_type);
 echo $response;
 exit;

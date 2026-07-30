@@ -23,22 +23,24 @@ defined('MOODLE_INTERNAL') || die();
  */
 function local_videoelicit_extend_navigation(global_navigation $navigation) {
     global $PAGE, $USER;
-    
+
     // Only add navigation item for logged-in users
     if (!isloggedin() || isguestuser()) {
         return;
     }
-    
+
+    $toolurl = new moodle_url('/local/videoelicit/index.php');
+
     // Create the navigation node
     $node = $navigation->add(
         get_string('pluginname', 'local_videoelicit'),
-        new moodle_url('/local/videoelicit/index.php'),
+        $toolurl,
         navigation_node::TYPE_CUSTOM,
         null,
         'videoelicit',
         new pix_icon('i/video', get_string('pluginname', 'local_videoelicit'))
     );
-    
+
     // Make it visible in the primary navigation bar
     $node->showinflatnavigation = true;
     $node->showinprimarynavigation = true;
@@ -49,7 +51,7 @@ function local_videoelicit_extend_navigation(global_navigation $navigation) {
         if (!$primarynode) {
             $primarynode = $PAGE->primarynav->add(
                 get_string('pluginname', 'local_videoelicit'),
-                new moodle_url('/local/videoelicit/index.php'),
+                $toolurl,
                 navigation_node::TYPE_CUSTOM,
                 null,
                 'videoelicit',
