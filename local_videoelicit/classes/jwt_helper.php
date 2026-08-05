@@ -74,6 +74,43 @@ class jwt_helper {
     }
     
     /**
+     * Verify a JWT token's signature and expiry.
+     *
+     * @param string $token The JWT in "header.payload.signature" form
+     * @return array|false Decoded payload on success, false if invalid/expired/malformed
+     */
+    public static function verify_token($token) {
+        $parts = explode('.', $token);
+        if (count($parts) !== 3) {
+            return false;
+        }
+        list($header, $payload, $signature) = $parts;
+
+        $config = get_config('local_videoelicit');
+        $secret = $config->jwt_secret ?? 'change-this-secret-key';
+
+        $expected_signature = self::base64url_encode(
+            hash_hmac('sha256', "$header.$payload", $secret, true)
+        );
+
+        // Constant-time comparison to avoid signature timing attacks.
+        if (!hash_equals($expected_signature, $signature)) {
+            return false;
+        }
+
+        $decoded_payload = json_decode(self::base64url_decode($payload), true);
+        if (!is_array($decoded_payload) || !isset($decoded_payload['exp'])) {
+            return false;
+        }
+
+        if ((int) $decoded_payload['exp'] < time()) {
+            return false;
+        }
+
+        return $decoded_payload;
+    }
+
+    /**
      * Base64url encode
      */
     private static function base64url_encode($data) {
