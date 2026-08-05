@@ -29,14 +29,8 @@ $string['settings_webdav_header'] = 'OwnCloud/WebDAV Configuration';
 $string['settings_webdav_header_desc'] = 'Configure institutional OwnCloud server for streaming videos without uploading copies to Moodle.';
 $string['settings_webdav_base_url'] = 'OwnCloud Base URL';
 $string['settings_webdav_base_url_desc'] = 'Full HTTPS URL of OwnCloud server (e.g., https://cloud.minesparis.psl.eu). Leave blank to disable WebDAV video linking.';
-$string['settings_webdav_username'] = 'Service Account Username';
-$string['settings_webdav_username_desc'] = 'Username for service account used to authenticate with OwnCloud. This account must have read access to video files.';
-$string['settings_webdav_password'] = 'Service Account Password';
-$string['settings_webdav_password_desc'] = 'Password for service account (encrypted in database).';
 $string['settings_webdav_user_id'] = 'Service Account UUID';
 $string['settings_webdav_user_id_desc'] = 'The UUID of the OwnCloud service account. Found in the WebDAV URL: /remote.php/dav/files/{UUID}/. Example: aadda5c2-2019-103f-8e2d-bb8e1f6141ce';
-$string['settings_webdav_storage_path'] = 'Storage Root Folder';
-$string['settings_webdav_storage_path_desc'] = 'Folder name inside the service account that acts as the root for all plugin storage. Default: Moodle_OwnCloud_Storage';
 $string['settings_webdav_shared_folder'] = 'Shared Library Subfolder';
 $string['settings_webdav_shared_folder_desc'] = 'Subfolder inside the Storage Root that contains admin-curated shared videos (e.g. Apprenties/, Expertes/). All users can browse this read-only. Default: Shared';
 
@@ -53,9 +47,6 @@ $string['end_time'] = 'End Time';
 $string['transcription'] = 'Transcription';
 $string['delete'] = 'Delete';
 $string['export'] = 'Export Annotations';
-
-// Scheduled tasks
-$string['task_init_user_folders'] = 'Pre-create personal OwnCloud folders for all users';
 
 // Errors
 $string['error_upload'] = 'Error uploading video';

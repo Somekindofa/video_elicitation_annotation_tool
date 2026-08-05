@@ -26,8 +26,6 @@ $token = optional_param('token', '', PARAM_RAW);
 if ($token !== '') {
     $token = preg_replace('/[^A-Za-z0-9\-_\.]/', '', $token);
 }
-$known_filesize = optional_param('filesize', 0, PARAM_INT);
-
 global $DB, $USER;
 
 // Authenticate: prefer existing Moodle session, then opaque ticket, then legacy JWT.
