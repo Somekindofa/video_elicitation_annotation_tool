@@ -2,7 +2,7 @@
 
 ## Architecture Overview
 
-This is a **hybrid Moodle local plugin** (`local_videoelicit`) that wraps a FastAPI backend service. The plugin handles authentication, permissions, and file storage while delegating video processing, transcription, and LLM operations to FastAPI running on localhost:8006.
+This is a **hybrid Moodle local plugin** (`local_videoelicit`) that wraps a FastAPI backend service. The plugin handles authentication, permissions, and file storage while delegating video processing, transcription, and LLM operations to FastAPI running on localhost:8005.
 
 ### Key Components
 
@@ -201,7 +201,7 @@ curl -I http://localhost/local/videoelicit/stream.php?videoid=1
 ### Backend Communication
 
 - **Base URL**: Configured in *Site administration > Plugins > Local plugins > Video Elicitation Tool*
-- **Default**: `http://localhost:8006`
+- **Default**: `http://localhost:8005`
 - **Headers**: All requests include `Authorization`, `X-Moodle-User`, `X-Moodle-Context`
 - **Timeout**: 300s for long-running tasks (see [api_proxy.php line 104](../api_proxy.php#L104))
 - **Security**: FastAPI must bind to 127.0.0.1 only, never expose publicly
