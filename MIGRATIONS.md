@@ -17,7 +17,7 @@ Development example (manual):
 python backend/migrate_db.py
 
 # Start development server
-uvicorn backend.main:app --reload --host 0.0.0.0 --port 8006
+uvicorn backend.main:app --reload --host 0.0.0.0 --port 8005
 ```
 
 For production, run the migration as part of your deployment process (systemd, CI/CD pipeline, or container entrypoint).
@@ -49,7 +49,7 @@ python migrate_db.py
 
 3. **Restart the server** (development):
 ```bash
-uvicorn backend.main:app --reload --host 0.0.0.0 --port 8006
+uvicorn backend.main:app --reload --host 0.0.0.0 --port 8005
 ```
 
 For production, include `python migrate_db.py` in your deployment workflow or container entrypoint.

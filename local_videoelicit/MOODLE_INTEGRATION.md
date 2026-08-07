@@ -15,7 +15,7 @@ This document explains how the Video Elicitation Tool integrates with Moodle as 
    - Manages files through Moodle file API
 
 2. **FastAPI Backend** (Python)
-   - Runs as a separate service on localhost:8006
+   - Runs as a separate service on localhost:8005
    - Handles video processing, transcription, LLM operations
    - Validates JWT tokens from Moodle
    - Stores processing data in SQLite
@@ -126,7 +126,7 @@ Type=simple
 User=www-data
 WorkingDirectory=/home/video_elicitation_annotation_tool/backend
 Environment="PATH=/usr/bin:/usr/local/bin"
-ExecStart=/usr/bin/python3 -m uvicorn main:app --host 127.0.0.1 --port 8006
+ExecStart=/usr/bin/python3 -m uvicorn main:app --host 127.0.0.1 --port 8005
 Restart=always
 RestartSec=10
 
@@ -148,7 +148,7 @@ systemctl status videoelicit-backend
 2. Navigate to: **Site administration > Plugins > Local plugins > Video Elicitation Tool**
 3. Set the following:
    - **JWT Secret Key**: Same value as `MOODLE_JWT_SECRET` in backend `.env`
-   - **FastAPI Backend URL**: `http://localhost:8006`
+   - **FastAPI Backend URL**: `http://localhost:8005`
    - **Token Quota**: `0` (unlimited) or set a limit per user
 4. Click **Save changes**
 
