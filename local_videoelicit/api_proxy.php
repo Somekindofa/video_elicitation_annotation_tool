@@ -32,7 +32,7 @@ require_capability('local/videoelicit:view', $context);
 
 // Get backend URL from config
 $config = get_config('local_videoelicit');
-$backend_url = $config->backend_url ?? 'http://localhost:8006';
+$backend_url = $config->backend_url ?? 'http://localhost:8005';
 
 // Get user roles in context
 $roles = jwt_helper::get_user_roles($USER->id, $context);

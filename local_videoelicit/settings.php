@@ -27,7 +27,7 @@ if ($hassiteconfig) {
         'local_videoelicit/backend_url',
         get_string('settings_backend_url', 'local_videoelicit'),
         get_string('settings_backend_url_desc', 'local_videoelicit'),
-        'http://localhost:8006',
+        'http://localhost:8005',
         PARAM_URL
     ));
 
