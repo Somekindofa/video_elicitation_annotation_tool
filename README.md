@@ -55,14 +55,14 @@ Development (recommended):
 
 ```bash
 # Run with Uvicorn (auto-reload for development)
-uvicorn backend.main:app --reload --host 0.0.0.0 --port 8006
+uvicorn backend.main:app --reload --host 0.0.0.0 --port 8005
 ```
 
 Production / service:
 
 - Create a systemd unit (example provided in `MIGRATIONS.md`) or run behind a process manager.
 
-The application will be available at the configured host/port (default: `http://localhost:8006`).
+The application will be available at the configured host/port (default: `http://localhost:8005`).
 
 ### 3. Basic Workflow
 
