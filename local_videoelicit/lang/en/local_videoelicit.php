@@ -20,7 +20,7 @@ $string['videoelicit:viewall'] = 'View all users\' annotations';
 $string['settings_jwt_secret'] = 'JWT Secret Key';
 $string['settings_jwt_secret_desc'] = 'Shared secret key for authenticating with FastAPI backend. Must match MOODLE_JWT_SECRET in backend .env file.';
 $string['settings_backend_url'] = 'FastAPI Backend URL';
-$string['settings_backend_url_desc'] = 'URL of the FastAPI backend server (e.g., http://localhost:8006)';
+$string['settings_backend_url_desc'] = 'URL of the FastAPI backend server (e.g., http://localhost:8005)';
 $string['settings_token_quota'] = 'Token Quota per User';
 $string['settings_token_quota_desc'] = 'Maximum LLM tokens per user (0 = unlimited)';
 
