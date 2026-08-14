@@ -5065,7 +5065,7 @@ Les données collectées dans cet outil sont utilisées **exclusivement** dans l
 - **Aucune donnée n'est commercialisée.**
 
 Pour toute question, contactez l'équipe ReSOuRCE à Mines Paris - PSL:
-- Théo Akbas - theo.akbas@minesparis.psl.eu
+- Dimitris Makrygiannis - dimitris.makrygiannis@minesparis.psl.eu
 - Alina Glushkova - alina.glushkova@minesparis.psl.eu
 `;
 
