@@ -114,6 +114,15 @@ Brand block (title + subtitle) sits immediately to the right of the back-to-Mood
 
 ---
 
+## Deploy topology & git hazards
+
+- This repo directory (`/opt/video_elicitation_annotation_tool`) is **both** a git working copy **and** the live source the backend runs from (`videoelicit-backend` execs `uvicorn` directly out of `backend/` here — no separate deploy/copy step for Python code). A `git checkout`/`pull`/merge here changes files the running system actually reads, not just history.
+- The Moodle plugin (`local_videoelicit/` in the repo) has a **separate, non-symlinked** copy at `/var/www/html/public/local/videoelicit/` that must be manually `sudo cp`'d over after editing plugin files — there is no sync script or cron job for this.
+- **Hazard, confirmed 2026-08-24:** while manually deploying the plugin files, PR #20 got merged into `main` on GitHub, and this directory's checkout moved `main` → then got fast-forwarded via `git pull` — briefly reverting `local_videoelicit/version.php` to an older value on disk. Re-copying from the repo at that moment pushed the stale `version.php` into the Moodle webroot, and Moodle's upgrade page threw a "cannot downgrade" error (its DB already had the newer version recorded from an earlier, successful upgrade).
+- **Lesson:** before `sudo cp`-ing repo files into `/var/www/html/public/local/videoelicit/`, run `git status`/`git log -1`/`git branch --show-current` first to confirm what's actually on disk right now — don't assume the working tree still matches what you last edited, especially if any time has passed or other collaborators could have merged/pushed in the meantime.
+
+---
+
 ## Workflow rules (learned during this build)
 
 - **Always branch from `main`** before frontend work: `git checkout main && git pull && git checkout -b feat/<name>`. Don't pile changes onto an existing feature branch.
