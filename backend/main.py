@@ -1398,6 +1398,7 @@ async def push_annotation_to_rag(annotation_id: int, transcription: str) -> None
             "source_type":      (video or {}).get("source_type", "local"),
             "project_name":     project_name,
             "audio_filepath":   annotation.get("audio_filepath") or annotation.get("audiofilepath") or "",
+            "language":         annotation.get("language"),
             "allowed_cohort_id": project.get("allowed_cohort_id") if project else None,
         }).encode()
 
