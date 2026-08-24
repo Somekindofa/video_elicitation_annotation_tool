@@ -116,7 +116,7 @@ async def score_endpoint(
     _user: MoodleUser = Depends(verify_moodle_jwt),
 ) -> dict:
     """Score a single annotation transcript against Quoi / Comment / Pourquoi."""
-    return coverage_detector.score_transcript(req.transcript)
+    return await coverage_detector.score_transcript(req.transcript)
 
 
 @router.post("/aggregate", response_model=AggregateResponse)

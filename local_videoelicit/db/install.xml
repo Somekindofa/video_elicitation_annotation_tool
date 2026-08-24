@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<XMLDB PATH="local/videoelicit/db" VERSION="20260216" COMMENT="XMLDB file for local_videoelicit plugin">
+<XMLDB PATH="local/videoelicit/db" VERSION="20260819" COMMENT="XMLDB file for local_videoelicit plugin">
   <TABLES>
     
     <!-- Videos table: maps Moodle files to FastAPI video records -->
@@ -45,9 +45,20 @@
         <FIELD NAME="audiofilepath" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false"/>
         <FIELD NAME="transcription" TYPE="text" NOTNULL="false" SEQUENCE="false"/>
         <FIELD NAME="transcriptionstatus" TYPE="char" LENGTH="50" NOTNULL="true" SEQUENCE="false" DEFAULT="pending"/>
+        <FIELD NAME="language" TYPE="char" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="ISO 639-1 code detected by Whisper (e.g. fr, en, el)"/>
+        <FIELD NAME="judgestatus" TYPE="char" LENGTH="20" NOTNULL="false" SEQUENCE="false" DEFAULT="pending"/>
+        <FIELD NAME="judgedecision" TYPE="text" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="taggingstatus" TYPE="char" LENGTH="20" NOTNULL="false" SEQUENCE="false" DEFAULT="pending"/>
         <FIELD NAME="tags" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="JSON array of tags"/>
+        <FIELD NAME="reviewstatus" TYPE="char" LENGTH="20" NOTNULL="false" SEQUENCE="false" DEFAULT="pending"/>
+        <FIELD NAME="reviewresults" TYPE="text" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="reviewattempts" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" DEFAULT="0"/>
+        <FIELD NAME="detectedtask" TYPE="char" LENGTH="255" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="issalient" TYPE="int" LENGTH="1" NOTNULL="false" SEQUENCE="false" DEFAULT="0"/>
         <FIELD NAME="craft" TYPE="char" LENGTH="100" NOTNULL="false" SEQUENCE="false"/>
         <FIELD NAME="task" TYPE="char" LENGTH="255" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="feedback" TYPE="int" LENGTH="1" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="feedbackchoices" TYPE="text" NOTNULL="false" SEQUENCE="false"/>
         <FIELD NAME="fastapi_annotation_id" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
         <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
         <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>

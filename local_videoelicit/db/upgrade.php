@@ -165,5 +165,40 @@ function xmldb_local_videoelicit_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026021903, 'local', 'videoelicit');
     }
 
+    // Multilingual elicitation pipeline (2026-08-19).
+    // - Adds the 'language' field (ISO 639-1 code, detected by Whisper per recording).
+    // - Also backfills annotations fields from the 2026021902 upgrade that were
+    //   never added to install.xml, so fresh installs match upgraded ones.
+    if ($oldversion < 2026081900) {
+        $table = new xmldb_table('local_videoelicit_annotations');
+
+        $field = new xmldb_field('language', XMLDB_TYPE_CHAR, '10', null, null, null, null, 'transcriptionstatus');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        $fields_to_add = [
+            ['judgestatus', XMLDB_TYPE_CHAR, '20', null, null, null, 'pending'],
+            ['judgedecision', XMLDB_TYPE_TEXT, null, null, null, null, null],
+            ['taggingstatus', XMLDB_TYPE_CHAR, '20', null, null, null, 'pending'],
+            ['reviewstatus', XMLDB_TYPE_CHAR, '20', null, null, null, 'pending'],
+            ['reviewresults', XMLDB_TYPE_TEXT, null, null, null, null, null],
+            ['reviewattempts', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, 0],
+            ['detectedtask', XMLDB_TYPE_CHAR, '255', null, null, null, null],
+            ['issalient', XMLDB_TYPE_INTEGER, '1', null, null, null, 0],
+            ['feedback', XMLDB_TYPE_INTEGER, '1', null, null, null, null],
+            ['feedbackchoices', XMLDB_TYPE_TEXT, null, null, null, null, null],
+        ];
+
+        foreach ($fields_to_add as list($name, $type, $length, $unsigned, $notnull, $sequence, $default)) {
+            $field = new xmldb_field($name, $type, $length, $unsigned, $notnull, $sequence, $default, 'language');
+            if (!$dbman->field_exists($table, $field)) {
+                $dbman->add_field($table, $field);
+            }
+        }
+
+        upgrade_plugin_savepoint(true, 2026081900, 'local', 'videoelicit');
+    }
+
     return true;
 }

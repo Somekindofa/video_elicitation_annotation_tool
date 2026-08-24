@@ -48,13 +48,9 @@ async def client():
     No real HTTP server is started. Background asyncio tasks (transcription,
     judge, tagging) share the event loop with the tests, so polling works.
 
-    STT language is patched to 'en' for the English harvard test audio.
-    After the module finishes, 'fr' is restored.
+    STT language is auto-detected by Whisper (no forced language) — the
+    English harvard test audio should come back with language="en".
     """
-    # Patch STT language BEFORE main imports transcription at module level
-    import transcription as _tr
-    _tr.INFOMANIAK_STT_LANGUAGE = "en"
-
     from main import app
     from auth import create_moodle_jwt
 
@@ -76,8 +72,6 @@ async def client():
         timeout=360.0,  # STT batch polling can take up to 5 min
     ) as ac:
         yield ac
-
-    _tr.INFOMANIAK_STT_LANGUAGE = "fr"
 
 
 # ── Polling helper ─────────────────────────────────────────────────────────────
@@ -146,9 +140,9 @@ async def test_02_stt_transcribe_only(client: httpx.AsyncClient):
 
 async def test_03_coverage_nlp_score(client: httpx.AsyncClient):
     """
-    NLP coverage scorer — local spaCy (fr_core_news_md) with French lexicon.
-    Uses a French sentence to exercise the Quoi/Comment/Pourquoi detection
-    and character-offset marker extraction.
+    LLM-based coverage scorer (Infomaniak Apertus). Uses a French sentence to
+    exercise the Quoi/Comment/Pourquoi detection and character-offset marker
+    extraction — the scorer itself is language-agnostic.
     """
     sample = (
         "Je commence par chauffer le métal pour savoir ce que je veux faire, "

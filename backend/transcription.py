@@ -16,7 +16,6 @@ from config import (
     INFOMANIAK_STT_API_URL,
     INFOMANIAK_RESULTS_BASE_URL,
     INFOMANIAK_STT_MODEL,
-    INFOMANIAK_STT_LANGUAGE,
 )
 
 logger = logging.getLogger(__name__)
@@ -58,7 +57,8 @@ async def transcribe_audio(audio_path: str) -> dict:
         content_type=audio_content_type,
     )
     form.add_field("model", INFOMANIAK_STT_MODEL)
-    form.add_field("language", INFOMANIAK_STT_LANGUAGE)
+    # No "language" field — omitting it lets Whisper auto-detect the spoken
+    # language instead of force-decoding everything as French.
     form.add_field("response_format", "verbose_json")
 
     async with aiohttp.ClientSession() as session:
@@ -114,18 +114,12 @@ async def transcribe_audio(audio_path: str) -> dict:
         raise TimeoutError(f"Transcription job {batch_id} did not complete within {_POLL_TIMEOUT}s")
 
 
-async def transcribe_audio_simple(audio_path: str) -> str:
-    """Simple wrapper that returns just the transcribed text."""
-    result = await transcribe_audio(audio_path)
-    return result["text"]
-
-
 def get_model_info() -> dict:
     return {
         "provider": "Infomaniak",
         "model": INFOMANIAK_STT_MODEL,
         "api_configured": bool(INFOMANIAK_API_KEY),
-        "language": INFOMANIAK_STT_LANGUAGE,
+        "language": "auto-detect",
     }
 
 

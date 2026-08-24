@@ -45,14 +45,27 @@ DETECTED_TASK: [nom_court ou null]
 CONFIDENCE: [0.0-1.0]
 REASONING: [une phrase]"""
 
+_LANGUAGE_NAMES = {"fr": "français", "en": "English", "el": "Ελληνικά"}
 
-async def detect_task(transcription: str, craft: str = "jewelry") -> dict:
+
+def _language_instruction(language: Optional[str]) -> str:
+    """Instruct the LLM to write REASONING in the session's spoken language
+    (what the interviewee said), not the interviewer's UI language."""
+    name = _LANGUAGE_NAMES.get((language or "").lower())
+    if name:
+        return f"\n\nRépondez dans la langue suivante : {name}."
+    return "\n\nRépondez dans la même langue que la transcription."
+
+
+async def detect_task(transcription: str, craft: str = "jewelry", language: Optional[str] = None) -> dict:
     """
     Detect the main task from an elicitation transcript.
 
     Args:
         transcription: The transcribed text from the elicitation
         craft: The craft domain (jewelry, glassblowing, etc.)
+        language: Session language detected by Whisper (e.g. 'fr', 'en', 'el') —
+            REASONING is written in it.
 
     Returns:
         {
@@ -73,12 +86,12 @@ async def detect_task(transcription: str, craft: str = "jewelry") -> dict:
         "Content-Type": "application/json",
     }
 
-    user_prompt = f'Transcript ({craft}): "{transcription}"\n\nQuelle est la tâche ? (null dans la plupart des cas)'
+    user_prompt = f'Transcript ({craft}): "{transcription}"\n\nWhat is the task? (null in most cases)'
 
     payload = {
         "model": INFOMANIAK_LLM_MODEL,
         "messages": [
-            {"role": "system", "content": TASK_DETECTION_SYSTEM_PROMPT},
+            {"role": "system", "content": TASK_DETECTION_SYSTEM_PROMPT + _language_instruction(language)},
             {"role": "user", "content": user_prompt},
         ],
         "max_tokens": 128,

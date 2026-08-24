@@ -47,9 +47,31 @@ New column on `Annotation` (`models.py`):
 language = Column(String, nullable=True)  # ISO 639-1 code detected by Whisper (e.g. "fr", "en", "el")
 ```
 
-Added via the existing auto-migration (`migrate_db.py` derives new columns
-from `models.py` — no new migration tooling needed). Run after the model
-change lands.
+**Correction from the original draft:** `migrate_db.py`'s auto-migration only
+touches the local SQLite fallback, which is dead code in production —
+`main.py` only ever goes through `database_compat.py` → `moodle_db.py` (raw
+SQL against the external Moodle MySQL/PostgreSQL database). The SQLAlchemy
+column above is just a field-allowlist entry for `database_compat.py`; the
+real schema change is a Moodle plugin migration:
+
+- `local_videoelicit/db/install.xml` — add `language` to the fresh-install
+  schema (also backfills ~10 AI-pipeline fields that a prior upgrade added
+  to production but never added here — a pre-existing drift bug, fixed in
+  the same edit since it touches the same `<FIELDS>` block).
+- `local_videoelicit/db/upgrade.php` — new `xmldb_field`/`add_field` block
+  gated by `upgrade_plugin_savepoint(true, 2026081900, ...)`.
+- `local_videoelicit/version.php` — bump `$plugin->version` to `2026081900`
+  (must exactly match the savepoint above).
+- `backend/moodle_db.py` — add `'language': 'language'` to
+  `update_annotation_sync`'s `field_mapping` dict (updates silently no-op
+  for any field missing from this dict).
+
+**Deploy ordering matters**: the Moodle upgrade must run (Site administration
+→ Notifications, or the Moodle CLI upgrade) *before* the updated backend is
+deployed/restarted. `process_transcription` unconditionally sets `language`
+on every transcription; if the backend goes live while the `language` column
+doesn't exist yet in Moodle's DB, every transcription's `UPDATE` will fail
+and `transcription_status` will flip to `failed`.
 
 ## 3. Propagation (`main.py`)
 
@@ -60,9 +82,9 @@ At both transcription call sites (audio upload handlers, currently
 - pass `annotation.language` into `detect_task()`, `extract_tags()`, and
   `judge_elicitation()` calls.
 
-Frontend (`js/app.js`): when calling `/api/coverage/score`, include the
-annotation's `language` (already fetched as part of annotation data) in
-the request body so `coverage_detector` can route to the right handling.
+Frontend (`js/app.js`): no changes needed for `/api/coverage/score` — the
+LLM-based coverage detector (§4) is language-neutral by design and doesn't
+need a language hint from the caller.
 
 ## 4. Coverage detector — full LLM replacement
 

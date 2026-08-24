@@ -17,7 +17,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'local_videoelicit';
-$plugin->version = 2026080700;  // YYYYMMDDXX format - drop init_user_folders scheduled task
+$plugin->version = 2026081900;  // YYYYMMDDXX format - add language field for multilingual elicitation
 $plugin->requires = 2022041900; // Moodle 4.0+
 $plugin->maturity = MATURITY_ALPHA;
 $plugin->release = 'v1.0.0-alpha';

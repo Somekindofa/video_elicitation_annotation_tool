@@ -742,6 +742,7 @@ class MoodleDBAdapter:
             field_mapping = {
                 'transcription': 'transcription',
                 'transcription_status': 'transcriptionstatus',
+                'language': 'language',
                 'audio_filepath': 'audiofilepath',
                 'judge_status': 'judgestatus',
                 'judge_decision': 'judgedecision',
