@@ -44,7 +44,7 @@ import time
 from collections import defaultdict
 from threading import Lock
 
-from transcription import transcribe_audio_simple, preload_model, get_model_info
+from transcription import transcribe_audio, preload_model, get_model_info
 from config import (
     HOST,
     PORT,
@@ -1450,7 +1450,11 @@ async def process_transcription(annotation_id: int, audio_path: str):
         logger.info(f"Starting transcription for annotation {annotation_id}")
 
         # Perform transcription
-        transcription = await transcribe_audio_simple(audio_path)
+        stt_result = await transcribe_audio(audio_path)
+        transcription = stt_result["text"]
+        language = stt_result.get("language")
+        if language == "unknown":
+            language = None
 
         # Guard: treat empty transcription as a failure so the pipeline doesn't run
         if not transcription or not transcription.strip():
@@ -1476,11 +1480,13 @@ async def process_transcription(annotation_id: int, audio_path: str):
                 session,
                 annotation_id,
                 models.AnnotationUpdate(
-                    transcription=transcription, transcription_status="completed"
+                    transcription=transcription,
+                    transcription_status="completed",
+                    language=language,
                 ),
             )
 
-        logger.info(f"Transcription completed for annotation {annotation_id}")
+        logger.info(f"Transcription completed for annotation {annotation_id} (language={language})")
 
         # Broadcast completion
         await manager.broadcast(
@@ -1488,13 +1494,14 @@ async def process_transcription(annotation_id: int, audio_path: str):
                 "type": "transcription_complete",
                 "annotation_id": annotation_id,
                 "transcription": transcription,
+                "language": language,
             }
         )
 
         # Start Judge to determine if review is needed
         import asyncio
 
-        asyncio.create_task(process_judge(annotation_id, transcription, None))
+        asyncio.create_task(process_judge(annotation_id, transcription, None, language))
 
         # Push to CraftPilot RAG backend so the elicitation is immediately searchable
         asyncio.create_task(push_annotation_to_rag(annotation_id, transcription))
@@ -1545,7 +1552,8 @@ async def transcribe_only(
             content = await audio_blob.read()
             tmp.write(content)
 
-        transcription = await transcribe_audio_simple(tmp_path)
+        stt_result = await transcribe_audio(tmp_path)
+        transcription = stt_result["text"]
 
         if not transcription or not transcription.strip():
             raise HTTPException(status_code=400, detail="Empty transcription — check microphone")
@@ -1617,6 +1625,7 @@ async def rerecord_annotation(
             "audio_filepath": str(new_audio_path),
             "transcription_status": "processing",
             "transcription": None,
+            "language": None,
         },
     )
 
@@ -1837,6 +1846,7 @@ async def tag_annotation(
         import asyncio
 
         craft_str = str(annotation.craft) if annotation.craft is not None else None
+        language_str = str(annotation.language) if annotation.language is not None else None
         logger.error(
             f"[TAGGING] Starting background task for annotation {annotation_id} (craft={craft_str})"
         )
@@ -1844,7 +1854,7 @@ async def tag_annotation(
             f"[TAGGING] Starting background task for annotation {annotation_id} (craft={craft_str})"
         )
         asyncio.create_task(
-            process_tagging(annotation_id, transcription_text, craft_str)
+            process_tagging(annotation_id, transcription_text, craft_str, language_str)
         )
 
         return {
@@ -1877,7 +1887,10 @@ async def tagging_llm_diagnostics(
 
 
 async def process_judge(
-    annotation_id: int, transcription: str, craft: Optional[str] = None
+    annotation_id: int,
+    transcription: str,
+    craft: Optional[str] = None,
+    language: Optional[str] = None,
 ):
     """Background task to judge if AI review is needed using judge_service"""
     from judge_service import judge_elicitation
@@ -1903,7 +1916,7 @@ async def process_judge(
         )
 
         # Judge whether review is needed
-        judge_result = await judge_elicitation(transcription, craft)
+        judge_result = await judge_elicitation(transcription, craft, language)
 
         # Store judge decision
         async with db.AsyncSessionLocal() as session:
@@ -1936,7 +1949,7 @@ async def process_judge(
             )
             import asyncio
 
-            asyncio.create_task(process_tagging(annotation_id, transcription, craft))
+            asyncio.create_task(process_tagging(annotation_id, transcription, craft, language))
         else:
             logger.info(
                 f"Judge says annotation {annotation_id} is complete - no review needed (manual trigger available)"
@@ -1965,13 +1978,14 @@ async def process_judge(
         # On judge error, still trigger tagging to be safe
         import asyncio
 
-        asyncio.create_task(process_tagging(annotation_id, transcription, craft))
+        asyncio.create_task(process_tagging(annotation_id, transcription, craft, language))
 
 
 async def process_task_detection(
     annotation_id: int,
     transcription: str,
     craft: Optional[str] = None,
+    language: Optional[str] = None,
 ):
     """Background task to detect the main task from elicitation transcription"""
     from task_detector_service import detect_task
@@ -2009,7 +2023,7 @@ async def process_task_detection(
         print(f"[TASK_DETECTION] Calling detect_task for annotation {annotation_id}")
         try:
             task_result = await asyncio.wait_for(
-                detect_task(transcription, craft or "jewelry"), timeout=60
+                detect_task(transcription, craft or "jewelry", language), timeout=60
             )
         except asyncio.TimeoutError:
             raise Exception("Task detection timed out after 60 seconds")
@@ -2161,7 +2175,10 @@ async def process_review(
 
 
 async def process_tagging(
-    annotation_id: int, transcription: str, craft: Optional[str] = None
+    annotation_id: int,
+    transcription: str,
+    craft: Optional[str] = None,
+    language: Optional[str] = None,
 ):
     """Background task to extract and apply tags using tagging_service"""
     from tagging_service import extract_tags
@@ -2344,6 +2361,7 @@ async def process_tagging(
             annotation_id,
             transcription,
             craft,
+            language,
         )
 
     except Exception as e:
@@ -2622,6 +2640,7 @@ async def auto_trigger_tagging_maintenance(
 
             logger.info(f"Auto-triggering tagging for annotation {annotation.id}")
             craft_str = str(annotation.craft) if annotation.craft else None
+            language_str = getattr(annotation, "language", None)
 
             # Use the same tagging trigger as the API endpoint
             current_count = (
@@ -2653,7 +2672,7 @@ async def auto_trigger_tagging_maintenance(
             import asyncio
 
             asyncio.create_task(
-                process_tagging(annotation.id, annotation.transcription, craft_str)
+                process_tagging(annotation.id, annotation.transcription, craft_str, language_str)
             )
             triggered_count += 1
 

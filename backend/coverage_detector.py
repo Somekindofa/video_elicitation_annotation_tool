@@ -1,33 +1,42 @@
 """
 Coverage detector for elicitation transcripts.
 
-Classifies transcript tokens against three phase registers:
-- Quoi     (What)      — first-person present-tense action verbs.
-- Comment  (How)       — manner adverbs, sequential/instrumental phrases, gerundives.
+Classifies transcript content against three phase registers:
+- Quoi     (What)      — concrete first-person action description.
+- Comment  (How)       — manner, sequence, or instrumental detail.
 - Pourquoi (Why)       — causal, teleological, and intentional markers.
 
-Pure function: one transcript in, per-phase hits + status out. No state.
-Aggregation across annotations and plateau detection live elsewhere
-(see coverage_service / /api/coverage endpoint).
+Language-agnostic: an LLM call extracts verbatim evidence phrases per phase
+directly from the transcript (any language), each phrase is verified as an
+actual substring of the transcript (anti-hallucination check, same pattern as
+tagging_service._filter_tags_against_transcript), and per-phase hit counts /
+status are derived from the verified phrases. No spaCy, no per-language
+lexicon — one code path for every language Whisper can transcribe.
 
-Model loaded once at import time. Disable parser/NER — we only need
-tokenization, POS tagging and morphology.
+score_transcript() makes a network call, so it's async; the /api/coverage/score
+route awaits it. Aggregation across annotations and plateau detection
+(aggregate_scores / detect_plateau) are pure math over hit counts and remain
+synchronous.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
-import spacy
-from spacy.matcher import Matcher, PhraseMatcher
+import aiohttp
+
+from config import INFOMANIAK_API_KEY, INFOMANIAK_LLM_API_URL, INFOMANIAK_LLM_MODEL
 
 logger = logging.getLogger(__name__)
 
 _LEXICON_PATH = Path(__file__).parent / "coverage_lexicon.json"
-_MODEL_NAME = "fr_core_news_md"
+_WORD_RE = re.compile(r"\w+", re.UNICODE)
+
+_PHASE_KEYS = ("quoi", "comment", "pourquoi")
 
 
 def _load_lexicon() -> dict[str, Any]:
@@ -35,87 +44,124 @@ def _load_lexicon() -> dict[str, Any]:
         return json.load(f)
 
 
-def _load_nlp() -> spacy.language.Language:
-    # parser/NER/attribute_ruler not needed; tagger + morphologizer give us
-    # POS + morph for first-person/tense filters.
-    return spacy.load(_MODEL_NAME, disable=["parser", "ner", "attribute_ruler"])
-
-
 _LEXICON = _load_lexicon()
-_NLP = _load_nlp()
 _THRESHOLDS = _LEXICON["thresholds"]
 
 
-def _build_phrase_matcher(nlp, phrases: list[str]) -> PhraseMatcher:
-    matcher = PhraseMatcher(nlp.vocab, attr="LOWER")
-    patterns = [nlp.make_doc(p) for p in phrases if p]
-    matcher.add("PHRASES", patterns)
-    return matcher
+COVERAGE_SYSTEM_PROMPT = """You are analyzing a transcript of a craft expert describing their work. The transcript may be in ANY language — do not translate anything, work in the transcript's own language.
+
+For each of three phases, extract the exact verbatim phrases from the transcript that count as evidence for that phase. Every phrase must be copied character-for-character from the transcript — no paraphrasing, no translation, no correction of speech errors.
+
+QUOI (What): concrete first-person action phrases — what the speaker is physically doing right now (e.g. "I pick up the rod", "je tourne la canne").
+COMMENT (How): manner, sequence, or instrumental detail — how the action is carried out (speed, tool used, order of steps, technique detail).
+POURQUOI (Why): causal, purposive, or intentional phrases — why the speaker does it (the goal, the reason, what would go wrong otherwise).
+
+Extract at most 15 phrases per phase, each roughly 2-12 words, only when genuinely present in the transcript. Leave a phase's list empty if there is no evidence for it. Never invent a phrase that is not verbatim in the transcript.
+
+Respond ONLY as lines "KEY: phrase one | phrase two | ...". Produce NO JSON and no other text.
+
+Expected keys, in this order:
+QUOI
+COMMENT
+POURQUOI"""
 
 
-def _build_matchers(nlp):
-    q = _LEXICON["quoi"]
-    c = _LEXICON["comment"]
-    p = _LEXICON["pourquoi"]
+def _parse_keyed_phrases(text: str) -> dict[str, list[str]]:
+    result: dict[str, list[str]] = {k: [] for k in _PHASE_KEYS}
+    key_map = {"QUOI": "quoi", "COMMENT": "comment", "POURQUOI": "pourquoi"}
+    for ln in text.splitlines():
+        line = ln.strip()
+        if not line or ":" not in line:
+            continue
+        key, val = line.split(":", 1)
+        norm_key = key_map.get(key.strip().upper())
+        if not norm_key:
+            continue
+        result[norm_key] = [p.strip() for p in val.split("|") if p.strip()]
+    return result
 
-    # --- PhraseMatchers for fixed multi-word and single-word markers. ---
-    quoi_verb_forms = _build_phrase_matcher(nlp, q["action_verb_forms"])
 
-    comment_phrases = _build_phrase_matcher(
-        nlp,
-        c["manner_adverbs"] + c["sequential_phrases"] + c["instrumental_phrases"],
-    )
+def _verify_phrases(phrases: list[str], text: str) -> list[dict[str, Any]]:
+    """
+    Keep only phrases that verifiably appear (case-insensitive substring) in
+    the transcript — rejects LLM-hallucinated evidence, same anti-hallucination
+    pattern as tagging_service._filter_tags_against_transcript. Computes
+    char_start/char_end from the first occurrence for frontend highlighting.
+    """
+    text_lower = text.lower()
+    seen: set[str] = set()
+    markers: list[dict[str, Any]] = []
 
-    pourquoi_phrases = _build_phrase_matcher(
-        nlp,
-        p["causal_phrases"] + p["teleological_phrases"] + p["intentional_phrases"],
-    )
+    for phrase in phrases:
+        p = phrase.strip()
+        if not p:
+            continue
+        p_lower = p.lower()
+        if p_lower in seen:
+            continue
+        idx = text_lower.find(p_lower)
+        if idx == -1:
+            continue
+        seen.add(p_lower)
+        markers.append({
+            "text": text[idx : idx + len(p)],
+            "char_start": idx,
+            "char_end": idx + len(p),
+        })
 
-    # --- Token Matcher for patterns needing POS/morph constraints. ---
-    tok_matcher = Matcher(nlp.vocab)
+    markers.sort(key=lambda m: m["char_start"])
+    return markers
 
-    # QUOI fallback: any finite present-tense 1st-person verb — catches craft
-    # verbs not in the allowlist. Tagged as a distinct match id so we can
-    # count it with a lower weight than explicit allowlist hits.
-    tok_matcher.add(
-        "QUOI_1P_VERB",
-        [[{"POS": "VERB",
-           "MORPH": {"IS_SUPERSET": ["Person=1", "Tense=Pres", "VerbForm=Fin"]}}]],
-    )
 
-    # COMMENT gerundive: "en" + present participle. Canonical French manner.
-    tok_matcher.add(
-        "COMMENT_GERUNDIVE",
-        [[{"LOWER": "en"},
-          {"POS": "VERB", "MORPH": {"IS_SUPERSET": ["VerbForm=Part"]}}]],
-    )
+async def _extract_phrases(text: str) -> dict[str, list[str]]:
+    """Call the LLM for verbatim evidence phrases. Returns empty lists for
+    every phase on any failure — score_transcript then reports 'absent'
+    rather than raising, matching the fallback pattern used elsewhere
+    (judge_service, task_detector_service, tagging_service)."""
+    empty = {k: [] for k in _PHASE_KEYS}
 
-    # POURQUOI teleological: "pour" + infinitive verb. Distinguishes purposive
-    # "pour + INF" from prepositional "pour + NOUN" ("pour le verre").
-    tok_matcher.add(
-        "POURQUOI_POUR_INF",
-        [[{"LOWER": "pour"},
-          {"POS": "VERB", "MORPH": {"IS_SUPERSET": ["VerbForm=Inf"]}}]],
-    )
+    if not INFOMANIAK_API_KEY:
+        logger.error("INFOMANIAK_API_KEY not configured — coverage scoring disabled")
+        return empty
 
-    # POURQUOI intentional verb lemma near first-person subject. Looser than
-    # requiring adjacency — we accept the verb alone if its lemma is in the
-    # intentional list, since negation and modals often intervene.
-    intentional_lemmas = _LEXICON["pourquoi"]["intentional_verb_lemmas"]
-    tok_matcher.add(
-        "POURQUOI_INTENT_VERB",
-        [[{"LEMMA": {"IN": intentional_lemmas}, "POS": "VERB"}]],
-    )
-
-    return {
-        "quoi_verbs": quoi_verb_forms,
-        "comment_phrases": comment_phrases,
-        "pourquoi_phrases": pourquoi_phrases,
-        "tok": tok_matcher,
+    headers = {
+        "Authorization": f"Bearer {INFOMANIAK_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": INFOMANIAK_LLM_MODEL,
+        "messages": [
+            {"role": "system", "content": COVERAGE_SYSTEM_PROMPT},
+            {"role": "user", "content": f"Transcript:\n{text}"},
+        ],
+        "max_tokens": 500,
+        "temperature": 0.0,
     }
 
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                INFOMANIAK_LLM_API_URL,
+                headers=headers,
+                json=payload,
+                timeout=aiohttp.ClientTimeout(total=60),
+            ) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    logger.error(f"Coverage LLM error: {response.status} - {error_text}")
+                    return empty
 
-_MATCHERS = _build_matchers(_NLP)
+                result = await response.json()
+                if "choices" not in result or not result["choices"]:
+                    logger.error("No choices in coverage LLM response")
+                    return empty
+
+                content = result["choices"][0]["message"]["content"].strip()
+                return _parse_keyed_phrases(content)
+
+    except Exception as e:
+        logger.error(f"Coverage LLM call failed: {e}")
+        return empty
 
 
 def _status_for(hits: float, per_100: float) -> str:
@@ -126,7 +172,7 @@ def _status_for(hits: float, per_100: float) -> str:
     return "absent"
 
 
-def score_transcript(text: str) -> dict[str, Any]:
+async def score_transcript(text: str) -> dict[str, Any]:
     """
     Score a single transcript against the three phases.
 
@@ -135,11 +181,9 @@ def score_transcript(text: str) -> dict[str, Any]:
         "token_count": int,
         "quoi":     {"hits": int, "per_100_tok": float, "status": str},
         "comment":  {...},
-        "pourquoi": {...}
+        "pourquoi": {...},
+        "markers": {"quoi": [...], "comment": [...], "pourquoi": [...]}
       }
-
-    Hits are counted with de-duplication on token spans — overlapping matches
-    at the same position count once per phase.
     """
     if not text or not text.strip():
         empty = {"hits": 0, "per_100_tok": 0.0, "status": "absent"}
@@ -151,67 +195,14 @@ def score_transcript(text: str) -> dict[str, Any]:
             "markers": {"quoi": [], "comment": [], "pourquoi": []},
         }
 
-    doc = _NLP(text)
-    token_count = len([t for t in doc if not t.is_punct and not t.is_space])
+    token_count = len(_WORD_RE.findall(text))
 
-    def unique_spans(matches: list[tuple[int, int, int]]) -> set[tuple[int, int]]:
-        return {(s, e) for _, s, e in matches}
-
-    # Phrase-level spans per phase.
-    quoi_spans = unique_spans(_MATCHERS["quoi_verbs"](doc))
-    comment_spans = unique_spans(_MATCHERS["comment_phrases"](doc))
-    pourquoi_spans = unique_spans(_MATCHERS["pourquoi_phrases"](doc))
-
-    # Token-level matches — partition by match id.
-    tok_matches = _MATCHERS["tok"](doc)
-    by_label: dict[str, set[tuple[int, int]]] = {
-        "QUOI_1P_VERB": set(),
-        "COMMENT_GERUNDIVE": set(),
-        "POURQUOI_POUR_INF": set(),
-        "POURQUOI_INTENT_VERB": set(),
+    phrases_by_phase = await _extract_phrases(text)
+    markers = {
+        phase: _verify_phrases(phrases_by_phase.get(phase, []), text)
+        for phase in _PHASE_KEYS
     }
-    for match_id, start, end in tok_matches:
-        label = _NLP.vocab.strings[match_id]
-        if label in by_label:
-            by_label[label].add((start, end))
 
-    # Fold token-level spans into phase buckets for highlighting. The fallback
-    # 1p-verb matches are weak evidence; we still surface them visually so the
-    # user can see *why* the score came out the way it did.
-    quoi_spans |= by_label["QUOI_1P_VERB"]
-    comment_spans |= by_label["COMMENT_GERUNDIVE"]
-    pourquoi_spans |= by_label["POURQUOI_POUR_INF"] | by_label["POURQUOI_INTENT_VERB"]
-
-    # Hit counts: phrase matches count 1:1; the 1p-verb fallback is diluted
-    # (every 2 matches = 1 hit) to keep common verbs from saturating Quoi.
-    quoi_hits = (
-        len(unique_spans(_MATCHERS["quoi_verbs"](doc)))
-        + len(by_label["QUOI_1P_VERB"]) // 2
-    )
-    comment_hits = (
-        len(unique_spans(_MATCHERS["comment_phrases"](doc)))
-        + len(by_label["COMMENT_GERUNDIVE"])
-    )
-    pourquoi_hits = (
-        len(unique_spans(_MATCHERS["pourquoi_phrases"](doc)))
-        + len(by_label["POURQUOI_POUR_INF"])
-        + len(by_label["POURQUOI_INTENT_VERB"])
-    )
-
-    def spans_to_markers(spans: set[tuple[int, int]]) -> list[dict[str, Any]]:
-        """Turn (token_start, token_end) pairs into char-offset markers sorted by start."""
-        out = []
-        for start, end in spans:
-            span = doc[start:end]
-            out.append({
-                "text": span.text,
-                "char_start": span.start_char,
-                "char_end": span.end_char,
-            })
-        out.sort(key=lambda m: m["char_start"])
-        return out
-
-    # Normalise per 100 tokens; avoid divide-by-zero.
     norm = 100.0 / max(token_count, 1)
 
     def pack(hits: int) -> dict[str, Any]:
@@ -220,14 +211,10 @@ def score_transcript(text: str) -> dict[str, Any]:
 
     return {
         "token_count": token_count,
-        "quoi": pack(quoi_hits),
-        "comment": pack(comment_hits),
-        "pourquoi": pack(pourquoi_hits),
-        "markers": {
-            "quoi": spans_to_markers(quoi_spans),
-            "comment": spans_to_markers(comment_spans),
-            "pourquoi": spans_to_markers(pourquoi_spans),
-        },
+        "quoi": pack(len(markers["quoi"])),
+        "comment": pack(len(markers["comment"])),
+        "pourquoi": pack(len(markers["pourquoi"])),
+        "markers": markers,
     }
 
 
@@ -295,9 +282,8 @@ def detect_plateau(
 
 
 def reload_lexicon() -> None:
-    """Hot-reload the lexicon JSON. Useful when tuning markers without restarting."""
-    global _LEXICON, _THRESHOLDS, _MATCHERS
+    """Hot-reload the thresholds JSON. Useful when tuning without restarting."""
+    global _LEXICON, _THRESHOLDS
     _LEXICON = _load_lexicon()
     _THRESHOLDS = _LEXICON["thresholds"]
-    _MATCHERS = _build_matchers(_NLP)
-    logger.info("coverage lexicon reloaded")
+    logger.info("coverage thresholds reloaded")

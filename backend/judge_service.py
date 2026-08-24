@@ -12,6 +12,17 @@ from config import INFOMANIAK_API_KEY, INFOMANIAK_LLM_API_URL, INFOMANIAK_LLM_MO
 
 logger = logging.getLogger(__name__)
 
+_LANGUAGE_NAMES = {"fr": "français", "en": "English", "el": "Ελληνικά"}
+
+
+def _language_instruction(language: Optional[str]) -> str:
+    """Instruct the LLM to write its analysis in the session's spoken language
+    (what the interviewee said), not the interviewer's UI language."""
+    name = _LANGUAGE_NAMES.get((language or "").lower())
+    if name:
+        return f"\n\nRépondez dans la langue suivante : {name}."
+    return "\n\nRépondez dans la même langue que la transcription."
+
 
 def _parse_keyed_judge(text: str) -> Dict[str, Any]:
     lines = [ln.strip() for ln in text.splitlines() if ":" in ln]
@@ -83,7 +94,7 @@ Analysez maintenant cette élicitation:"""
 
 
 async def judge_elicitation(
-    transcription: str, craft: Optional[str] = None
+    transcription: str, craft: Optional[str] = None, language: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Judge whether an elicitation needs AI Review based on completeness signals.
@@ -91,6 +102,8 @@ async def judge_elicitation(
     Args:
         transcription: The elicitation transcript to judge
         craft: Optional craft/domain context (e.g., 'glassblowing', 'jewelry')
+        language: Session language detected by Whisper (e.g. 'fr', 'en', 'el') —
+            the judge's reasoning/missing_elements/strengths are written in it.
 
     Returns:
         Dictionary with judge decision:
@@ -131,7 +144,7 @@ async def judge_elicitation(
     payload = {
         "model": INFOMANIAK_LLM_MODEL,
         "messages": [
-            {"role": "system", "content": JUDGE_SYSTEM_PROMPT},
+            {"role": "system", "content": JUDGE_SYSTEM_PROMPT + _language_instruction(language)},
             {"role": "user", "content": user_content},
         ],
         "max_tokens": 200,

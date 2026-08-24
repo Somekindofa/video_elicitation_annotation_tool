@@ -95,7 +95,6 @@ INFOMANIAK_RESULTS_BASE_URL = (
     f"https://api.infomaniak.com/1/ai/{INFOMANIAK_PRODUCT_ID}/results"
 )
 INFOMANIAK_STT_MODEL = "whisper"
-INFOMANIAK_STT_LANGUAGE = "fr"
 
 # Google Drive API settings
 GOOGLE_DRIVE_API_KEY = os.getenv(

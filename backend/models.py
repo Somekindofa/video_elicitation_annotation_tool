@@ -148,6 +148,7 @@ class Annotation(Base):
     transcription_status = Column(
         String, default="pending"
     )  # pending, processing, completed, failed
+    language = Column(String, nullable=True)  # ISO 639-1 code detected by Whisper (e.g. "fr", "en", "el")
     # Judge fields: determines if AI review is needed
     judge_status = Column(
         String, default="pending"
@@ -329,6 +330,7 @@ class AnnotationUpdate(BaseModel):
 
     transcription: Optional[str] = None
     transcription_status: Optional[str] = None
+    language: Optional[str] = None
     judge_status: Optional[str] = None
     judge_decision: Optional[str] = None
     review_status: Optional[str] = None
@@ -397,6 +399,7 @@ class AnnotationResponse(BaseModel):
     audio_filepath: Optional[str] = None
     transcription: Optional[str] = None
     transcription_status: str
+    language: Optional[str] = None
     review_status: str = "pending"
     review_results: Optional[str] = None
     review_timestamp: Optional[datetime] = None
