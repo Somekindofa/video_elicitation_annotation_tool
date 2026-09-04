@@ -218,6 +218,13 @@ const TRANSLATIONS = {
         addCraftInvalid: 'Invalid name (use letters and numbers)',
         addCraftDuplicate: 'This domain already exists',
         addCraftError: 'Could not save, please try again',
+
+        // Mandatory craft gate (shown on every video load)
+        craftGateTitle: 'Which craft domain is this video?',
+        craftGateBody: 'Every elicitation you record is filed under this domain and is used to search the knowledge base. Confirm it before you start — a wrong domain sends your work to the wrong craft.',
+        craftGatePlaceholder: '— choose a craft domain —',
+        craftGateConfirm: 'Confirm and start',
+        craftGateRequired: 'Choose a craft domain to continue.',
     },
     fr: {
         // Header / nav
@@ -430,6 +437,13 @@ const TRANSLATIONS = {
         addCraftInvalid: 'Nom invalide (lettres et chiffres uniquement)',
         addCraftDuplicate: 'Ce domaine existe déjà',
         addCraftError: 'Impossible de sauvegarder, réessayez',
+
+        // Mandatory craft gate (shown on every video load)
+        craftGateTitle: 'Quel est le domaine artisanal de cette vidéo ?',
+        craftGateBody: 'Chaque élicitation enregistrée est classée dans ce domaine et sert à interroger la base de connaissances. Confirmez-le avant de commencer — un domaine erroné envoie votre travail vers le mauvais métier.',
+        craftGatePlaceholder: '— choisissez un domaine artisanal —',
+        craftGateConfirm: 'Confirmer et commencer',
+        craftGateRequired: 'Choisissez un domaine artisanal pour continuer.',
     },
 };
 
@@ -611,7 +625,14 @@ const state = {
     currentProject: null,
     currentTab: 'annotate',
     editingProjectId: null,
-    craft: 'glassblowing',
+    // Never defaulted. Only an explicit annotator choice (craft gate or the
+    // control-bar dropdown) may set this — a silently assumed craft mislabels
+    // annotations and poisons CraftPilot's metadata filter for everyone.
+    craft: '',
+    // Last confirmed craft, read from localStorage. Used ONLY to pre-select the
+    // dropdown; it never becomes state.craft without an explicit confirmation.
+    rememberedCraft: '',
+    craftGateOpen: false,
     tasks: [],
     task: '',
     sortBy: 'newest',
@@ -813,8 +834,13 @@ async function initializeApp() {
     // Check microphone permissions
     checkMicrophonePermission();
 
-    // Load craft selection from localStorage (default to glassblowing)
-    state.craft = localStorage.getItem('craft') || 'glassblowing';
+    // Remember the last confirmed craft so the gate can pre-select it, but do NOT
+    // adopt it as the active craft: it must be confirmed on every video load.
+    try {
+        state.rememberedCraft = localStorage.getItem('craft') || '';
+    } catch (e) {
+        state.rememberedCraft = '';
+    }
     // Create craft selector UI only (task selector removed)
     createElicitControlsUI();
 
@@ -888,6 +914,8 @@ async function loadCustomCrafts(selectEl, addBtn) {
         if (state.craft && selectEl.querySelector(`option[value="${CSS.escape(state.craft)}"]`)) {
             selectEl.value = state.craft;
         }
+        // Custom crafts arrive asynchronously; mirror them into an open gate.
+        if (state.craftGateOpen) refreshCraftGateOptions();
     } catch (_) {
         if (addBtn) addBtn.style.display = 'none';
     }
@@ -975,6 +1003,202 @@ function showAddCraftInput(wrapperEl, selectEl, addBtn) {
     input.focus();
 }
 
+// ============================================================
+// Mandatory craft gate
+// ------------------------------------------------------------
+// A wrong `craft` value silently poisons CraftPilot's retrieval metadata
+// filter, so the annotator must confirm the craft domain on EVERY video load
+// before the app (video player included) becomes usable again.
+// ============================================================
+
+// Make everything except the gate itself non-interactive. `inert` is what does
+// the real work here: it removes the whole subtree from the tab order, from
+// hit-testing and from keyboard handling, so the covered video element cannot
+// be reached with the mouse OR the keyboard. The overlay alone would not.
+function setAppInteractive(enabled) {
+    Array.from(document.body.children).forEach(el => {
+        if (el.id === 'craftGate' || el.tagName === 'SCRIPT') return;
+        if (enabled) {
+            el.removeAttribute('inert');
+            el.removeAttribute('aria-hidden');
+        } else {
+            el.setAttribute('inert', '');
+            el.setAttribute('aria-hidden', 'true');
+        }
+    });
+}
+
+// Belt-and-braces for browsers without `inert` support: a <video> with no
+// `controls` attribute has no native keyboard handling, so space / arrow keys
+// cannot play or scrub it, and tabindex="-1" keeps it out of the tab order.
+function setVideoPlayerUsable(enabled) {
+    const videoPlayer = document.getElementById('videoPlayer');
+    if (!videoPlayer) return;
+    if (enabled) {
+        videoPlayer.setAttribute('controls', '');
+        videoPlayer.removeAttribute('tabindex');
+    } else {
+        try { videoPlayer.pause(); } catch (e) { }
+        videoPlayer.removeAttribute('controls');
+        videoPlayer.setAttribute('tabindex', '-1');
+        try { videoPlayer.blur(); } catch (e) { }
+    }
+}
+
+// The gate never owns a craft list of its own: it mirrors #craftSelector, which
+// already holds the built-in domains plus whatever /api/crafts returned.
+function refreshCraftGateOptions() {
+    const gateSelect = document.getElementById('craftGateSelector');
+    const source = document.getElementById('craftSelector');
+    if (!gateSelect || !source) return;
+
+    const previous = gateSelect.value;
+    gateSelect.innerHTML = '';
+    Array.from(source.options).forEach(opt => {
+        const clone = document.createElement('option');
+        clone.value = opt.value;
+        const key = opt.getAttribute('data-craft-key');
+        if (key) {
+            // Re-translate built-in labels so the gate is correct whatever order
+            // applyLanguage() and the gate ran in. Custom crafts keep their label.
+            clone.setAttribute('data-craft-key', key);
+            clone.textContent = t(key);
+        } else {
+            clone.textContent = opt.textContent;
+        }
+        if (!opt.value) clone.disabled = true;
+        gateSelect.appendChild(clone);
+    });
+
+    // Pre-select the last confirmed craft as a convenience only. It is still the
+    // annotator who confirms it — nothing is filed on a remembered value alone.
+    const preferred = previous || state.craft || state.rememberedCraft || '';
+    gateSelect.value = (preferred && gateSelect.querySelector(`option[value="${CSS.escape(preferred)}"]`))
+        ? preferred
+        : '';
+}
+
+function openCraftGate() {
+    if (state.craftGateOpen) {
+        refreshCraftGateOptions();
+        return;
+    }
+    state.craftGateOpen = true;
+    setVideoPlayerUsable(false);
+
+    const overlay = document.createElement('div');
+    overlay.id = 'craftGate';
+    overlay.className = 'craft-gate';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-labelledby', 'craftGateTitle');
+
+    const card = document.createElement('div');
+    card.className = 'craft-gate-card';
+
+    const title = document.createElement('h2');
+    title.id = 'craftGateTitle';
+    title.className = 'craft-gate-title';
+    title.textContent = t('craftGateTitle');
+
+    const body = document.createElement('p');
+    body.className = 'craft-gate-body';
+    body.textContent = t('craftGateBody');
+
+    const field = document.createElement('div');
+    field.className = 'craft-gate-field';
+
+    const row = document.createElement('div');
+    row.className = 'craft-gate-row';
+
+    const gateSelect = document.createElement('select');
+    gateSelect.id = 'craftGateSelector';
+    gateSelect.className = 'craft-gate-select';
+
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.id = 'craftGateAddBtn';
+    addBtn.className = 'btn btn-secondary craft-gate-add';
+    addBtn.textContent = '+';
+    addBtn.title = t('addCraftTitle');
+    addBtn.addEventListener('click', () => showAddCraftInput(field, gateSelect, addBtn));
+
+    row.appendChild(gateSelect);
+    row.appendChild(addBtn);
+    field.appendChild(row);
+
+    const error = document.createElement('p');
+    error.id = 'craftGateError';
+    error.className = 'craft-gate-error';
+    error.hidden = true;
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.type = 'button';
+    confirmBtn.id = 'craftGateConfirmBtn';
+    confirmBtn.className = 'btn btn-primary craft-gate-confirm';
+    confirmBtn.textContent = t('craftGateConfirm');
+    confirmBtn.addEventListener('click', () => {
+        const chosen = gateSelect.value;
+        if (!chosen) {
+            error.textContent = t('craftGateRequired');
+            error.hidden = false;
+            gateSelect.focus();
+            return;
+        }
+        const chosenOption = gateSelect.options[gateSelect.selectedIndex];
+        confirmCraftSelection(chosen, chosenOption ? chosenOption.textContent : chosen);
+    });
+
+    gateSelect.addEventListener('change', () => { error.hidden = true; });
+
+    card.appendChild(title);
+    card.appendChild(body);
+    card.appendChild(field);
+    card.appendChild(error);
+    card.appendChild(confirmBtn);
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+
+    refreshCraftGateOptions();
+    // Custom domains need an authenticated user, same rule as the control bar.
+    if (!window.USER_ID) addBtn.hidden = true;
+
+    setAppInteractive(false);
+    gateSelect.focus();
+}
+
+// The only path that may assign state.craft from the gate.
+function confirmCraftSelection(craftKey, craftLabel) {
+    state.craft = craftKey;
+    state.rememberedCraft = craftKey;
+    try { localStorage.setItem('craft', craftKey); } catch (e) { }
+    syncMainCraftSelector(craftKey, craftLabel);
+    closeCraftGate();
+}
+
+// Keep the control-bar dropdown showing what was actually confirmed, adding the
+// option if the gate created a brand-new custom domain.
+function syncMainCraftSelector(craftKey, craftLabel) {
+    const source = document.getElementById('craftSelector');
+    if (!source || !craftKey) return;
+    if (!source.querySelector(`option[value="${CSS.escape(craftKey)}"]`)) {
+        const opt = document.createElement('option');
+        opt.value = craftKey;
+        opt.textContent = craftLabel || craftKey;
+        opt.setAttribute('data-custom', '1');
+        source.appendChild(opt);
+    }
+    source.value = craftKey;
+}
+
+function closeCraftGate() {
+    const overlay = document.getElementById('craftGate');
+    if (overlay) overlay.remove();
+    state.craftGateOpen = false;
+    setAppInteractive(true);
+    setVideoPlayerUsable(true);
+}
+
 // Create a small craft selector UI under the recording controls
 function createElicitControlsUI() {
     try {
@@ -998,6 +1222,15 @@ function createElicitControlsUI() {
         craftSelect.style.border = '1px solid #ccc';
         craftSelect.style.width = 'fit-content';
 
+        // Empty placeholder: the control bar must never display a craft that the
+        // annotator has not actually confirmed.
+        const craftPlaceholder = document.createElement('option');
+        craftPlaceholder.value = '';
+        craftPlaceholder.setAttribute('data-craft-key', 'craftGatePlaceholder');
+        craftPlaceholder.textContent = t('craftGatePlaceholder');
+        craftPlaceholder.disabled = true;
+        craftSelect.appendChild(craftPlaceholder);
+
         [
             { value: 'glassblowing', key: 'craft_glassblowing' },
             { value: 'scientific_glassblowing', key: 'craft_scientific_glassblowing' },
@@ -1012,8 +1245,9 @@ function createElicitControlsUI() {
             craftSelect.appendChild(option);
         });
 
-        craftSelect.value = state.craft || 'glassblowing';
+        craftSelect.value = state.craft || '';
         craftSelect.addEventListener('change', (e) => {
+            if (!e.target.value) return;
             state.craft = e.target.value;
             try { localStorage.setItem('craft', state.craft); } catch (e) { }
         });
@@ -1742,6 +1976,10 @@ function showVideoModal() {
 
 // Load and Play Video
 async function loadVideo(videoId) {
+    // Block the whole UI (video player included) and ask for the craft domain.
+    // This runs before the player is shown, so nothing is usable until confirmed.
+    openCraftGate();
+
     try {
         showLoading('Loading video...');
 
@@ -1794,6 +2032,9 @@ async function loadVideo(videoId) {
     } catch (error) {
         console.error('Error loading video:', error);
         showToast('Error', 'Failed to load video', 'error');
+        // No video loaded means nothing to guard — do not trap the annotator
+        // behind the gate. startRecording() re-opens it if a craft is still unset.
+        closeCraftGate();
     } finally {
         hideLoading();
     }
@@ -1815,6 +2056,13 @@ async function toggleRecording() {
 }
 
 async function startRecording() {
+    // Safety net for any path that reached the recorder without a confirmed
+    // craft (e.g. a failed video load released the gate). Never record blind.
+    if (!state.craft) {
+        openCraftGate();
+        return;
+    }
+
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
@@ -1908,9 +2156,15 @@ async function handleRecordingStop() {
         // Create FormData for multipart upload
         const formData = new FormData();
         formData.append('audio_blob', audioBlob, `recording.${audioExt}`);
-        // Attach craft/domain selection so backend can use domain-specific prompts
+        // Attach craft/domain selection so backend can use domain-specific prompts.
+        // Never substitute a default: an unset craft is stored as NULL, which is
+        // recoverable, while a guessed craft silently mislabels the annotation.
         try {
-            formData.append('craft', state.craft || 'glassblowing');
+            if (state.craft) {
+                formData.append('craft', state.craft);
+            } else {
+                console.warn('No craft confirmed — annotation will be saved without a craft domain');
+            }
         } catch (e) {
             console.warn('Could not append craft to FormData', e);
         }
