@@ -4837,3 +4837,82 @@ h1, h2, h3, h4 { letter-spacing: -0.015em; }
     color: var(--danger-color);
 }
 
+
+/* Craft gate ---------------------------------------------
+   Mandatory craft-domain confirmation shown on every video load.
+   Sits above the loading overlay (2000) and the tutorial modal (10000 is
+   inline on that element, but it is made `inert` while the gate is up). */
+.craft-gate {
+    position: fixed;
+    inset: 0;
+    z-index: 4000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(15, 31, 60, 0.55);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+}
+
+.craft-gate-card {
+    width: 100%;
+    max-width: 460px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 22px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+}
+
+.craft-gate-title {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+    color: var(--slate-900);
+}
+
+.craft-gate-body {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--slate-700);
+}
+
+.craft-gate-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.craft-gate-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.craft-gate-select {
+    flex: 1;
+    min-width: 0;
+}
+
+.craft-gate-add {
+    flex-shrink: 0;
+    padding: 8px 12px;
+    line-height: 1;
+}
+
+.craft-gate-error {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--danger-color);
+}
+
+.craft-gate-confirm {
+    align-self: flex-end;
+}
